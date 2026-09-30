@@ -1,0 +1,24 @@
+# Gradle / build
+.gradle/
+build/
+out/
+
+# IDE local metadata (공유 설정은 무시하지 않는다)
+.idea/workspace.xml
+.idea/tasks.xml
+.idea/shelf/
+.idea/httpRequests/
+*.iml
+.classpath
+.project
+.settings/
+.vscode/settings.json
+
+# Local secrets
+.env
+.env.*
+!.env.example
+.DS_Store
+
+# Local workspace files
+/.local/
