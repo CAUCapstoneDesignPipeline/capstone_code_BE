@@ -1,24 +1,36 @@
-# Gradle / build
+# Gradle / build output
 .gradle/
 build/
 out/
+*.class
 
-# IDE local metadata (공유 설정은 무시하지 않는다)
-.idea/workspace.xml
-.idea/tasks.xml
-.idea/shelf/
-.idea/httpRequests/
+# IDE metadata
+.idea/
+.vscode/
 *.iml
+*.ipr
+*.iws
 .classpath
 .project
 .settings/
-.vscode/settings.json
+/bin/
 
-# Local secrets
+# Local environment variables
 .env
 .env.*
 !.env.example
-.DS_Store
 
-# Local workspace files
+# Logs / JVM diagnostics
+*.log
+/logs/
+*.hprof
+hs_err_pid*
+replay_pid*
+
+# OS metadata
+.DS_Store
+._*
+Thumbs.db
+
+# Local drafts / verification records
 /.local/
