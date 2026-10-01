@@ -269,3 +269,13 @@ PUT `/api/topics/order`에 `{"topicIds":["주제 UUID", "다른 주제 UUID"]}`�
 집합이 다르면 409 TOPIC_ORDER_CONFLICT와 `details.current`의 TopicList를 반환하고 변경하지 않습니다.
 중복/null/잘못된 UUID는 400입니다. 사용자 승인 기준으로 주제 없는 사용자의 빈 배열은 200,
 주제가 있는 사용자의 빈 배열은 409입니다(팀 정본 반영 대기). 생성과 같은 사용자 잠금을 공유합니다.
+
+### 노트 생성·조회 (#9)
+
+POST `/api/notes`에 `{"title":"제목","topicId":null,"body":"본문"}`을 보냅니다.
+주제 생략/null은 미분류, 본문 생략은 빈 문자열이며 version=0으로 생성합니다.
+GET `/api/notes/{id}`는 원문, GET `/api/notes?topicId=none&sort=updated`는
+본문 전체 없이 앞 80 코드 포인트 snippet을 반환합니다. 주제 필터 생략은 전체, UUID는 해당 주제이며
+정렬은 title(기본 오름차순) 또는 updated(최근순)입니다.
+사용자 승인 로컬 기준으로 없는/타인 주제 필터는 404입니다(팀 정본 반영 대기).
+같은 주제·미분류의 제목은 대소문자를 구분해 유일합니다. q 검색은 #13에서 추가합니다.
