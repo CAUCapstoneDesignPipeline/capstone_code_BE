@@ -7,11 +7,15 @@ import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
-import com.example.capstone.auth.config.*;
+import com.example.capstone.auth.config.AuthenticationErrorHandler;
+import com.example.capstone.auth.config.JwtConfig;
+import com.example.capstone.auth.config.SecurityConfig;
 import com.example.capstone.auth.controller.AuthProviderController;
 import com.example.capstone.auth.controller.DevTokenController;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest({AuthProviderController.class, DevTokenController.class})
 @Import({SecurityConfig.class, JwtConfig.class, AuthenticationErrorHandler.class})
