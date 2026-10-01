@@ -6,6 +6,13 @@ spring:
       ddl-auto: validate
     open-in-view: false
 
+capstone:
+  auth:
+    app-url: ${CAPSTONE_APP_URL:http://localhost:5173}
+    jwt:
+      secret: ${CAPSTONE_JWT_SECRET:}
+      issuer: capstone-be
+
 management:
   endpoints:
     web:

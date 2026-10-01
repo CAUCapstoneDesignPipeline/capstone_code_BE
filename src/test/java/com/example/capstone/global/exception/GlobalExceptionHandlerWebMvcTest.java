@@ -14,6 +14,8 @@ import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.test.context.support.WithMockUser;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -21,6 +23,10 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import com.example.capstone.auth.config.AuthenticationErrorHandler;
+import com.example.capstone.auth.config.JwtConfig;
+import com.example.capstone.auth.config.SecurityConfig;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
@@ -32,7 +38,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(GlobalExceptionHandlerWebMvcTest.TestController.class)
-@Import({GlobalExceptionHandler.class, GlobalExceptionHandlerWebMvcTest.TestController.class})
+@Import({GlobalExceptionHandler.class, GlobalExceptionHandlerWebMvcTest.TestController.class,
+        SecurityConfig.class, JwtConfig.class, AuthenticationErrorHandler.class})
+@ActiveProfiles("test")
+@WithMockUser
 class GlobalExceptionHandlerWebMvcTest {
 
     @Autowired

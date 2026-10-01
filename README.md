@@ -1,6 +1,6 @@
 # capstone-be
 
-캡스톤 노트 서비스의 Spring Boot REST API 백엔드입니다. 팀이 기능을 함께 개발하고 확장하기 쉽게 단일 모듈과 도메인별 패키지를 사용합니다. 현재 범위는 프로젝트 기반 설정·health API·공통 오류 응답·초기 ERD 전체의 V1 스키마이며, 로그인이나 노트 업무 기능은 포함하지 않습니다. 저장소 이름과 로컬 디렉터리 `capstone_code_BE`는 유지하고 Gradle 프로젝트 이름만 `capstone-be`로 지정했습니다.
+캡스톤 노트 서비스의 Spring Boot REST API 백엔드입니다. 단일 모듈과 도메인별 패키지를 사용합니다. 현재 초기 설정·health·공통 오류·V1 스키마와 JWT 인증 기반·내 정보 조회를 구현했습니다. refresh·로그인 발급 API와 주제·노트 API는 후속 작업입니다. 저장소 이름과 로컬 디렉터리 `capstone_code_BE`는 유지하고 Gradle 프로젝트 이름만 `capstone-be`로 지정했습니다.
 
 개발 규칙은 [AGENTS.md](AGENTS.md)와 [팀 백엔드 컨벤션](../capstone_docs/conventions/backend.md)을 참고합니다.
 
@@ -14,10 +14,11 @@
 | PostgreSQL | 16.15, Docker 공식 이미지 `postgres:16.15` |
 | 패키징 | 실행 가능한 Jar, 단일 모듈 |
 | 기능 | Spring Web MVC, Validation, Data JPA, Actuator, Flyway, PostgreSQL JDBC |
+| 인증 | Spring Security OAuth2 Resource Server, HS256 JWT (Boot BOM 관리) |
 | API 문서 | springdoc-openapi 3.1.1, Swagger UI |
 | 테스트 | JUnit Jupiter, MockMvc, Testcontainers JUnit / PostgreSQL, ServiceConnection |
 
-Spring Boot 플러그인은 지정 버전 4.1.1을 명시합니다. Java 플러그인은 Gradle 내장 기능입니다. 추가 의존성 관리 플러그인 없이 Gradle의 `platform(SpringBootPlugin.BOM_COORDINATES)`로 Boot BOM을 가져오며, BOM이 관리하는 라이브러리 버전은 따로 지정하지 않습니다. 테스트에는 실제 사용하는 `spring-boot-starter-webmvc-test`와 `spring-boot-testcontainers`만 추가합니다. MVC 테스트 starter가 공통 Spring 테스트 지원과 JUnit Jupiter를 함께 제공합니다. PostgreSQL 전용 Flyway 모듈과 JDBC 드라이버는 실행 시 필요하므로 `runtimeOnly`입니다.
+Spring Boot 플러그인은 지정 버전 4.1.1을 명시합니다. Java 플러그인은 Gradle 내장 기능입니다. 추가 의존성 관리 플러그인 없이 Gradle의 `platform(SpringBootPlugin.BOM_COORDINATES)`로 Boot BOM을 가져오며, BOM이 관리하는 라이브러리 버전은 따로 지정하지 않습니다. 테스트에는 MVC·Security 테스트 starter와 `spring-boot-testcontainers`를 사용합니다. MVC 테스트 starter가 공통 Spring 테스트 지원과 JUnit Jupiter를 함께 제공합니다. PostgreSQL 전용 Flyway 모듈과 JDBC 드라이버는 실행 시 필요하므로 `runtimeOnly`입니다.
 
 공식 자료와 확인 기록:
 
@@ -110,6 +111,11 @@ Compose의 `.env`는 YAML의 `${...}` 치환에 쓰입니다. 호스트에서 �
 set -a
 source ./.env
 set +a
+# .env에 키를 설정하지 않았다면, 로컬 세션용 무작위 키를 출력 없이 주입합니다.
+# 재실행 시 같은 액세스 토큰을 쓰려면 동일한 개발용 키를 안전하게 보관·주입하세요.
+if [ -z "$CAPSTONE_JWT_SECRET" ]; then
+  export CAPSTONE_JWT_SECRET="$(openssl rand -base64 48)"
+fi
 ./gradlew bootRun --args='--spring.profiles.active=local'
 ```
 
@@ -132,7 +138,18 @@ set +a
 
 통합 테스트는 새 `postgres:16.15` Testcontainers 컨테이너와 임의 호스트 포트를 사용합니다. `@SpringBootTest`로 전체 컨텍스트를 시작하고, 실제 DataSource에서 `SELECT 1`, V1 적용·재실행·체크섬, 19개 테이블과 주요 유일성·외래 키·CHECK 제약을 검증합니다. 로컬 프로필, `.env`, 개발 DB를 사용하지 않습니다. Docker가 없으면 통합 테스트는 **실패**하며 자동 건너뛰기를 설정하지 않았습니다. 테스트 터미널에서 개발용 프로필이나 별도의 `SPRING_FLYWAY_*` 설정을 export하지 마세요.
 
-현재 JPA 엔티티는 없으며 Flyway V1이 초기 ERD의 19개 테이블을 생성합니다. `ddl-auto=validate`는 매핑된 엔티티만 검사하므로 이번 SQL 통합 테스트가 JPA 매핑이나 업무 API의 구현 검증을 대신하지 않습니다. 엔티티를 추가할 때 해당 매핑과 업무 테스트를 함께 확장하세요.
+Flyway V1은 초기 ERD의 19개 테이블을 생성하며 `app_user`, `user_identity`는 JPA로 매핑했습니다. `ddl-auto=validate`는 매핑된 엔티티만 검사합니다. 인증 통합 테스트는 해당 매핑과 실제 JWT·내 정보 응답을 검증하고, 기존 SQL 테스트는 초기 스키마 제약을 검증합니다.
+
+인증 기반의 필수 검증은 다음과 같이 선택할 수 있습니다. 이 부분 실행은 전체 회귀 테스트 결과를 대신하지 않습니다.
+
+```bash
+./gradlew test --tests 'com.example.capstone.auth.AuthFoundationIntegrationTest' \
+  --tests 'com.example.capstone.auth.AuthProductionWebMvcTest' \
+  --tests 'com.example.capstone.health.controller.HealthControllerTest' \
+  --tests 'com.example.capstone.global.exception.GlobalExceptionHandlerWebMvcTest'
+```
+
+테스트의 `test` 프로필은 테스트 클래스패스의 합성 키를 사용합니다. 실제 `.env`나 Google 인증정보는 필요하지 않습니다. 이 키는 실행 Jar에 포함되지 않습니다.
 
 Jar를 로컬 DB로 실행하려면 `.env`를 위 방식으로 export하고:
 
@@ -168,9 +185,20 @@ Swagger UI는 현재 구현된 Controller를 기준으로 문서를 생성합니
 
 성공 응답은 명세의 DTO를 그대로 반환합니다. 오류는 `global/response/ErrorResponse`의 `{"error":{"code":"...","message":"...","details":{...}}}` 구조를 사용하며 불필요한 `details`는 생략합니다. `ApiException`에 계약의 오류 코드·사용자용 문구·상세 정보를 담으면 `GlobalExceptionHandler`가 HTTP 응답으로 변환합니다. 사용 예와 MVC 기본 오류 처리 범위는 [팀 컨벤션](../capstone_docs/conventions/backend.md)의 API·응답·오류 절을 참고합니다.
 
+## 인증 기반과 내 정보 조회
+
+- `CAPSTONE_JWT_SECRET`은 필수이며, 32 UTF-8 바이트 이상의 무작위 문자열을 실행 환경에서 주입합니다. 설정 문자열을 UTF-8 키 바이트로 사용하며 별도로 Base64 디코딩하지 않습니다. 누락·짧은 키로는 기동하지 않습니다. 개발용·운영 키를 서로 다르게 관리하고 실제 키를 Git·로그에 남기지 않습니다.
+- JWT는 HS256, `iss=capstone-be`, `sub=사용자 UUID`, `iat`·`exp`를 포함하며 30분 동안 유효합니다. 서명·issuer·필수 시각·UUID를 검증합니다. `Authorization: Bearer` 헤더로 인증하며 HTTP 세션이나 refresh 쿠키로 업무 API를 인증하지 않습니다.
+- `GET /api/auth/me`는 `{id,email,displayName,providers}`를 반환합니다. nullable `email`도 응답에 포함합니다. 요청의 임의 `userId`로 사용자를 바꿀 수 없습니다. 누락·만료·변조 토큰은 JSON 401 `UNAUTHENTICATED`입니다.
+- `dev` 신원의 액세스 토큰에는 저장된 신원을 기준으로 `dev=true`를 붙입니다. 활성 프로필이 `local`·`test`로만 구성된 경우에만 이 토큰을 허용하며, 운영이나 혼합 프로필에서는 `dev` 클레임이 있는 토큰을 거부합니다. 현재 공개 토큰 발급 API는 구현 전입니다.
+- CORS는 `CAPSTONE_APP_URL` 하나만 허용하며 기본은 `http://localhost:5173`입니다. 경로·끝의 `/` 없이 Origin을 지정합니다. credentials·Authorization·Content-Type과 GET/POST/PUT/PATCH/DELETE/OPTIONS를 지원합니다.
+- health의 두 경로는 공개이며, Swagger는 `local`·`test`에서 공개합니다. 인증 공개 경로는 메서드별로 providers·OAuth 시작/콜백·refresh·logout·dev/token만 지정하며 `/api/auth/me`와 나머지 요청은 보호합니다. 공개 경로 지정이 해당 API의 구현 완료를 뜻하지 않습니다.
+
+운영은 `local`·`test` 없이 별도의 `CAPSTONE_JWT_SECRET`, 실제 앱 Origin `CAPSTONE_APP_URL`과 표준 DataSource 환경변수를 주입합니다. Google 로그인과 refresh·logout 설정은 해당 기능 구현 시 추가합니다.
+
 ## Flyway와 협업
 
-[V1__initial_schema.sql](src/main/resources/db/migration/V1__initial_schema.sql)은 초기 ERD 전체를 생성합니다. 신규 빈 DB에 애플리케이션을 기동하면 Flyway가 JPA보다 먼저 적용합니다. 엔티티가 아직 없어도 실행할 수 있으며, 기능 구현 시 이 스키마에 맞춰 JPA 엔티티를 추가합니다. 관계 유형과 합성 규칙의 미정 데이터는 seed로 넣지 않았습니다.
+[V1__initial_schema.sql](src/main/resources/db/migration/V1__initial_schema.sql)은 초기 ERD 전체를 생성합니다. 신규 빈 DB에 애플리케이션을 기동하면 Flyway가 JPA보다 먼저 적용합니다. 사용자·신원 엔티티는 이 스키마에 맞췄으며 나머지 엔티티는 기능 구현 시 추가합니다. 관계 유형과 합성 규칙의 미정 데이터는 seed로 넣지 않았습니다.
 
 실행 SQL은 백엔드에서만 관리하고 docs에는 [ERD](../capstone_docs/diagrams/erd.md)와 설계 설명을 유지합니다. 적용된 V1은 수정하지 않고 다음 변경을 `V2__설명.sql`, `V3__설명.sql`로 추가합니다. 버전은 주차가 아닌 스키마 변경 순서이며 팀원의 번호와 겹치지 않게 조율합니다. `schema.sql` / `data.sql`을 병용하거나 `baseline-on-migrate`·clean 허용으로 오류를 우회하지 않습니다. 기존 DB에 같은 이름의 테이블이나 다른 V1이 있다면 실행을 멈추고 이력을 확인하며, 데이터를 삭제하거나 덮어쓰지 않습니다.
 
