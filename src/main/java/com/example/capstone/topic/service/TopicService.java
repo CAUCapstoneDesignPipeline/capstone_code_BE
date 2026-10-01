@@ -2,6 +2,11 @@ package com.example.capstone.topic.service;
 
 import java.time.Clock;
 import java.util.UUID;
+import java.util.List;
+import java.util.Map;
+import java.util.HashSet;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
@@ -46,6 +51,20 @@ public class TopicService {
         checkName(userId,name,id);
         topic.rename(name); save(topic);
         return response(topic,notes.countByUserIdAndTopicId(userId,id));
+    }
+    @Transactional
+    public TopicListResponse reorder(UUID userId,List<UUID> ids) {
+        if(ids==null || ids.contains(null) || new HashSet<>(ids).size()!=ids.size()) {
+            throw TextValidation.invalid("topicIds","invalid","주제 순서가 올바르지 않습니다.");
+        }
+        lock(userId);
+        var current=topics.findByUserId(userId).stream().collect(Collectors.toMap(Topic::getId,Function.identity()));
+        if(!current.keySet().equals(new HashSet<>(ids))) {
+            throw new ApiException(ErrorCode.TOPIC_ORDER_CONFLICT,"다른 곳에서 주제 목록이 바뀌었습니다. 목록을 새로 불러왔으니 다시 시도하세요.",Map.of("current",list(userId)));
+        }
+        for(int order=0;order<ids.size();order++) { current.get(ids.get(order)).reorder(order); }
+        topics.flush();
+        return list(userId);
     }
     @Transactional(readOnly=true)
     public Topic owned(UUID userId,UUID id) {

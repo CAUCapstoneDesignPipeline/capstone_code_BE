@@ -19,6 +19,7 @@ public class Topic {
     public Topic(UUID userId,String name,int sortOrder,Instant now) {
         this.id=UUID.randomUUID(); this.userId=userId; this.name=name; this.sortOrder=sortOrder; this.createdAt=now;
     }
+    public void reorder(int order) { this.sortOrder=order; }
     public void rename(String name) { this.name=name; }
     public UUID getId() { return id; }
     public String getName() { return name; }
