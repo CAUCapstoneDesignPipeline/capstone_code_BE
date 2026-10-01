@@ -286,3 +286,10 @@ PUT `/api/notes/{id}`의 필수 필드는 title·body·version입니다. 요청 
 성공은 version+1, 불일치는 409 NOTE_CONFLICT와 `details.current`의 현재 Note를 반환합니다.
 같은 내용 저장도 version을 증가시키며 같은 version의 동시 저장은 하나만 성공합니다.
 사용자 행 잠금과 JPA @Version을 함께 적용하고 @DynamicUpdate로 주제 필드를 저장하지 않습니다.
+
+### 노트 이동 (#11)
+
+PUT `/api/notes/{id}/topic`에 `{"topicId":"대상 UUID"}` 또는 `{"topicId":null}`을 보냅니다.
+필드를 생략하면 400입니다. 이동은 topicId·updatedAt만 변경하고 제목·본문·version을 보존합니다.
+사용자 잠금 안의 벌크 갱신 후 영속성 컨텍스트를 비워 최신 Note를 반환합니다.
+본문 저장과 동시에 실행해도 둘 다 반영되며 목적지 제목 충돌은 전체 이동을 취소합니다.

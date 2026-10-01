@@ -1,6 +1,8 @@
 package com.example.capstone.note.repository;
 
+import java.time.Instant;
 import java.util.List;
+import org.springframework.data.jpa.repository.Modifying;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.domain.Sort;
@@ -9,6 +11,9 @@ import org.springframework.data.jpa.repository.Query;
 import com.example.capstone.note.domain.Note;
 
 public interface NoteRepository extends JpaRepository<Note,UUID> {
+    @Modifying(flushAutomatically=true,clearAutomatically=true)
+    @Query("update Note n set n.topicId = :topicId, n.updatedAt = :now where n.id = :id and n.userId = :userId")
+    int move(UUID userId,UUID id,UUID topicId,Instant now);
     long countByUserIdAndTopicId(UUID userId,UUID topicId);
     Optional<Note> findByIdAndUserId(UUID id,UUID userId);
     @Query("""
