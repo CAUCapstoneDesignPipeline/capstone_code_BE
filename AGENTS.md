@@ -101,7 +101,7 @@ docker compose --env-file .env.example config --quiet
 ## 8. 협업과 문서
 
 - 팀 기준은 `main` 대상 PR, 1명 이상 승인, Squash merge다. 실제 원격 보호 규칙·CI가 설정되어 있는지는 별도 확인한다.
-- 브랜치는 `타입/영역-내용`(예: `feat/note-update`), 커밋 메시지는 `타입: 커밋 제목(#이슈번호)`(예: `feat: 공통 오류 응답 구현(#1)`), PR 제목은 `타입(#이슈번호): 내용`을 사용한다. 타입은 변경 목적에 맞게 `feat`, `fix`, `refactor`, `test`, `style`, `chore`, `docs` 중 선택한다. 콜론 뒤에는 공백 하나를 두고, 제목과 `(#이슈번호)` 사이에는 공백을 넣지 않는다. 커밋·PR에 실제 관련 이슈 번호를 사용하며 번호를 임의로 만들지 않는다.
+- 브랜치는 `타입/이슈번호-영역-내용`(예: `feat/10-note-update`)으로 작성하며 `/` 바로 뒤에 실제 관련 이슈 번호를 넣는다. 커밋 메시지는 `타입: 커밋 제목(#이슈번호)`(예: `feat: 공통 오류 응답 구현(#1)`), PR 제목은 `타입(#이슈번호): 내용`을 사용한다. 타입은 변경 목적에 맞게 `feat`, `fix`, `refactor`, `test`, `style`, `chore`, `docs` 중 선택한다. 콜론 뒤에는 공백 하나를 두고, 제목과 `(#이슈번호)` 사이에는 공백을 넣지 않는다. 브랜치·커밋·PR에 실제 관련 이슈 번호를 사용하며 번호를 임의로 만들지 않는다.
 - 저장소의 `.github/ISSUE_TEMPLATE/feature-request.md`와 `.github/pull_request_template.md`를 따른다. 완료되는 이슈만 `Closes`, 참고는 `Related to`로 연결하며 타 저장소는 전체 이슈 주소를 쓴다.
 - 이슈 제목·본문을 작성하거나 수정할 때는 로컬 보조 지침인 [.local/guides/issue-writing.md](.local/guides/issue-writing.md)를 먼저 읽고 현재 이슈 템플릿과 함께 적용한다. 이슈는 PR보다 훨씬 간결하게 작성한다. 이 지침은 Git에 포함하지 않으며, 다른 클론에 파일이 없으면 저장소 이슈 템플릿을 기준으로 목적·작업 범위·완료 조건만 짧게 정리한다.
 - PR 제목·본문을 작성하거나 수정할 때는 로컬 보조 지침인 [.local/guides/pr-writing.md](.local/guides/pr-writing.md)를 먼저 읽고 현재 PR 템플릿과 함께 적용한다. 이 문서는 Git에 포함하지 않으며, 다른 클론에 파일이 없으면 이 문서의 협업·검증 기준과 저장소 PR 템플릿을 따른다.
