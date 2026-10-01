@@ -220,3 +220,13 @@ Swagger UI는 현재 구현된 Controller를 기준으로 문서를 생성합니
 refresh 원문은 256비트 무작위 값이며 DB에는 SHA-256 해시만 저장합니다. 14일 동안 유효하고 사용할 때마다 회전합니다. 교체된 토큰 재사용은 해당 family 전체를 폐기한 뒤 401로 응답합니다. 사용자 행 잠금으로 회전·재사용·로그아웃을 직렬화합니다. 로그아웃은 현재 기기의 family만 폐기하며 이미 발급된 액세스 토큰은 만료까지 유효합니다.
 
 쿠키는 `CAPSTONE_REFRESH`, HttpOnly, SameSite=Strict, Path=/api/auth입니다. Secure는 기본 활성화하고 local/test 전용 프로필과 HTTP 앱 Origin에서만 예외를 적용합니다. 정상 Origin의 비로그인 로그아웃도 204이며 동일 경로로 쿠키를 만료시킵니다.
+
+### 개발용 로그인 (#5)
+
+`local` 또는 `test` 프로필만 사용하고 `CAPSTONE_DEV_TOKEN_ENABLED=true`를 설정하면
+`POST /api/auth/dev/token`이 열립니다. 기본값은 비활성이고 운영/혼합 프로필에서는 404입니다.
+`GET /api/auth/providers`의 `devTokenEnabled`로 버튼 표시 여부를 확인합니다.
+요청 예시: `{"email":"dev@capstone.local","displayName":"개발자","issueRefreshCookie":true}`.
+필드를 생략하면 기본 개발 사용자를 재사용하며 refresh 쿠키는 요청한 경우에만 발급합니다.
+응답의 `accessToken`을 Bearer 헤더로 `/api/auth/me`에 전달합니다.
+개발용 서명 키는 운영 키와 다르게 설정해야 합니다. Google 제공자는 #6 설정 전까지 목록에 없습니다.

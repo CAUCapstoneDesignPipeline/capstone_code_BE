@@ -33,7 +33,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@WebMvcTest(AuthController.class)
+@WebMvcTest({AuthController.class, com.example.capstone.auth.controller.AuthProviderController.class,
+        com.example.capstone.auth.controller.DevTokenController.class})
 @Import({SecurityConfig.class, JwtConfig.class, AuthenticationErrorHandler.class})
 @ActiveProfiles("prod")
 @TestPropertySource(properties = "capstone.auth.jwt.secret=test-only-production-validation-key-32-bytes")
@@ -71,6 +72,14 @@ class AuthProductionWebMvcTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(id.toString()));
         mvc.perform(get("/swagger-ui.html")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void productionDoesNotExposeDevelopmentLoginEvenWithBearerHeader() throws Exception {
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/api/auth/dev/token")
+                .header("Authorization", "Bearer invalid").contentType("application/json").content("{}"))
+                .andExpect(status().isNotFound());
+        mvc.perform(get("/api/auth/providers")).andExpect(jsonPath("$.devTokenEnabled").value(false));
     }
 
     private String sign(JwtClaimsSet claims) {
