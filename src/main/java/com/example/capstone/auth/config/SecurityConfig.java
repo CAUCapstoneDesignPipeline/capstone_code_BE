@@ -1,6 +1,18 @@
 package com.example.capstone.auth.config;
 
 import java.net.URI;
+import java.io.IOException;
+import java.util.Map;
+import tools.jackson.databind.ObjectMapper;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.server.ServerHttpResponse;
+import org.springframework.security.oauth2.server.resource.web.DefaultBearerTokenResolver;
+import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
+import org.springframework.web.cors.DefaultCorsProcessor;
+import org.springframework.web.filter.CorsFilter;
+import com.example.capstone.global.exception.ErrorCode;
+import com.example.capstone.global.response.ErrorResponse;
 import java.util.List;
 
 import org.springframework.context.annotation.Bean;
@@ -19,8 +31,20 @@ public class SecurityConfig {
 
     @Bean
     SecurityFilterChain apiSecurity(HttpSecurity http, AuthenticationErrorHandler errors,
-            Environment environment) throws Exception {
-        http.cors(Customizer.withDefaults())
+            Environment environment, UrlBasedCorsConfigurationSource source, ObjectMapper mapper) throws Exception {
+        CorsFilter corsFilter = new CorsFilter(source);
+        corsFilter.setCorsProcessor(new DefaultCorsProcessor() {
+            @Override
+            protected void rejectRequest(ServerHttpResponse response) throws IOException {
+                response.setStatusCode(HttpStatus.FORBIDDEN);
+                response.getHeaders().setContentType(MediaType.APPLICATION_JSON);
+                mapper.writeValue(response.getBody(), ErrorResponse.of(ErrorCode.FORBIDDEN,
+                        "허용된 앱에서 요청해 주세요.", Map.of()));
+            }
+        });
+        DefaultBearerTokenResolver bearer = new DefaultBearerTokenResolver();
+        http.addFilterBefore(corsFilter, BearerTokenAuthenticationFilter.class)
+                .cors(cors -> cors.disable())
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .requestCache(cache -> cache.disable())
@@ -39,7 +63,16 @@ public class SecurityConfig {
                     requests.anyRequest().authenticated();
                 })
                 .exceptionHandling(exceptions -> exceptions.authenticationEntryPoint(errors))
-                .oauth2ResourceServer(resource -> resource.jwt(Customizer.withDefaults())
+                .oauth2ResourceServer(resource -> resource
+                        .bearerTokenResolver(request -> {
+                            String path = request.getRequestURI().substring(request.getContextPath().length());
+                            boolean publicGet = "GET".equals(request.getMethod())
+                                    && (path.equals("/api/auth/providers") || path.startsWith("/api/auth/oauth2/"));
+                            boolean publicPost = "POST".equals(request.getMethod()) && List.of(
+                                    "/api/auth/refresh", "/api/auth/logout", "/api/auth/dev/token").contains(path);
+                            return publicGet || publicPost ? null : bearer.resolve(request);
+                        })
+                        .jwt(Customizer.withDefaults())
                         .authenticationEntryPoint(errors));
         return http.build();
     }

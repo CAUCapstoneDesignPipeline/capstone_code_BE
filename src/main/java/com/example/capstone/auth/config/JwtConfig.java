@@ -4,7 +4,6 @@ import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.Arrays;
 import java.util.UUID;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
@@ -60,10 +59,7 @@ public class JwtConfig {
                 .macAlgorithm(MacAlgorithm.HS256).build();
         JwtTimestampValidator timestamps = new JwtTimestampValidator(Duration.ZERO);
         timestamps.setClock(authClock);
-        // A mixed production/development profile must never enable development credentials.
-        String[] profiles = environment.getActiveProfiles();
-        boolean development = profiles.length > 0 && Arrays.stream(profiles)
-                .allMatch(profile -> profile.equals("local") || profile.equals("test"));
+        boolean development = AuthEnvironment.isDevelopment(environment);
         decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(timestamps,
                 new JwtIssuerValidator(properties.jwt().issuer()),
                 jwt -> validateClaims(jwt, development, authClock.instant())));
