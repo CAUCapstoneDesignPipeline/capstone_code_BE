@@ -14,6 +14,7 @@ import com.example.capstone.global.exception.ErrorCode;
 import com.example.capstone.global.validation.TextValidation;
 import com.example.capstone.note.domain.Note;
 import com.example.capstone.note.dto.request.NoteCreateRequest;
+import com.example.capstone.note.dto.request.NoteUpdateRequest;
 import com.example.capstone.note.dto.response.NoteListResponse;
 import com.example.capstone.note.dto.response.NoteResponse;
 import com.example.capstone.note.dto.response.NoteSummaryResponse;
@@ -40,6 +41,19 @@ public class NoteService {
         checkTitle(userId,note.getTopicId(),title,note.getId());
         note=save(note);
         return NoteResponse.from(note);
+    }
+    @Transactional
+    public NoteResponse update(UUID userId,UUID id,NoteUpdateRequest request) {
+        String title=TextValidation.title(request.title(),"title","제목",200);
+        String body=TextValidation.body(request.body());
+        lock(userId);
+        Note note=owned(userId,id,true);
+        if(note.getVersion()!=request.version()) {
+            throw new ApiException(ErrorCode.NOTE_CONFLICT,"다른 곳에서 이 노트가 먼저 수정되었습니다.",Map.of("current",NoteResponse.from(note)));
+        }
+        checkTitle(userId,note.getTopicId(),title,id);
+        note.edit(title,body,clock.instant());
+        return NoteResponse.from(save(note));
     }
     @Transactional(readOnly=true)
     public NoteResponse get(UUID userId,UUID id) { return NoteResponse.from(owned(userId,id,false)); }
