@@ -78,6 +78,15 @@ public class NoteService {
     private ApiException moveDuplicate(String title) {
         return new ApiException(ErrorCode.NOTE_TITLE_TAKEN,"옮길 주제에 같은 제목의 노트가 있어 옮기지 못했습니다.",Map.of("titles",List.of(title)));
     }
+    @Transactional
+    public void delete(UUID userId,UUID id) {
+        lock(userId);
+        Note note=notes.lockForDelete(userId,id).orElseThrow(() -> new ApiException(ErrorCode.NOT_FOUND,"삭제된 노트입니다"));
+        if(notes.hasEvidence(userId,id)) {
+            throw new ApiException(ErrorCode.NOTE_DELETE_BLOCKED,"근거가 연결된 노트는 아직 삭제할 수 없습니다.");
+        }
+        notes.delete(note); notes.flush();
+    }
     @Transactional(readOnly=true)
     public NoteResponse get(UUID userId,UUID id) { return NoteResponse.from(owned(userId,id,false)); }
     @Transactional(readOnly=true)

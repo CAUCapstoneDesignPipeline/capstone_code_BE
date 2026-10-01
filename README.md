@@ -293,3 +293,13 @@ PUT `/api/notes/{id}/topic`에 `{"topicId":"대상 UUID"}` 또는 `{"topicId":nu
 필드를 생략하면 400입니다. 이동은 topicId·updatedAt만 변경하고 제목·본문·version을 보존합니다.
 사용자 잠금 안의 벌크 갱신 후 영속성 컨텍스트를 비워 최신 Note를 반환합니다.
 본문 저장과 동시에 실행해도 둘 다 반영되며 목적지 제목 충돌은 전체 이동을 취소합니다.
+
+### 삭제와 미분류 이동 (#12)
+
+DELETE `/api/notes/{id}`는 근거 없는 소유 노트를 삭제하며 204, 이후 조회는 404입니다.
+DELETE `/api/topics/{id}`는 소속 노트를 미분류로 옮기고 updatedAt을 변경하며 내용/version을 보존합니다.
+미분류 제목 충돌은 409 NOTE_TITLE_TAKEN·titles와 함께 전체 작업을 취소합니다.
+사용자 행 잠금을 생성/수정/이동/순서 변경/삭제가 공유합니다.
+사용자 승인 로컬 기준으로 evidence_span이 연결된 노트 삭제는 409 NOTE_DELETE_BLOCKED이며
+노트와 AI 데이터를 변경하지 않습니다(팀 정본 반영 대기). PostgreSQL FOR UPDATE로
+근거의 외래 키 삽입과 삭제 검사를 동기화합니다. AI 근거 소실 전체 처리는 #14 후속 범위입니다.
