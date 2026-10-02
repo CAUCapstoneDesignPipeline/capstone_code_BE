@@ -1,6 +1,14 @@
 # CAPSTONE 백엔드 작업 지침
 
-이 지침은 백엔드 저장소 전체에 적용한다. 캡스톤 서비스 개발과 팀 협업을 우선하며, 단일 모듈과 도메인별 패키지를 유지한다. 팀원용 상세 컨벤션은 [backend.md](../capstone_docs/conventions/backend.md), 환경 구성은 [README.md](README.md)를 참고한다.
+이 지침은 백엔드 저장소 전체에 적용한다. 캡스톤 서비스 개발과 팀 협업을 우선하며, 단일 모듈과 도메인별 패키지를 유지한다. 팀원용 상세 컨벤션은 [backend.md](../capstone_docs/conventions/backend.md), 환경 구성은 [백엔드 개발 가이드](../capstone_docs/development/backend-guide.md)를 참고한다.
+
+## 대표 README 보호
+
+- 루트 `README.md`는 포트폴리오 방문자가 프로젝트의 목적·핵심 기능·설계 특징·기술 스택을 빠르게 이해하는 대표 소개 문서다. 설명은 현재 코드로 확인할 수 있는 사실에 한정하고 구현된 기능과 계획을 구분한다.
+- 사용자가 README 작성·수정 또는 대표 소개 내용 변경을 명시적으로 요청한 경우에만 수정한다. 일반 기능 개발, API 추가, 실행 설정 변경, 검증·문서 보완 요청을 README 수정 권한으로 해석하지 않는다.
+- 실행 명령, 환경변수·키 발급 절차, Swagger 조작법, 문제 해결, 이슈별 진행 상황, 테스트 집계·로그, AI 작업 기록, 개인 컴퓨터 경로를 README에 추가하지 않는다.
+- 실행·설정 안내는 팀 문서의 `development/backend-guide.md`, API별 설명은 Swagger와 팀 API 문서, 작업·검증 기록은 `.local/`에서 관리한다. 기능 개발의 문서 갱신은 이 위치에서 계속 수행하며 README 수정을 위해 작업을 중단하지 않는다.
+- README 수정이 명시적으로 요청되어도 기존 소개 구조와 분량을 존중하고 요청한 범위만 바꾼다. 동작·계약·성과를 추측하거나 개발 매뉴얼을 다시 누적하지 않는다.
 
 ## 1. 작업 기준과 범위
 
@@ -29,8 +37,8 @@ API 계약과 동작 규칙이 기능명세서보다 우선한다. 새 팀 결�
 - Swagger UI는 `springdoc-openapi-starter-webmvc-ui:3.1.1`을 사용한다. Boot BOM 밖이라 버전을 명시하며 기본 `/swagger-ui.html`, `/v3/api-docs` 경로를 사용한다. 자동 생성 문서는 구현 확인용이고 전체 계약의 정본은 docs의 `api/openapi.yaml`이다.
 - 필요가 확정되지 않은 Security, Redis, Kafka, QueryDSL, Lombok, DevTools, Spring AI, Docker Compose 자동 연동 등을 선제 추가하지 않는다.
 - 공통 설정은 `application.yml`, 로컬 DB 연결은 `application-local.yml`에 둔다. `local`은 실행할 때 명시한다. SQL 출력·DEBUG 로그를 공통 설정에 넣지 않는다.
-- 로컬 DB 변수는 `.env.example`의 `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_HOST_PORT`를 공유한다. Compose의 `.env`는 호스트 Spring Boot에 자동 전달되지 않으므로 README의 export 절차를 따른다.
-- 운영 연결은 표준 `SPRING_DATASOURCE_*` 환경변수를 사용한다. 실제 `.env`와 비밀번호를 출력·커밋하지 않으며, 변수 추가 시 `.env.example`과 README도 갱신한다.
+- 로컬 DB 변수는 `.env.example`의 `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_HOST_PORT`를 공유한다. Compose의 `.env`는 호스트 Spring Boot에 자동 전달되지 않으므로 백엔드 개발 가이드의 export 절차를 따른다.
+- 운영 연결은 표준 `SPRING_DATASOURCE_*` 환경변수를 사용한다. 실제 `.env`와 비밀번호를 출력·커밋하지 않으며, 변수 추가 시 `.env.example`과 백엔드 개발 가이드를 갱신한다.
 
 ## 3. 코드 구조와 네이밍
 
@@ -109,8 +117,8 @@ docker compose --env-file .env.example config --quiet
 - 이슈 문서나 PR 문서 작성을 요청받으면 이슈는 `.local/issues/`, PR은 `.local/prs/`에 Markdown 파일로 저장한다. 폴더가 없으면 생성하고 파일명은 `issue-<내용>.md`, `pr-<내용>.md`처럼 영문 kebab-case로 정한다. 후속 수정은 해당 파일에 반영하고 저장 경로를 안내한다. `.gitignore`의 `/.local/` 규칙으로 폴더 전체를 제외하며, 이 문서들을 커밋하거나 강제로 추가하지 않는다.
 - 설계·계약·컨벤션 등 팀원에게 공유할 대부분의 문서는 별도 `capstone_docs` 저장소에서 작성·수정한다. 백엔드 저장소의 `docs/`와 구분하며, 같은 문서의 사본을 양쪽에 만들지 않는다.
 - AI가 작업 기록을 위해 만드는 검증 기록·조사 메모·작업 보고서와 공유 전 초안은 백엔드 저장소 루트의 `.local/`에 저장한다. 검증 보고서는 `.local/verification/reports/`, 빌드 로그는 `.local/verification/logs/`, 구조 검증 JSON은 `.local/verification/results/`, 기동 증거는 `.local/verification/runs/`에 구분한다. 초기 설정의 과거 기록은 [.local/verification/reports/setup-validation.md](.local/verification/reports/setup-validation.md)에서 관리하며, 이런 로컬 기록을 자동으로 `docs/`나 팀 문서 저장소에 옮기지 않는다.
-- 백엔드 저장소의 `docs/`에는 사용자가 충분히 검토하고 포함하도록 명시적으로 요청한 매우 중요한 백엔드 문서만 추가한다. AI가 중요하다고 판단한 것만으로 추가하지 않으며, 검토용 초안은 먼저 `.local/`에 작성한다. README의 실행·설정 안내는 기존 위치에서 갱신하되, 팀 공유 문서가 Git에서 제외된 로컬 기록을 필수 자료로 참조하지 않게 한다.
+- 백엔드 저장소의 `docs/`에는 사용자가 충분히 검토하고 포함하도록 명시적으로 요청한 매우 중요한 백엔드 문서만 추가한다. AI가 중요하다고 판단한 것만으로 추가하지 않으며, 검토용 초안은 먼저 `.local/`에 작성한다. 실행·설정 안내는 팀 문서의 `development/backend-guide.md`에서 갱신한다. 팀 공유 문서가 Git에서 제외된 로컬 기록을 필수 자료로 참조하지 않게 한다.
 - `.local`의 작성 지침은 `guides/`, 재실행 도구는 `scripts/`, 변경 전 자료는 `snapshots/`에 둔다. 파일 배치는 [.local/README.md](.local/README.md)를 따르고 이동 시 문서 링크와 스크립트의 입력·출력 경로를 함께 수정한다.
 - 컨벤션을 바꾸면 이 문서와 docs의 `conventions/backend.md`를 함께 갱신한다. 계약·코드 목록은 정본을 참조하며 별도 사본을 늘리지 않는다. `CLAUDE.md` 동기화나 자동 CI를 존재한다고 가정하지 않는다.
-- 실행·설정 변경은 README와 필요한 예시 환경변수에 반영한다. 새 일반 문서는 영문 kebab-case, 문서 내 링크는 가능한 상대 경로를 쓴다. `AGENTS.md`, `README.md` 등 표준 파일명은 유지한다.
+- 실행·설정 변경은 백엔드 개발 가이드와 필요한 예시 환경변수에 반영한다. 대표 README는 위 보호 규칙을 따른다. 새 일반 문서는 영문 kebab-case, 문서 내 링크는 가능한 상대 경로를 쓴다. `AGENTS.md`, `README.md` 등 표준 파일명은 유지한다.
 - 요청 없는 커밋·푸시·배포·시스템 도구 설치는 하지 않는다. 변경 파일, 검증 결과, 남은 제약을 간결히 보고한다.
