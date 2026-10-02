@@ -1,6 +1,7 @@
 package com.example.capstone.note.controller;
 
 import java.util.UUID;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -21,6 +22,7 @@ import com.example.capstone.note.dto.response.NoteListResponse;
 import com.example.capstone.note.service.NoteService;
 
 @RestController
+@SecurityRequirement(name = "bearerAuth")
 public class NoteController {
     private final NoteService notes;
     public NoteController(NoteService notes) { this.notes=notes; }

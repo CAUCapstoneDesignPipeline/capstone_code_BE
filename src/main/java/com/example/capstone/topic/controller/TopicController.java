@@ -1,6 +1,7 @@
 package com.example.capstone.topic.controller;
 
 import java.util.UUID;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -19,6 +20,7 @@ import com.example.capstone.topic.dto.response.TopicListResponse;
 import com.example.capstone.topic.service.TopicService;
 
 @RestController
+@SecurityRequirement(name = "bearerAuth")
 public class TopicController {
     private final TopicService topics;
     public TopicController(TopicService topics) { this.topics=topics; }

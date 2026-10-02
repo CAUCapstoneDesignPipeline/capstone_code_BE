@@ -177,9 +177,18 @@ curl -i http://localhost:8080/actuator/health
 - 자동 생성 OpenAPI JSON: <http://localhost:8080/v3/api-docs>
 - 자동 생성 OpenAPI YAML: <http://localhost:8080/v3/api-docs.yaml>
 
-Spring Boot 4를 지원하는 [springdoc 공식 안내](https://springdoc.org/)에 따라 `springdoc-openapi-starter-webmvc-ui:3.1.1`을 사용합니다. Boot BOM 밖의 의존성이므로 버전을 명시합니다. 별도 설정 클래스 없이 starter의 기본 경로와 자동 설정을 사용합니다.
+Spring Boot 4를 지원하는 [springdoc 공식 안내](https://springdoc.org/)에 따라 `springdoc-openapi-starter-webmvc-ui:3.1.1`을 사용합니다. Boot BOM 밖의 의존성이므로 버전을 명시합니다. starter의 기본 경로와 자동 설정을 사용하며 `OpenApiConfig`에서 HTTP Bearer 인증을 등록합니다.
 
 Swagger UI는 현재 구현된 Controller를 기준으로 문서를 생성합니다. 팀의 전체 API 계약 정본은 [docs의 openapi.yaml](../capstone_docs/api/openapi.yaml)이며, 자동 생성 결과와 계약의 일치는 기능을 구현할 때 확인합니다.
+
+### Swagger에서 액세스 토큰 입력하기
+
+1. 개발용 로그인 설정을 활성화한 경우 `POST /api/auth/dev/token`의 **Try it out → Execute**로 토큰을 발급합니다. 요청 본문 `{}`는 기본 개발 사용자를 사용합니다.
+2. 응답의 `accessToken` 문자열 값만 복사합니다. 따옴표와 `Bearer ` 접두사는 포함하지 않습니다.
+3. Swagger 상단의 **Authorize**를 누르고 `bearerAuth`의 입력란에 붙여 넣은 뒤 **Authorize → Close**를 누릅니다.
+4. 자물쇠가 표시된 `GET /api/auth/me`, 주제·노트 API에서 **Try it out → Execute**를 사용합니다. Swagger가 `Authorization: Bearer <accessToken>` 헤더를 붙입니다.
+
+providers·개발용 토큰 발급·OAuth 시작/콜백·refresh·logout은 Bearer 토큰을 요구하지 않습니다. refresh·logout의 Origin/쿠키 조건은 별도이며 아래 인증 안내를 따릅니다. 다른 사용자로 확인할 때는 Authorize 창에서 **Logout** 후 새 액세스 토큰을 입력합니다. 화면을 새로고침하면 다시 입력하며 토큰을 브라우저 저장소에 보관하는 설정은 추가하지 않습니다.
 
 ## 공통 API 응답
 

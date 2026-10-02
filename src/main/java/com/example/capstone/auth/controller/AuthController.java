@@ -1,6 +1,7 @@
 package com.example.capstone.auth.controller;
 
 import java.util.UUID;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -13,6 +14,7 @@ import com.example.capstone.auth.service.CurrentUserService;
 
 @RestController
 @RequestMapping("/api/auth")
+@SecurityRequirement(name = "bearerAuth")
 public class AuthController {
 
     private final CurrentUserService currentUsers;

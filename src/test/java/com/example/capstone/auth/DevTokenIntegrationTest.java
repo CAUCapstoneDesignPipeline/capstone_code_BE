@@ -30,6 +30,38 @@ class DevTokenIntegrationTest {
     @Autowired private ObjectMapper mapper;
 
     @Test
+    void documentsBearerInputForProtectedOperationsAndKeepsLoginOperationsPublic() throws Exception {
+        var response = mvc.perform(get("/v3/api-docs")).andExpect(status().isOk())
+                .andReturn().getResponse();
+        var document = mapper.readTree(response.getContentAsString());
+        var scheme = document.path("components").path("securitySchemes").path("bearerAuth");
+        assertThat(scheme.path("type").asString()).isEqualTo("http");
+        assertThat(scheme.path("scheme").asString()).isEqualTo("bearer");
+        assertThat(scheme.path("bearerFormat").asString()).isEqualTo("JWT");
+        assertThat(document.path("security").isMissingNode()).isTrue();
+
+        document.path("paths").properties().forEach(path -> {
+            boolean protectedPath = path.getKey().equals("/api/auth/me")
+                    || path.getKey().startsWith("/api/topics") || path.getKey().startsWith("/api/notes");
+            path.getValue().properties().forEach(operation -> {
+                var security = operation.getValue().path("security");
+                if (protectedPath) {
+                    assertThat(security.isArray()).as(path.getKey() + " " + operation.getKey()).isTrue();
+                    assertThat(security.get(0).path("bearerAuth").isArray()).isTrue();
+                } else {
+                    assertThat(security.isMissingNode() || security.isEmpty())
+                            .as(path.getKey() + " " + operation.getKey() + " is public").isTrue();
+                }
+            });
+        });
+        assertThat(document.path("paths").has("/api/auth/dev/token")).isTrue();
+        assertThat(document.path("paths").has("/api/auth/providers")).isTrue();
+        assertThat(document.path("paths").has("/api/auth/me")).isTrue();
+        assertThat(document.path("paths").has("/api/topics")).isTrue();
+        assertThat(document.path("paths").has("/api/notes")).isTrue();
+    }
+
+    @Test
     void reusesIdentityAndConnectsOptionalCookieToMeAndRefresh() throws Exception {
         mvc.perform(get("/api/auth/providers")).andExpect(jsonPath("$.providers").isEmpty())
                 .andExpect(jsonPath("$.devTokenEnabled").value(true));
