@@ -190,6 +190,12 @@ Swagger UI는 현재 구현된 Controller를 기준으로 문서를 생성합니
 
 providers·개발용 토큰 발급·OAuth 시작/콜백·refresh·logout은 Bearer 토큰을 요구하지 않습니다. refresh·logout의 Origin/쿠키 조건은 별도이며 아래 인증 안내를 따릅니다. 다른 사용자로 확인할 때는 Authorize 창에서 **Logout** 후 새 액세스 토큰을 입력합니다. 화면을 새로고침하면 다시 입력하며 토큰을 브라우저 저장소에 보관하는 설정은 추가하지 않습니다.
 
+### FE 개발자가 API 설명 읽기
+
+Swagger의 **인증 → 주제 → 노트** 그룹에서 API를 펼치면 호출 목적과 화면 처리 방법을 볼 수 있습니다. **Request body → Schema**에서 필수 필드·생략 기본값·null 허용 조건을, **Responses**에서 성공 상태와 오류 코드별 대응을 확인합니다. 목록의 `snippet`은 평문이며 노트 원문은 단건 조회로 읽습니다. 자동 저장은 직전 응답의 `version`을 보내고, `NOTE_CONFLICT`에서는 미저장 입력을 유지한 채 `error.details.current`를 확인합니다.
+
+`refresh`·`logout`은 실제 FE 출처에서 `credentials: include`로 실행해야 합니다. 예를 들어 Swagger가 `http://localhost:8080`, `CAPSTONE_APP_URL`이 `http://localhost:5173`이면 Swagger에서 직접 실행한 요청은 Origin 조건 때문에 403입니다. 브라우저의 Origin과 HttpOnly 쿠키는 Swagger 입력란으로 대체할 수 없습니다. 소셜 로그인 시작은 브라우저 이동이며 콜백은 Google이 호출합니다. Swagger 실행만으로 Google 로그인·쿠키·FE 복귀를 검증했다고 판단하지 않습니다.
+
 ## 공통 API 응답
 
 성공 응답은 명세의 DTO를 그대로 반환합니다. 오류는 `global/response/ErrorResponse`의 `{"error":{"code":"...","message":"...","details":{...}}}` 구조를 사용하며 불필요한 `details`는 생략합니다. `ApiException`에 계약의 오류 코드·사용자용 문구·상세 정보를 담으면 `GlobalExceptionHandler`가 HTTP 응답으로 변환합니다. 사용 예와 MVC 기본 오류 처리 범위는 [팀 컨벤션](../capstone_docs/conventions/backend.md)의 API·응답·오류 절을 참고합니다.
