@@ -55,6 +55,29 @@ public class NoteService {
         note.edit(title,body,clock.instant());
         return NoteResponse.from(save(note));
     }
+    @Transactional
+    public NoteResponse move(UUID userId,UUID id,UUID destination) {
+        lock(userId);
+        Note note=owned(userId,id,false);
+        if(destination!=null) { topics.owned(userId,destination); }
+        if(notes.titleExists(userId,destination,note.getTitle(),id)) { throw moveDuplicate(note.getTitle()); }
+        try {
+            if(notes.move(userId,id,destination,clock.instant())!=1) {
+                throw new ApiException(ErrorCode.NOT_FOUND,"삭제된 노트입니다");
+            }
+        } catch(DataIntegrityViolationException exception) {
+            for(Throwable cause=exception;cause!=null;cause=cause.getCause()) {
+                if(cause instanceof ConstraintViolationException constraint && "note_topic_title_unique".equals(constraint.getConstraintName())) {
+                    throw moveDuplicate(note.getTitle());
+                }
+            }
+            throw exception;
+        }
+        return NoteResponse.from(owned(userId,id,false));
+    }
+    private ApiException moveDuplicate(String title) {
+        return new ApiException(ErrorCode.NOTE_TITLE_TAKEN,"옮길 주제에 같은 제목의 노트가 있어 옮기지 못했습니다.",Map.of("titles",List.of(title)));
+    }
     @Transactional(readOnly=true)
     public NoteResponse get(UUID userId,UUID id) { return NoteResponse.from(owned(userId,id,false)); }
     @Transactional(readOnly=true)
