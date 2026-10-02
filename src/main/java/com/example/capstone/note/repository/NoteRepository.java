@@ -5,7 +5,6 @@ import java.util.List;
 import org.springframework.data.jpa.repository.Modifying;
 import java.util.Optional;
 import java.util.UUID;
-import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import com.example.capstone.note.domain.Note;
@@ -38,9 +37,14 @@ public interface NoteRepository extends JpaRepository<Note,UUID> {
             and n.title = :title and (n.topicId = :topicId or (:topicId is null and n.topicId is null))
             """)
     boolean titleExists(UUID userId,UUID topicId,String title,UUID except);
-    @Query("""
-            select n from Note n where n.userId = :userId
-            and (:allTopics = true or (:unassigned = true and n.topicId is null) or n.topicId = :topicId)
-            """)
-    List<Note> list(UUID userId,boolean allTopics,boolean unassigned,UUID topicId,Sort sort);
+    // PostgreSQL ILIKE supplies case-insensitive literal substring search; all inputs are bound.
+    @Query(value="""
+            select n.* from note n where n.user_id = :userId
+            and (:allTopics = true or (:unassigned = true and n.topic_id is null) or n.topic_id = cast(:topicId as uuid))
+            and (cast(:pattern as text) is null or n.title ilike cast(:pattern as text) escape chr(92)
+                 or n.body ilike cast(:pattern as text) escape chr(92))
+            order by case when :sort = 'title' then n.title end asc,
+                     case when :sort = 'updated' then n.updated_at end desc, n.id
+            """,nativeQuery=true)
+    List<Note> list(UUID userId,boolean allTopics,boolean unassigned,UUID topicId,String pattern,String sort);
 }

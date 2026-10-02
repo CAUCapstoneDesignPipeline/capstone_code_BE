@@ -4,9 +4,9 @@ import java.time.Clock;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.regex.Pattern;
 import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.example.capstone.global.exception.ApiException;
@@ -91,7 +91,10 @@ public class NoteService {
     public NoteResponse get(UUID userId,UUID id) { return NoteResponse.from(owned(userId,id,false)); }
     @Transactional(readOnly=true)
     public NoteListResponse list(UUID userId,String filter,String sort,String q) {
-        if(q!=null && !q.trim().isEmpty()) { throw TextValidation.invalid("q","invalid","검색 기능은 아직 제공되지 않습니다."); }
+        String query=q==null?"":q.trim();
+        if(query.codePointCount(0,query.length())>100) {
+            throw TextValidation.invalid("q","too_long","검색어는 100자 이하로 입력하세요.");
+        }
         boolean all=filter==null,unassigned="none".equals(filter);
         UUID topicId=null;
         if(!all && !unassigned) {
@@ -101,11 +104,15 @@ public class NoteService {
             } catch(IllegalArgumentException exception) { throw TextValidation.invalid("topicId","invalid","주제 ID가 올바르지 않습니다."); }
             topics.owned(userId,topicId);
         }
-        Sort order;
-        if("title".equals(sort)) { order=Sort.by("title").ascending().and(Sort.by("id")); }
-        else if("updated".equals(sort)) { order=Sort.by("updatedAt").descending().and(Sort.by("id")); }
-        else { throw TextValidation.invalid("sort","invalid","정렬 기준이 올바르지 않습니다."); }
-        return new NoteListResponse(notes.list(userId,all,unassigned,topicId,order).stream().map(this::summary).toList());
+        if(!"title".equals(sort) && !"updated".equals(sort)) {
+            throw TextValidation.invalid("sort","invalid","정렬 기준이 올바르지 않습니다.");
+        }
+        String pattern=query.isEmpty()?null:"%"+escapeLike(query)+"%";
+        return new NoteListResponse(notes.list(userId,all,unassigned,topicId,pattern,sort).stream()
+                .map(note -> summary(note,query)).toList());
+    }
+    private String escapeLike(String query) {
+        return query.replace("\\","\\\\").replace("%","\\%").replace("_","\\_");
     }
     private Note owned(UUID userId,UUID id,boolean saving) {
         return notes.findByIdAndUserId(id,userId).orElseThrow(() -> new ApiException(ErrorCode.NOT_FOUND,
@@ -131,10 +138,19 @@ public class NoteService {
     private ApiException duplicate(UUID topicId,String title) {
         return new ApiException(ErrorCode.NOTE_TITLE_TAKEN,topicId==null?"미분류에 같은 제목의 노트가 있습니다.":"같은 주제에 같은 제목의 노트가 있습니다.",Map.of("titles",List.of(title)));
     }
-    private NoteSummaryResponse summary(Note note) {
+    private NoteSummaryResponse summary(Note note,String query) {
         String body=note.getBody();
-        int length=Math.min(80,body.codePointCount(0,body.length()));
-        String snippet=body.substring(0,body.offsetByCodePoints(0,length));
+        int total=body.codePointCount(0,body.length());
+        int start=0;
+        if(!query.isEmpty()) {
+            var match=Pattern.compile(Pattern.quote(query),Pattern.CASE_INSENSITIVE|Pattern.UNICODE_CASE).matcher(body);
+            if(match.find()) {
+                start=Math.max(0,body.codePointCount(0,match.start())-20);
+                start=Math.min(start,Math.max(0,total-80));
+            }
+        }
+        int end=Math.min(total,start+80);
+        String snippet=body.substring(body.offsetByCodePoints(0,start),body.offsetByCodePoints(0,end));
         return new NoteSummaryResponse(note.getId(),note.getTopicId(),note.getTitle(),snippet,note.getVersion(),note.getUpdatedAt());
     }
 }

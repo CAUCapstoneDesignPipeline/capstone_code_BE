@@ -1,6 +1,6 @@
 # capstone-be
 
-캡스톤 노트 서비스의 Spring Boot REST API 백엔드입니다. 단일 모듈과 도메인별 패키지를 사용합니다. 현재 초기 설정·health·공통 오류·V1 스키마와 JWT 인증 기반·내 정보 조회를 구현했습니다. refresh·로그인 발급 API와 주제·노트 API는 후속 작업입니다. 저장소 이름과 로컬 디렉터리 `capstone_code_BE`는 유지하고 Gradle 프로젝트 이름만 `capstone-be`로 지정했습니다.
+캡스톤 노트 서비스의 Spring Boot REST API 백엔드입니다. 단일 모듈과 도메인별 패키지를 사용합니다. 현재 health·공통 오류·Flyway 스키마, JWT·refresh·dev/Google 로그인, 주제·노트 CRUD와 검색을 구현했습니다. 실제 Google·FE 인수와 전체 회귀는 #14에서 검증합니다. 저장소 이름과 로컬 디렉터리 `capstone_code_BE`는 유지하고 Gradle 프로젝트 이름만 `capstone-be`로 지정했습니다.
 
 개발 규칙은 [AGENTS.md](AGENTS.md)와 [팀 백엔드 컨벤션](../capstone_docs/conventions/backend.md)을 참고합니다.
 
@@ -136,9 +136,9 @@ fi
 ./gradlew bootJar                  # 테스트 실행과 별도인 Jar 빌드
 ```
 
-통합 테스트는 새 `postgres:16.15` Testcontainers 컨테이너와 임의 호스트 포트를 사용합니다. `@SpringBootTest`로 전체 컨텍스트를 시작하고, 실제 DataSource에서 `SELECT 1`, V1 적용·재실행·체크섬, 19개 테이블과 주요 유일성·외래 키·CHECK 제약을 검증합니다. 로컬 프로필, `.env`, 개발 DB를 사용하지 않습니다. Docker가 없으면 통합 테스트는 **실패**하며 자동 건너뛰기를 설정하지 않았습니다. 테스트 터미널에서 개발용 프로필이나 별도의 `SPRING_FLYWAY_*` 설정을 export하지 마세요.
+통합 테스트는 새 `postgres:16.15` Testcontainers 컨테이너와 임의 호스트 포트를 사용합니다. `@SpringBootTest`로 전체 컨텍스트를 시작하고, 실제 DataSource에서 `SELECT 1`, V1/V2 적용·재실행·체크섬, 19개 업무 테이블·OAuth 임시 상태 테이블과 주요 유일성·외래 키·CHECK 제약을 검증합니다. 로컬 프로필, `.env`, 개발 DB를 사용하지 않습니다. Docker가 없으면 통합 테스트는 **실패**하며 자동 건너뛰기를 설정하지 않았습니다. 테스트 터미널에서 개발용 프로필이나 별도의 `SPRING_FLYWAY_*` 설정을 export하지 마세요.
 
-Flyway V1은 초기 ERD의 19개 테이블을 생성하며 `app_user`, `user_identity`는 JPA로 매핑했습니다. `ddl-auto=validate`는 매핑된 엔티티만 검사합니다. 인증 통합 테스트는 해당 매핑과 실제 JWT·내 정보 응답을 검증하고, 기존 SQL 테스트는 초기 스키마 제약을 검증합니다.
+Flyway V1은 초기 ERD의 19개 테이블을 생성하고 V2는 OAuth 일회용 시도 테이블을 추가합니다. `app_user`, `user_identity`, `refresh_token`, `oauth_attempt`, `topic`, `note`를 JPA로 매핑했습니다. `ddl-auto=validate`는 매핑된 엔티티만 검사합니다. 인증 통합 테스트는 해당 매핑과 실제 JWT·내 정보 응답을 검증하고, 기존 SQL 테스트는 초기 스키마 제약을 검증합니다.
 
 인증 기반의 필수 검증은 다음과 같이 선택할 수 있습니다. 이 부분 실행은 전체 회귀 테스트 결과를 대신하지 않습니다.
 
@@ -194,13 +194,13 @@ Swagger UI는 현재 구현된 Controller를 기준으로 문서를 생성합니
 - CORS는 `CAPSTONE_APP_URL` 하나만 허용하며 기본은 `http://localhost:5173`입니다. 경로·끝의 `/` 없이 Origin을 지정합니다. credentials·Authorization·Content-Type과 GET/POST/PUT/PATCH/DELETE/OPTIONS를 지원합니다.
 - health의 두 경로는 공개이며, Swagger는 `local`·`test`에서 공개합니다. 인증 공개 경로는 메서드별로 providers·OAuth 시작/콜백·refresh·logout·dev/token만 지정하며 `/api/auth/me`와 나머지 요청은 보호합니다. 공개 경로 지정이 해당 API의 구현 완료를 뜻하지 않습니다.
 
-운영은 `local`·`test` 없이 별도의 `CAPSTONE_JWT_SECRET`, 실제 앱 Origin `CAPSTONE_APP_URL`과 표준 DataSource 환경변수를 주입합니다. Google 로그인과 refresh·logout 설정은 해당 기능 구현 시 추가합니다.
+운영은 `local`·`test` 없이 별도의 `CAPSTONE_JWT_SECRET`, 실제 앱 Origin `CAPSTONE_APP_URL`과 표준 DataSource 환경변수를 주입합니다. Google 활성화·가입 허용 목록과 refresh·logout 안내는 아래 기능별 절을 따릅니다.
 
 ## Flyway와 협업
 
-[V1__initial_schema.sql](src/main/resources/db/migration/V1__initial_schema.sql)은 초기 ERD 전체를 생성합니다. 신규 빈 DB에 애플리케이션을 기동하면 Flyway가 JPA보다 먼저 적용합니다. 사용자·신원 엔티티는 이 스키마에 맞췄으며 나머지 엔티티는 기능 구현 시 추가합니다. 관계 유형과 합성 규칙의 미정 데이터는 seed로 넣지 않았습니다.
+[V1__initial_schema.sql](src/main/resources/db/migration/V1__initial_schema.sql)은 초기 ERD 전체를 생성합니다. 신규 빈 DB에 애플리케이션을 기동하면 Flyway가 JPA보다 먼저 적용합니다. 현재 사용자·신원·refresh·주제·노트 엔티티는 V1, OAuth 시도는 V2에 맞췄습니다. 나머지 AI 엔티티는 후속 기능에서 추가합니다. 관계 유형과 합성 규칙의 미정 데이터는 seed로 넣지 않았습니다.
 
-실행 SQL은 백엔드에서만 관리하고 docs에는 [ERD](../capstone_docs/diagrams/erd.md)와 설계 설명을 유지합니다. 적용된 V1은 수정하지 않고 다음 변경을 `V2__설명.sql`, `V3__설명.sql`로 추가합니다. 버전은 주차가 아닌 스키마 변경 순서이며 팀원의 번호와 겹치지 않게 조율합니다. `schema.sql` / `data.sql`을 병용하거나 `baseline-on-migrate`·clean 허용으로 오류를 우회하지 않습니다. 기존 DB에 같은 이름의 테이블이나 다른 V1이 있다면 실행을 멈추고 이력을 확인하며, 데이터를 삭제하거나 덮어쓰지 않습니다.
+실행 SQL은 백엔드에서만 관리하고 docs에는 [ERD](../capstone_docs/diagrams/erd.md)와 설계 설명을 유지합니다. 적용된 V1은 수정하지 않고 V2 OAuth 추가 이후의 변경은 `V3__설명.sql`부터 추가합니다. 버전은 주차가 아닌 스키마 변경 순서이며 팀원의 번호와 겹치지 않게 조율합니다. `schema.sql` / `data.sql`을 병용하거나 `baseline-on-migrate`·clean 허용으로 오류를 우회하지 않습니다. 기존 DB에 같은 이름의 테이블이나 다른 V1이 있다면 실행을 멈추고 이력을 확인하며, 데이터를 삭제하거나 덮어쓰지 않습니다.
 
 새 기능은 `com.example.capstone.<기능>` 아래에 필요한 코드만 추가합니다. 공통 CRUD 계층이나 응답 래퍼는 현재 만들지 않았습니다. API 계약과 협업 규칙은 [팀 문서 저장소](https://github.com/CAUCapstoneDesignPipeline/capstone_docs)를 따릅니다. 기능 변경 PR에는 관련 테스트 결과를 기록합니다.
 
@@ -229,7 +229,7 @@ refresh 원문은 256비트 무작위 값이며 DB에는 SHA-256 해시만 저�
 요청 예시: `{"email":"dev@capstone.local","displayName":"개발자","issueRefreshCookie":true}`.
 필드를 생략하면 기본 개발 사용자를 재사용하며 refresh 쿠키는 요청한 경우에만 발급합니다.
 응답의 `accessToken`을 Bearer 헤더로 `/api/auth/me`에 전달합니다.
-개발용 서명 키는 운영 키와 다르게 설정해야 합니다. Google 제공자는 #6 설정 전까지 목록에 없습니다.
+개발용 서명 키는 운영 키와 다르게 설정해야 합니다. Google 제공자는 활성화하고 필수 설정을 주입한 경우에만 목록에 표시합니다.
 
 ### Google 로그인 (#6)
 
@@ -278,7 +278,7 @@ GET `/api/notes/{id}`는 원문, GET `/api/notes?topicId=none&sort=updated`는
 본문 전체 없이 앞 80 코드 포인트 snippet을 반환합니다. 주제 필터 생략은 전체, UUID는 해당 주제이며
 정렬은 title(기본 오름차순) 또는 updated(최근순)입니다.
 사용자 승인 로컬 기준으로 없는/타인 주제 필터는 404입니다(팀 정본 반영 대기).
-같은 주제·미분류의 제목은 대소문자를 구분해 유일합니다. q 검색은 #13에서 추가합니다.
+같은 주제·미분류의 제목은 대소문자를 구분해 유일합니다. q 검색은 아래 #13 안내를 따릅니다.
 
 ### 노트 저장과 충돌 (#10)
 
@@ -303,3 +303,19 @@ DELETE `/api/topics/{id}`는 소속 노트를 미분류로 옮기고 updatedAt�
 사용자 승인 로컬 기준으로 evidence_span이 연결된 노트 삭제는 409 NOTE_DELETE_BLOCKED이며
 노트와 AI 데이터를 변경하지 않습니다(팀 정본 반영 대기). PostgreSQL FOR UPDATE로
 근거의 외래 키 삽입과 삭제 검사를 동기화합니다. AI 근거 소실 전체 처리는 #14 후속 범위입니다.
+
+### 노트 검색 (#13)
+
+GET `/api/notes?q=검색어&topicId=none&sort=updated`로 제목 또는 마크다운 원문을
+대소문자 무시 부분 검색합니다. q의 앞뒤 공백을 제거하고 100 코드 포인트를 제한하며
+비어 있으면 기본 목록과 같습니다. `%`, `_`, 역슬래시는 검색 문자를 그대로 취급합니다.
+PostgreSQL ILIKE와 명시적인 ESCAPE를 사용하고 모든 입력값은 바인딩합니다.
+주제/미분류 필터와 정렬은 기본 목록과 동일합니다.
+
+사용자 승인 로컬 snippet 기준: 검색어가 본문에 없으면 앞 80 코드 포인트,
+본문에 있으면 최초 일치의 최대 20 코드 포인트 앞에서 시작해 최대 80개를 반환합니다.
+끝에 가까우면 앞쪽으로 당겨 가능한 80개를 채우며 Unicode를 자르거나 말줄임표를 붙이지 않습니다.
+본문 전체는 목록에 포함하지 않습니다. 이 snippet 세부 기준은 팀 정본 반영 대기입니다.
+
+단계별 필수 선택 테스트는 통과했습니다. 전체 `./gradlew test`, 실제 FE/Google 브라우저·
+환경별 인수 검증은 사용자 지정 범위에 따라 #14에서 수행합니다.
