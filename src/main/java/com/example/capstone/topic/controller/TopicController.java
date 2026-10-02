@@ -1,6 +1,7 @@
 package com.example.capstone.topic.controller;
 
 import java.util.UUID;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -21,6 +22,11 @@ import com.example.capstone.topic.service.TopicService;
 public class TopicController {
     private final TopicService topics;
     public TopicController(TopicService topics) { this.topics=topics; }
+    @DeleteMapping("/api/topics/{id}")
+    public ResponseEntity<Void> delete(@AuthenticationPrincipal Jwt jwt,@PathVariable UUID id) {
+        topics.delete(UUID.fromString(jwt.getSubject()),id);
+        return ResponseEntity.noContent().build();
+    }
     @GetMapping("/api/topics")
     public TopicListResponse list(@AuthenticationPrincipal Jwt jwt) { return topics.list(UUID.fromString(jwt.getSubject())); }
     @PutMapping("/api/topics/order")

@@ -1,6 +1,7 @@
 package com.example.capstone.note.controller;
 
 import java.util.UUID;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.PutMapping;
 import com.example.capstone.note.dto.request.NoteUpdateRequest;
@@ -37,6 +38,11 @@ public class NoteController {
     }
     @GetMapping("/api/notes/{id}")
     public NoteResponse get(@AuthenticationPrincipal Jwt jwt,@PathVariable UUID id) { return notes.get(UUID.fromString(jwt.getSubject()),id); }
+    @DeleteMapping("/api/notes/{id}")
+    public ResponseEntity<Void> delete(@AuthenticationPrincipal Jwt jwt,@PathVariable UUID id) {
+        notes.delete(UUID.fromString(jwt.getSubject()),id);
+        return ResponseEntity.noContent().build();
+    }
     @GetMapping("/api/notes")
     public NoteListResponse list(@AuthenticationPrincipal Jwt jwt,@RequestParam(required=false) String topicId,
             @RequestParam(defaultValue="title") String sort,@RequestParam(required=false) String q) {

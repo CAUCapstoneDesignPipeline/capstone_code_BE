@@ -66,6 +66,18 @@ public class TopicService {
         topics.flush();
         return list(userId);
     }
+    @Transactional
+    public void delete(UUID userId,UUID id) {
+        lock(userId);
+        owned(userId,id);
+        List<String> conflicts=notes.unassignedConflicts(userId,id);
+        if(!conflicts.isEmpty()) {
+            throw new ApiException(ErrorCode.NOTE_TITLE_TAKEN,"미분류에 같은 제목의 노트가 있어 주제를 삭제할 수 없습니다.",Map.of("titles",conflicts));
+        }
+        long count=notes.countByUserIdAndTopicId(userId,id);
+        int moved=notes.unassignTopic(userId,id,clock.instant());
+        if(moved!=count || topics.remove(userId,id)!=1) { throw new IllegalStateException("Topic deletion changed unexpectedly"); }
+    }
     @Transactional(readOnly=true)
     public Topic owned(UUID userId,UUID id) {
         return topics.findByIdAndUserId(id,userId).orElseThrow(() -> new ApiException(ErrorCode.NOT_FOUND,"삭제된 주제입니다."));

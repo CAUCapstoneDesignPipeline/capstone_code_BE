@@ -5,10 +5,14 @@ import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.Modifying;
 import com.example.capstone.topic.domain.Topic;
 import com.example.capstone.topic.dto.response.TopicResponse;
 
 public interface TopicRepository extends JpaRepository<Topic,UUID> {
+    @Modifying(flushAutomatically=true,clearAutomatically=true)
+    @Query("delete from Topic t where t.userId = :userId and t.id = :id")
+    int remove(UUID userId,UUID id);
     List<Topic> findByUserId(UUID userId);
     Optional<Topic> findByIdAndUserId(UUID id,UUID userId);
     boolean existsByUserIdAndNameAndIdNot(UUID userId,String name,UUID id);

@@ -14,6 +14,23 @@ public interface NoteRepository extends JpaRepository<Note,UUID> {
     @Modifying(flushAutomatically=true,clearAutomatically=true)
     @Query("update Note n set n.topicId = :topicId, n.updatedAt = :now where n.id = :id and n.userId = :userId")
     int move(UUID userId,UUID id,UUID topicId,Instant now);
+    // PostgreSQL FOR UPDATE blocks FK key-share locks from concurrent evidence insertion.
+    @Query(value="select n.* from note n where n.id = :id and n.user_id = :userId for update",nativeQuery=true)
+    Optional<Note> lockForDelete(UUID userId,UUID id);
+    @Query(value="""
+            select exists(select 1 from evidence_span e join note n on n.id = e.note_id
+            where n.id = :id and n.user_id = :userId)
+            """,nativeQuery=true)
+    boolean hasEvidence(UUID userId,UUID id);
+    @Query("""
+            select n.title from Note n where n.userId = :userId and n.topicId = :topicId
+            and exists(select 1 from Note u where u.userId = :userId and u.topicId is null and u.title = n.title)
+            order by n.title
+            """)
+    List<String> unassignedConflicts(UUID userId,UUID topicId);
+    @Modifying(flushAutomatically=true,clearAutomatically=true)
+    @Query("update Note n set n.topicId = null, n.updatedAt = :now where n.userId = :userId and n.topicId = :topicId")
+    int unassignTopic(UUID userId,UUID topicId,Instant now);
     long countByUserIdAndTopicId(UUID userId,UUID topicId);
     Optional<Note> findByIdAndUserId(UUID id,UUID userId);
     @Query("""
