@@ -51,6 +51,10 @@ public class UserIdentity {
         this.lastLoginAt = now;
     }
 
+    public void loggedIn(Instant now) {
+        this.lastLoginAt = now;
+    }
+
     public UUID getUserId() {
         return userId;
     }

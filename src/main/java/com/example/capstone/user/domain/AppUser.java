@@ -38,6 +38,10 @@ public class AppUser {
         this.lastLoginAt = now;
     }
 
+    public void loggedIn(Instant now) {
+        this.lastLoginAt = now;
+    }
+
     public UUID getId() {
         return id;
     }

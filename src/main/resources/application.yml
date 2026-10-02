@@ -9,6 +9,8 @@ spring:
 capstone:
   auth:
     app-url: ${CAPSTONE_APP_URL:http://localhost:5173}
+    dev-token:
+      enabled: ${CAPSTONE_DEV_TOKEN_ENABLED:false}
     jwt:
       secret: ${CAPSTONE_JWT_SECRET:}
       issuer: capstone-be
