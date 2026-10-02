@@ -26,6 +26,11 @@ public class Note {
         this.id=UUID.randomUUID(); this.userId=userId; this.topicId=topicId; this.title=title;
         this.body=body; this.createdAt=now; this.updatedAt=now;
     }
+    public void edit(String title,String body,Instant now) {
+        this.title=title; this.body=body;
+        // Even a same-content save is a versioned operation.
+        this.updatedAt=now.isAfter(updatedAt)?now:updatedAt.plusNanos(1000);
+    }
     public UUID getId() { return id; }
     public UUID getTopicId() { return topicId; }
     public String getTitle() { return title; }

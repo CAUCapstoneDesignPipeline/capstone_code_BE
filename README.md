@@ -279,3 +279,10 @@ GET `/api/notes/{id}`는 원문, GET `/api/notes?topicId=none&sort=updated`는
 정렬은 title(기본 오름차순) 또는 updated(최근순)입니다.
 사용자 승인 로컬 기준으로 없는/타인 주제 필터는 404입니다(팀 정본 반영 대기).
 같은 주제·미분류의 제목은 대소문자를 구분해 유일합니다. q 검색은 #13에서 추가합니다.
+
+### 노트 저장과 충돌 (#10)
+
+PUT `/api/notes/{id}`의 필수 필드는 title·body·version입니다. 요청 version을 직접 비교하고
+성공은 version+1, 불일치는 409 NOTE_CONFLICT와 `details.current`의 현재 Note를 반환합니다.
+같은 내용 저장도 version을 증가시키며 같은 version의 동시 저장은 하나만 성공합니다.
+사용자 행 잠금과 JPA @Version을 함께 적용하고 @DynamicUpdate로 주제 필드를 저장하지 않습니다.

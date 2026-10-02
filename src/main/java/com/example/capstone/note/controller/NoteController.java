@@ -1,6 +1,9 @@
 package com.example.capstone.note.controller;
 
 import java.util.UUID;
+import jakarta.validation.Valid;
+import org.springframework.web.bind.annotation.PutMapping;
+import com.example.capstone.note.dto.request.NoteUpdateRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -22,6 +25,10 @@ public class NoteController {
     @PostMapping("/api/notes")
     public ResponseEntity<NoteResponse> create(@AuthenticationPrincipal Jwt jwt,@RequestBody NoteCreateRequest request) {
         return ResponseEntity.status(201).body(notes.create(UUID.fromString(jwt.getSubject()),request));
+    }
+    @PutMapping("/api/notes/{id}")
+    public NoteResponse update(@AuthenticationPrincipal Jwt jwt,@PathVariable UUID id,@Valid @RequestBody NoteUpdateRequest request) {
+        return notes.update(UUID.fromString(jwt.getSubject()),id,request);
     }
     @GetMapping("/api/notes/{id}")
     public NoteResponse get(@AuthenticationPrincipal Jwt jwt,@PathVariable UUID id) { return notes.get(UUID.fromString(jwt.getSubject()),id); }
