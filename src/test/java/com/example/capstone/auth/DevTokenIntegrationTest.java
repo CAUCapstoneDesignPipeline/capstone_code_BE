@@ -15,7 +15,9 @@ import tools.jackson.databind.ObjectMapper;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest(properties = "capstone.auth.dev-token.enabled=true")
 @AutoConfigureMockMvc
@@ -53,6 +55,7 @@ class DevTokenIntegrationTest {
             mvc.perform(post("/api/auth/dev/token").contentType("application/json").content(bad))
                     .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error.code").value("VALIDATION_FAILED"));
         }
+        mvc.perform(get("/api/auth/oauth2/google")).andExpect(status().isNotFound());
         assertThat(id).isNotBlank();
     }
 }

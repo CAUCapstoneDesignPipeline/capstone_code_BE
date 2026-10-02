@@ -68,8 +68,8 @@ class CapstoneApplicationTest {
     void startsContextAndConnectsToPostgresWithFlywayEnabled() throws Exception {
         assertThat(query("SELECT 1")).containsExactly("1");
         assertThat(flywayMigrationInitializer).isNotNull();
-        assertThat(flyway.info().applied()).hasSize(1);
-        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("1");
+        assertThat(flyway.info().applied()).hasSize(2);
+        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("2");
         assertThat(flyway.info().pending()).isEmpty();
         assertThat(flyway.validateWithResult().validationSuccessful).isTrue();
         assertThat(flyway.migrate().migrationsExecuted).isZero();
@@ -85,7 +85,7 @@ class CapstoneApplicationTest {
                 .containsExactlyInAnyOrder("app_user", "user_identity", "refresh_token", "topic", "note",
                         "analysis_job", "concept", "concept_mention", "concept_merge", "relation_type",
                         "relation_type_rule", "evidence_span", "relation", "relation_evidence", "candidate",
-                        "candidate_step", "candidate_claim", "verification_result", "review");
+                        "candidate_step", "candidate_claim", "verification_result", "review", "oauth_attempt");
         assertThat(query("SELECT count(*) FROM relation_type")).containsExactly("0");
         assertThat(query("SELECT count(*) FROM relation_type_rule")).containsExactly("0");
     }

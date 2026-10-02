@@ -5,15 +5,21 @@ import org.springframework.core.env.Environment;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 import com.example.capstone.auth.config.AuthEnvironment;
+import com.example.capstone.auth.config.AuthProperties;
 import com.example.capstone.auth.dto.response.AuthProviderListResponse;
 
 @RestController
 public class AuthProviderController {
     private final Environment environment;
-    public AuthProviderController(Environment environment) { this.environment = environment; }
+    private final AuthProperties properties;
+    public AuthProviderController(Environment environment, AuthProperties properties) {
+        this.environment = environment;
+        this.properties = properties;
+    }
     @GetMapping("/api/auth/providers")
     public AuthProviderListResponse providers() {
-        return new AuthProviderListResponse(List.of(), AuthEnvironment.isDevelopment(environment)
+        return new AuthProviderListResponse(properties.google() != null && properties.google().enabled()
+                ? List.of(new AuthProviderListResponse.Provider("google", "Google")) : List.of(), AuthEnvironment.isDevelopment(environment)
                 && environment.getProperty("capstone.auth.dev-token.enabled", Boolean.class, false));
     }
 }

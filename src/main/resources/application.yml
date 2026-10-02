@@ -9,6 +9,15 @@ spring:
 capstone:
   auth:
     app-url: ${CAPSTONE_APP_URL:http://localhost:5173}
+    allowed-emails: ${CAPSTONE_ALLOWED_EMAILS:}
+    google:
+      enabled: ${CAPSTONE_GOOGLE_ENABLED:false}
+      client-id: ${CAPSTONE_GOOGLE_CLIENT_ID:}
+      client-secret: ${CAPSTONE_GOOGLE_CLIENT_SECRET:}
+      redirect-uri: ${CAPSTONE_GOOGLE_REDIRECT_URI:http://localhost:8080/api/auth/oauth2/google/callback}
+      authorization-uri: https://accounts.google.com/o/oauth2/v2/auth
+      token-uri: https://oauth2.googleapis.com/token
+      jwks-uri: https://www.googleapis.com/oauth2/v3/certs
     dev-token:
       enabled: ${CAPSTONE_DEV_TOKEN_ENABLED:false}
     jwt:

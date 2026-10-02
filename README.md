@@ -230,3 +230,26 @@ refresh 원문은 256비트 무작위 값이며 DB에는 SHA-256 해시만 저�
 필드를 생략하면 기본 개발 사용자를 재사용하며 refresh 쿠키는 요청한 경우에만 발급합니다.
 응답의 `accessToken`을 Bearer 헤더로 `/api/auth/me`에 전달합니다.
 개발용 서명 키는 운영 키와 다르게 설정해야 합니다. Google 제공자는 #6 설정 전까지 목록에 없습니다.
+
+### Google 로그인 (#6)
+
+Google OAuth 웹 클라이언트를 만들고 승인된 redirect URI를 정확히
+`http://localhost:8080/api/auth/oauth2/google/callback`로 등록합니다. 배포 시에는
+HTTPS BE 주소의 같은 경로를 등록하고 `CAPSTONE_GOOGLE_REDIRECT_URI`도 일치시킵니다.
+`CAPSTONE_GOOGLE_CLIENT_ID`, `CAPSTONE_GOOGLE_CLIENT_SECRET`을 환경변수로 주입하고
+`CAPSTONE_ALLOWED_EMAILS`에 가입 가능한 이메일을 쉼표로 구분하여 입력합니다.
+비밀 값은 파일·로그·Git에 저장하지 않습니다. `CAPSTONE_GOOGLE_ENABLED=true`로 활성화하며
+필수 설정이 빠지면 기동에 실패합니다. 비활성 상태에서는 목록이 비어 있고 OAuth 경로는 404입니다.
+`CAPSTONE_APP_URL`은 경로 없는 앱 Origin(기본 `http://localhost:5173`)이며 CORS/refresh Origin과 같습니다.
+
+브라우저에서 제공자 목록 확인 → `/api/auth/oauth2/google?returnTo=/` 이동 →
+허용 계정 동의 → 앱 `/auth/callback`에서 credentials 포함 refresh → 내 정보 조회 순으로 확인합니다.
+이후 취소·미허용 계정·동일 계정 재로그인·팝업 재로그인을 확인합니다.
+실제 Google/브라우저 검증은 인증정보 주입 후 #14에서 수행합니다.
+자동 테스트는 테스트용 RSA 서명·JWKS·HTTP 제공자를 사용하며 실제 ID 토큰 검증 로직을 실행합니다.
+구현 기준: [Google OpenID Connect](https://developers.google.com/identity/openid-connect/openid-connect).
+
+OAuth state/브라우저 쿠키는 독립적인 무작위 값이며 DB에는 해시를 보관합니다.
+V2는 5분 만료·일회용 시도와 nonce/PKCE verifier를 저장하며 새 시도 생성 시 만료 행을 정리합니다.
+임시 쿠키는 HttpOnly/Lax이고 refresh는 Strict입니다. 외부 코드 교환은 DB 트랜잭션 밖에서 수행합니다.
+returnTo는 사용자 승인 로컬 기준으로 내부 경로만 허용하며 잘못된 값은 400 VALIDATION_FAILED입니다(팀 정본 반영 대기).
