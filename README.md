@@ -253,3 +253,11 @@ OAuth state/브라우저 쿠키는 독립적인 무작위 값이며 DB에는 해
 V2는 5분 만료·일회용 시도와 nonce/PKCE verifier를 저장하며 새 시도 생성 시 만료 행을 정리합니다.
 임시 쿠키는 HttpOnly/Lax이고 refresh는 Strict입니다. 외부 코드 교환은 DB 트랜잭션 밖에서 수행합니다.
 returnTo는 사용자 승인 로컬 기준으로 내부 경로만 허용하며 잘못된 값은 400 VALIDATION_FAILED입니다(팀 정본 반영 대기).
+
+### 주제 기본 API (#7)
+
+Bearer 인증으로 GET/POST `/api/topics`, PATCH `/api/topics/{id}`를 사용합니다.
+생성/변경 요청은 `{"name":"주제 이름"}`이며 NFC·trim 이후 코드 포인트 1~50자를 검사합니다.
+목록은 sortOrder·이름 순서와 실제 노트 수/미분류 수를 반환합니다.
+첫 주제의 sortOrder는 사용자 승인 로컬 기준 0이며 이후 최댓값+1입니다(팀 정본 반영 대기).
+주제 변경은 사용자 행 잠금을 공유해 생성·순서 변경·삭제의 경합을 처리합니다.
