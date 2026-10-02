@@ -9,6 +9,7 @@ import com.example.capstone.topic.domain.Topic;
 import com.example.capstone.topic.dto.response.TopicResponse;
 
 public interface TopicRepository extends JpaRepository<Topic,UUID> {
+    List<Topic> findByUserId(UUID userId);
     Optional<Topic> findByIdAndUserId(UUID id,UUID userId);
     boolean existsByUserIdAndNameAndIdNot(UUID userId,String name,UUID id);
     @Query("select coalesce(max(t.sortOrder), -1) from Topic t where t.userId = :userId")
