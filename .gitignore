@@ -1,0 +1,36 @@
+# Gradle / build output
+.gradle/
+build/
+out/
+*.class
+
+# IDE metadata
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+.classpath
+.project
+.settings/
+/bin/
+
+# Local environment variables
+.env
+.env.*
+!.env.example
+
+# Logs / JVM diagnostics
+*.log
+/logs/
+*.hprof
+hs_err_pid*
+replay_pid*
+
+# OS metadata
+.DS_Store
+._*
+Thumbs.db
+
+# Local drafts / verification records
+/.local/
