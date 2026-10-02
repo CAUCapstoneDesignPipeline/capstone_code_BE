@@ -212,3 +212,11 @@ Swagger UI는 현재 구현된 Controller를 기준으로 문서를 생성합니
 - 기존 named volume에서는 최초 초기화 때의 DB 이름·사용자·비밀번호가 유지됩니다. `.env` 값을 바꿔도 기존 DB 설정이 자동 변경되지 않습니다. 기존 데이터가 있으면 관리자와 조율해 DB 설정을 변경하거나 별도 Compose 프로젝트로 새 개발 DB를 구성하세요.
 - PostgreSQL 16 데이터 볼륨은 `/var/lib/postgresql/data`에 연결합니다. `docker compose --env-file .env down`은 컨테이너를 종료하지만 named volume은 보존합니다. `down -v`나 Docker 전체 정리 명령을 일반 종료 용도로 쓰지 마세요.
 - 실제 `.env`, Gradle 캐시, 빌드 결과, IDE 로컬 메타데이터는 `.gitignore` 대상입니다. `.env.example`과 Wrapper 파일은 Git에 포함합니다. 팀 공유 IDE 설정은 필요한 파일만 따로 검토합니다.
+
+## Refresh와 로그아웃
+
+`POST /api/auth/refresh`와 `POST /api/auth/logout`은 `Origin: CAPSTONE_APP_URL`을 요구합니다. Origin 누락·불일치는 토큰/쿠키 변경 전에 JSON 403 `FORBIDDEN`으로 거부합니다(사용자 승인 로컬 계약, 팀 정본 반영 대기). 액세스 토큰 헤더는 이 두 공개 경로의 인증에 사용하지 않습니다.
+
+refresh 원문은 256비트 무작위 값이며 DB에는 SHA-256 해시만 저장합니다. 14일 동안 유효하고 사용할 때마다 회전합니다. 교체된 토큰 재사용은 해당 family 전체를 폐기한 뒤 401로 응답합니다. 사용자 행 잠금으로 회전·재사용·로그아웃을 직렬화합니다. 로그아웃은 현재 기기의 family만 폐기하며 이미 발급된 액세스 토큰은 만료까지 유효합니다.
+
+쿠키는 `CAPSTONE_REFRESH`, HttpOnly, SameSite=Strict, Path=/api/auth입니다. Secure는 기본 활성화하고 local/test 전용 프로필과 HTTP 앱 Origin에서만 예외를 적용합니다. 정상 Origin의 비로그인 로그아웃도 204이며 동일 경로로 쿠키를 만료시킵니다.
