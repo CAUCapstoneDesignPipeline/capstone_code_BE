@@ -47,6 +47,12 @@ public abstract class ApiIntegrationSupport {
     protected JsonNode json(ResultActions result) throws Exception {
         return mapper.readTree(result.andReturn().getResponse().getContentAsString());
     }
+    protected UUID note(String title,UUID topicId,String body) throws Exception {
+        var fields=new java.util.LinkedHashMap<String,Object>();
+        fields.put("title",title); fields.put("topicId",topicId); fields.put("body",body);
+        return UUID.fromString(json(call("POST","/api/notes",mapper.writeValueAsString(fields))
+                .andExpect(status().isCreated())).path("id").asString());
+    }
     protected UUID topic(String name) throws Exception {
         return UUID.fromString(json(call("POST","/api/topics",mapper.writeValueAsString(java.util.Map.of("name",name)))
                 .andExpect(status().isCreated())).path("id").asString());
