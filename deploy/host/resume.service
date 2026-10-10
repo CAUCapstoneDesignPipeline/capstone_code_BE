@@ -1,0 +1,12 @@
+[Unit]
+Description=Recreate CAPSTONE runtime secrets and resume the successful release
+Wants=network-online.target
+After=network-online.target docker.service nginx.service capstone-container-boundary.service
+Requires=docker.service nginx.service capstone-container-boundary.service
+ConditionPathExists=/etc/capstone/current.json
+[Service]
+Type=oneshot
+UMask=0077
+ExecStart=/opt/capstone/tools/bin/python /opt/capstone/host/release.py --resume
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,46 @@
+name: Reviewed release executor
+'on':
+  workflow_call:
+    inputs:
+      operation:
+        required: true
+        type: string
+      manifest:
+        required: true
+        type: string
+      expected_release:
+        required: true
+        type: string
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  release:
+    if: github.ref == 'refs/heads/main'
+    environment: production
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      PRODUCTION_DEPLOY_ENABLED: ${{ vars.PRODUCTION_DEPLOY_ENABLED }}
+      APPROVED_CONTRACT_SHA: ${{ vars.APPROVED_CONTRACT_SHA }}
+      SSM_DOCUMENT_VERSION: ${{ vars.SSM_DOCUMENT_VERSION }}
+    steps:
+    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      with:
+        persist-credentials: false
+    - name: Validate reviewed manifest before AWS access
+      env:
+        MANIFEST: ${{ inputs.manifest }}
+      run: python3 deploy/pipeline/release-command.py validate --manifest "$MANIFEST"
+    - uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708
+      with:
+        role-to-assume: arn:aws:iam::378040395204:role/capstone/capstone-prod-deploy
+        aws-region: ap-northeast-2
+        allowed-account-ids: '378040395204'
+        role-session-name: release-${{ github.run_id }}
+    - name: Execute and wait for final SSM result
+      env:
+        OPERATION: ${{ inputs.operation }}
+        MANIFEST: ${{ inputs.manifest }}
+        EXPECTED_RELEASE: ${{ inputs.expected_release }}
+      run: python3 deploy/pipeline/release-command.py "$OPERATION" --manifest "$MANIFEST" --expected-release "$EXPECTED_RELEASE"
