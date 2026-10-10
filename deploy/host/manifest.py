@@ -7,6 +7,8 @@ REGISTRY = '378040395204.dkr.ecr.ap-northeast-2.amazonaws.com'
 RELEASE = r'[a-z0-9][a-z0-9-]{0,63}'
 SHA = r'[a-f0-9]{40}'
 DIGEST = r'sha256:[a-f0-9]{64}'
+PIPELINE_PROTOCOL = '4'
+AI_OFF_SMOKE = {'path':'/api/capabilities','expected':{'analysisEnabled':False,'graphEnabled':False,'discoveriesEnabled':False}}
 
 class ReleaseError(Exception):
     pass
@@ -25,9 +27,9 @@ def checksum(value):
     return hashlib.sha256(canonical(value).encode()).hexdigest()
 
 def validate(m):
-    keys(m, ['schemaVersion','releaseId','mode','be','web','docsContractSha','configRevision',
+    keys(m, ['schemaVersion','releaseId','mode','be','web','configRevision',
              'secretVersions','flyway','gates','aiEnabled','aiImage'])
-    require(type(m['schemaVersion']) is int and m['schemaVersion'] == 1, 'Unsupported manifest version')
+    require(type(m['schemaVersion']) is int and m['schemaVersion'] == 2, 'Unsupported manifest version')
     require(isinstance(m['releaseId'], str) and re.fullmatch(RELEASE, m['releaseId']), 'Invalid release ID')
     # notes-web is deliberately closed until actual FE auth/P4 has been implemented.
     require(m['mode'] == 'api-only', 'Only api-only is approved by this pipeline implementation')
@@ -36,7 +38,6 @@ def validate(m):
         keys(m[name], ['sourceSha','digest'])
         require(isinstance(m[name]['sourceSha'], str) and re.fullmatch(SHA, m[name]['sourceSha']), 'Invalid source SHA')
         require(isinstance(m[name]['digest'], str) and re.fullmatch(DIGEST, m[name]['digest']), 'Digest pin required')
-    require(isinstance(m['docsContractSha'], str) and re.fullmatch(SHA, m['docsContractSha']), 'Contract commit pin required')
     require(isinstance(m['configRevision'], str) and re.fullmatch(RELEASE, m['configRevision']), 'Invalid configuration revision')
     keys(m['secretVersions'], ['dbPassword','jwtSecret','googleClientSecret','allowedEmails'])
     for name, version in m['secretVersions'].items():
@@ -51,8 +52,8 @@ def validate(m):
         require(backup['dbIdentifier'] == 'capstone-prod', 'Wrong backup DB')
         require(isinstance(backup['snapshotId'], str) and re.fullmatch(r'[a-z][a-z0-9-]{0,254}', backup['snapshotId']), 'Invalid snapshot identifier')
         require(isinstance(backup['confirmedAt'], str) and re.fullmatch(r'[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z', backup['confirmedAt']), 'Invalid snapshot evidence time')
-    keys(m['gates'], ['contractApproved','aiOffVerified'])
-    require(m['gates']['contractApproved'] is True and m['gates']['aiOffVerified'] is True, 'Unapproved contract or unverified AI-off image')
+    keys(m['gates'], ['aiOffVerified'])
+    require(m['gates']['aiOffVerified'] is True, 'Unverified AI-off image')
     require(len(canonical(m).encode()) <= 3500, 'Manifest too large')
     return m
 

@@ -28,8 +28,7 @@ def load(path):
 def check(m, remote=False):
     require(os.environ.get('GITHUB_REF')=='refs/heads/main', 'Production requires main')
     require(os.environ.get('PRODUCTION_DEPLOY_ENABLED')=='true', 'Production execution is disabled')
-    require(os.environ.get('APPROVED_CONTRACT_SHA')==m['docsContractSha'], 'Contract has not been approved')
-    require(re.fullmatch(r'[1-9][0-9]*',os.environ.get('SSM_DOCUMENT_VERSION','')) and int(os.environ['SSM_DOCUMENT_VERSION'])>=3, 'Reviewed P8 document version required; P6 version 2 cannot deploy')
+    require(re.fullmatch(r'[1-9][0-9]*',os.environ.get('SSM_DOCUMENT_VERSION','')) and int(os.environ['SSM_DOCUMENT_VERSION'])>=4, 'Reviewed protocol 4 document version required')
     if not remote: return
     identity=aws('sts','get-caller-identity')
     require(identity['Account']==ACCOUNT and ':assumed-role/capstone-prod-deploy/' in identity['Arn'], 'Wrong deploy identity')

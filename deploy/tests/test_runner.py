@@ -19,13 +19,13 @@ class RunnerTests(unittest.TestCase):
         with patch.dict(os.environ,{},clear=True):
             with self.assertRaises(runner.ReleaseError):runner.check(test_release.manifest())
     def test_dev_ref_rejected_even_when_enabled(self):
-        with patch.dict(os.environ,{'GITHUB_REF':'refs/heads/dev','PRODUCTION_DEPLOY_ENABLED':'true','APPROVED_CONTRACT_SHA':'e'*40,'SSM_DOCUMENT_VERSION':'3'},clear=True):
+        with patch.dict(os.environ,{'GITHUB_REF':'refs/heads/dev','PRODUCTION_DEPLOY_ENABLED':'true','SSM_DOCUMENT_VERSION':'3'},clear=True):
             with self.assertRaises(runner.ReleaseError):runner.check(test_release.manifest())
     def test_p6_document_rejected(self):
-        with patch.dict(os.environ,{'GITHUB_REF':'refs/heads/main','PRODUCTION_DEPLOY_ENABLED':'true','APPROVED_CONTRACT_SHA':'e'*40,'SSM_DOCUMENT_VERSION':'2'},clear=True):
+        with patch.dict(os.environ,{'GITHUB_REF':'refs/heads/main','PRODUCTION_DEPLOY_ENABLED':'true','SSM_DOCUMENT_VERSION':'2'},clear=True):
             with self.assertRaises(runner.ReleaseError):runner.check(test_release.manifest())
     def test_valid_later_document_version(self):
-        with patch.dict(os.environ,{'GITHUB_REF':'refs/heads/main','PRODUCTION_DEPLOY_ENABLED':'true','APPROVED_CONTRACT_SHA':'e'*40,'SSM_DOCUMENT_VERSION':'10'},clear=True):runner.check(test_release.manifest())
+        with patch.dict(os.environ,{'GITHUB_REF':'refs/heads/main','PRODUCTION_DEPLOY_ENABLED':'true','SSM_DOCUMENT_VERSION':'10'},clear=True):runner.check(test_release.manifest())
     def test_ssm_failure_is_not_success(self):
         with patch.object(runner.subprocess,'run',return_value=Result('Failed',1)):
             with self.assertRaises(runner.ReleaseError):runner.wait('command')

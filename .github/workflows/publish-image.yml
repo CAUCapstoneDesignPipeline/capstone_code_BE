@@ -35,41 +35,6 @@ jobs:
     - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       with:
         persist-credentials: false
-    - name: Require approved contract
-      env:
-        CONTRACT_SHA: ${{ vars.APPROVED_CONTRACT_SHA }}
-        APP_ID: ${{ vars.CONTRACT_APP_ID }}
-      run: |-
-        python3 - <<'PY'
-        import os,re
-        assert re.fullmatch('[a-f0-9]{40}',os.environ['CONTRACT_SHA'])
-        assert os.environ['APP_ID'].isdigit()
-        PY
-    - uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349
-      id: contract-token
-      with:
-        app-id: ${{ vars.CONTRACT_APP_ID }}
-        private-key: ${{ secrets.CONTRACT_APP_PRIVATE_KEY }}
-        owner: CAUCapstoneDesignPipeline
-        repositories: capstone_docs
-        permission-contents: read
-    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
-      with:
-        repository: CAUCapstoneDesignPipeline/capstone_docs
-        ref: ${{ vars.APPROVED_CONTRACT_SHA }}
-        token: ${{ steps.contract-token.outputs.token }}
-        path: .private-contract
-        persist-credentials: false
-    - name: Verify contract pin without publishing private content
-      env:
-        CONTRACT_SHA: ${{ vars.APPROVED_CONTRACT_SHA }}
-      run: |-
-        test "$(git -C .private-contract rev-parse HEAD)" = "$CONTRACT_SHA"
-        python3 - <<'PY'
-        from pathlib import Path
-        p=Path('.private-contract/api/openapi.yaml')
-        assert p.is_file() and p.stat().st_size > 0
-        PY
     - uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708
       with:
         role-to-assume: arn:aws:iam::378040395204:role/capstone/capstone-be-publisher
@@ -79,7 +44,7 @@ jobs:
     - uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd
       id: ecr
     - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
-    - name: Build approved contract image for runtime checks
+    - name: Build image for runtime checks
       uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
       with:
         context: .
@@ -88,16 +53,11 @@ jobs:
         tags: capstone-ci:test
         build-args: |-
           SOURCE_REVISION=${{ github.sha }}
-          DOCS_CONTRACT_SHA=${{ vars.APPROVED_CONTRACT_SHA }}
         provenance: false
         sbom: false
         load: true
-    - name: Runtime smoke against approved P1 fixture
-      env:
-        AI_OFF_SMOKE_PATH: .private-contract/deployment/ai-off-smoke.json
-      run: |-
-        test -f "$AI_OFF_SMOKE_PATH"
-        python3 deploy/pipeline/image-smoke.py
+    - name: Runtime smoke with repository AI-off expectations
+      run: python3 deploy/pipeline/image-smoke.py
     - name: Publish tested commit only
       uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
       id: image
@@ -108,20 +68,18 @@ jobs:
         tags: 378040395204.dkr.ecr.ap-northeast-2.amazonaws.com/capstone/be:sha-${{ github.sha }}
         build-args: |-
           SOURCE_REVISION=${{ github.sha }}
-          DOCS_CONTRACT_SHA=${{ vars.APPROVED_CONTRACT_SHA }}
         provenance: mode=min
         sbom: true
     - name: Write public release metadata only
       env:
         IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
         SOURCE_SHA: ${{ github.sha }}
-        CONTRACT_SHA: ${{ vars.APPROVED_CONTRACT_SHA }}
       run: |-
         python3 - <<'PY'
         import os,json,re
         from pathlib import Path
         assert re.fullmatch('sha256:[a-f0-9]{64}',os.environ['IMAGE_DIGEST'])
-        Path('image-metadata.json').write_text(json.dumps({'sourceSha':os.environ['SOURCE_SHA'],'digest':os.environ['IMAGE_DIGEST'],'docsContractSha':os.environ['CONTRACT_SHA'],'platform':'linux/amd64'},sort_keys=True)+'\n')
+        Path('image-metadata.json').write_text(json.dumps({'sourceSha':os.environ['SOURCE_SHA'],'digest':os.environ['IMAGE_DIGEST'],'releaseProtocol':4,'runtimeVerified':True,'aiOffVerified':True,'platform':'linux/amd64'},sort_keys=True)+'\n')
         PY
     - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
       with:

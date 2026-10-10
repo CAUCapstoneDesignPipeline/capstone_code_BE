@@ -5,7 +5,7 @@ import os
 import re
 import sys
 from datetime import datetime,timezone
-from manifest import keys,require,RELEASE,SHA,version
+from manifest import keys,require,RELEASE,version
 from release import Host,STATE,atomic
 
 try:
@@ -14,15 +14,10 @@ try:
     value=json.loads(os.environ['SSM_ConfigurationJson'])
     if operation=='initial-config':
         require(not (STATE/'current.json').exists() and not (STATE/'release-pending.json').exists(), 'Existing release configuration cannot be overwritten by initial setup')
-        keys(value,['configRevision','approvedContractSha','googleEnabled','googleClientId','allowedMode','aiOffSmoke'])
+        keys(value,['configRevision','googleEnabled','googleClientId','allowedMode'])
         require(isinstance(value['configRevision'],str) and re.fullmatch(RELEASE,value['configRevision']), 'Invalid revision')
-        require(isinstance(value['approvedContractSha'],str) and re.fullmatch(SHA,value['approvedContractSha']), 'Approved contract pin required')
         require(value['allowedMode']=='api-only' and type(value['googleEnabled']) is bool, 'Unsupported mode')
         require(isinstance(value['googleClientId'],str) and (re.fullmatch(r'[A-Za-z0-9.-]+\.apps\.googleusercontent\.com',value['googleClientId']) if value['googleEnabled'] else value['googleClientId']==''), 'Real Google client ID required only when enabled')
-        keys(value['aiOffSmoke'],['path','expected'])
-        require(isinstance(value['aiOffSmoke']['path'],str) and re.fullmatch(r'/api/[a-z][a-z0-9/-]{0,100}',value['aiOffSmoke']['path']), 'Approved public smoke path required')
-        expected=value['aiOffSmoke']['expected']
-        require(isinstance(expected,dict) and 1 <= len(expected) <= 8 and all(re.fullmatch(r'[A-Za-z][A-Za-z0-9]{0,63}',k) and v is False for k,v in expected.items()), 'Approved boolean AI-off smoke required')
         atomic(STATE/'production.json',json.dumps(value,sort_keys=True)+'\n')
     elif operation=='backup-evidence':
         keys(value,['backup','status','flywayBefore'])

@@ -6,11 +6,11 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'host'))
 from manifest import ReleaseError, checksum, transition, validate
 
 def manifest(name='next',before='2',after='2'):
-    return {'schemaVersion':1,'releaseId':name,'mode':'api-only','be':{'sourceSha':'a'*40,'digest':'sha256:'+'b'*64},
-      'web':{'sourceSha':'c'*40,'digest':'sha256:'+'d'*64},'docsContractSha':'e'*40,'configRevision':'p8-1',
+    return {'schemaVersion':2,'releaseId':name,'mode':'api-only','be':{'sourceSha':'a'*40,'digest':'sha256:'+'b'*64},
+      'web':{'sourceSha':'c'*40,'digest':'sha256:'+'d'*64},'configRevision':'p8-1',
       'secretVersions':{'dbPassword':1,'jwtSecret':1,'googleClientSecret':0,'allowedEmails':0},
       'flyway':{'before':before,'after':after,'rollbackCompatibleWith':['2'],'backup':None},
-      'gates':{'contractApproved':True,'aiOffVerified':True},'aiEnabled':False,'aiImage':None}
+      'gates':{'aiOffVerified':True},'aiEnabled':False,'aiImage':None}
 
 class Fake:
     def __init__(self,current=True,fail=None,changed=False):
@@ -95,7 +95,7 @@ class ReleaseTests(unittest.TestCase):
         for field,value in [('mode','notes-web'),('aiEnabled',True),('releaseId','$(touch /tmp/pwn)'),('be',{'sourceSha':'a'*40,'digest':'latest'}),('password','bad')]:
             m=manifest();m[field]=value
             with self.assertRaises(ReleaseError):validate(m)
-        m=manifest();m['gates']['contractApproved']=False
+        m=manifest();m['gates']['aiOffVerified']=False
         with self.assertRaises(ReleaseError):validate(m)
     def test_hash_is_canonical(self):
         m=manifest();self.assertEqual(checksum(m),checksum(dict(reversed(list(m.items())))))

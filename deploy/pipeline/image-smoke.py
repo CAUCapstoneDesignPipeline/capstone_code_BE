@@ -8,6 +8,10 @@ import time
 import urllib.request
 import urllib.error
 import uuid
+import sys
+from pathlib import Path
+sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'host'))
+from manifest import AI_OFF_SMOKE
 
 IMAGE=os.environ.get('TEST_IMAGE','capstone-ci:test')
 PREFIX='capstone-image-test-'+uuid.uuid4().hex[:12]
@@ -61,14 +65,11 @@ try:
         assert request(port,'/api/v1/health')[0]==200
         assert request(port,'/api/notes')[0]==401
         assert request(port,'/api/auth/dev/token','POST')[0] in [404,403]
-        if os.environ.get('AI_OFF_SMOKE_PATH'):
-            from pathlib import Path
-            smoke=json.loads(Path(os.environ['AI_OFF_SMOKE_PATH']).read_text())
-            assert set(smoke)=={'path','expected'} and smoke['path'].startswith('/api/') and smoke['expected'] and all(v is False for v in smoke['expected'].values())
-            status,body,_=request(port,smoke['path'])
-            assert status==200 and all(json.loads(body).get(k) is v for k,v in smoke['expected'].items())
+        smoke=AI_OFF_SMOKE
+        status,body,_=request(port,smoke['path'])
+        assert status==200 and json.loads(body)==smoke['expected']
         docker('exec',name,'java','-cp','/app/health','Healthcheck')
-        print(json.dumps({'amd64':True,'nonRoot':True,'flywayJpaDbHealth':True,'appRoleNonSuperuser':True,'memoryLimit1100MiB':True,'unauthenticatedNotes401':True,'productionDevTokenDisabled':True,'imageHealthcheck':True}))
+        print(json.dumps({'amd64':True,'nonRoot':True,'flywayJpaDbHealth':True,'appRoleNonSuperuser':True,'memoryLimit1100MiB':True,'unauthenticatedNotes401':True,'productionDevTokenDisabled':True,'imageHealthcheck':True,'aiOffVerified':True}))
     else:
         name=PREFIX+'-web';created.append(name)
         docker('run','-d','--name',name,'--network',PREFIX,'--platform','linux/amd64','--read-only','--tmpfs','/tmp:rw,nosuid,size=32m','--cap-drop','ALL','--security-opt','no-new-privileges:true','-p','127.0.0.1::8080',IMAGE)

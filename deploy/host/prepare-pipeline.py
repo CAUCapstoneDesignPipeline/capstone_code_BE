@@ -6,7 +6,7 @@ import hashlib
 import json
 import stat
 import subprocess
-from manifest import require
+from manifest import require, PIPELINE_PROTOCOL
 from release import atomic,STATE
 
 require(os.geteuid()==0 and not (STATE/'current.json').exists() and not (STATE/'release-pending.json').exists(), 'Initial pipeline preparation only')
@@ -25,9 +25,9 @@ subprocess.run(['install','-m','0644','/opt/capstone/host/resume.service','/etc/
 subprocess.run(['systemctl','daemon-reload'],check=True)
 subprocess.run(['systemctl','enable','capstone-release-resume.service'],check=True)
 subprocess.run(['/opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl','-a','fetch-config','-m','ec2','-c','file:/opt/capstone/host/cloudwatch.json','-s'],check=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
-atomic(STATE/'pipeline-version','3\n')
+atomic(STATE/'pipeline-version',PIPELINE_PROTOCOL+'\n')
 checks.update({
-    'protocol_3': (STATE/'pipeline-version').read_text()=='3\n',
+    'protocol_4': (STATE/'pipeline-version').read_text()==PIPELINE_PROTOCOL+'\n',
     'protocol_root_only': (STATE/'pipeline-version').stat().st_uid==0 and stat.S_IMODE((STATE/'pipeline-version').stat().st_mode)==0o600,
     'resume_unit_matches': Path('/etc/systemd/system/capstone-release-resume.service').read_bytes()==(host/'resume.service').read_bytes(),
     'resume_enabled': subprocess.run(['systemctl','is-enabled','--quiet','capstone-release-resume.service']).returncode==0,

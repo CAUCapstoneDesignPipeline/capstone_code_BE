@@ -9,10 +9,9 @@ RUN ./gradlew --no-daemon bootJar && javac -d /tmp/health /tmp/Healthcheck.java
 
 FROM eclipse-temurin:21-jre-jammy@sha256:f04fb34e053148344e83317976114ec3f37e4b830ec8bdab5a2fe3cecd7d010b
 ARG SOURCE_REVISION
-ARG DOCS_CONTRACT_SHA
 LABEL org.opencontainers.image.source="https://github.com/CAUCapstoneDesignPipeline/capstone_code_BE" \
       org.opencontainers.image.revision=$SOURCE_REVISION \
-      art.capsnote.contract-sha=$DOCS_CONTRACT_SHA
+      art.capsnote.release-protocol="4"
 RUN groupadd --gid 10001 capstone && useradd --uid 10001 --gid 10001 --no-create-home capstone
 WORKDIR /app
 COPY --from=build --chown=10001:10001 /workspace/build/libs/*.jar /app/app.jar

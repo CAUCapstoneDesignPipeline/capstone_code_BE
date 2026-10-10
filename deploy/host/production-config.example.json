@@ -1,8 +1,6 @@
 {
-  "configRevision": "p8-1",
-  "approvedContractSha": "",
+  "configRevision": "api-only-v2",
   "googleEnabled": false,
   "googleClientId": "",
-  "allowedMode": "api-only",
-  "aiOffSmoke": null
+  "allowedMode": "api-only"
 }

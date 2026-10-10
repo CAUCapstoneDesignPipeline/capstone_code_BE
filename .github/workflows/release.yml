@@ -22,7 +22,6 @@ jobs:
     timeout-minutes: 20
     env:
       PRODUCTION_DEPLOY_ENABLED: ${{ vars.PRODUCTION_DEPLOY_ENABLED }}
-      APPROVED_CONTRACT_SHA: ${{ vars.APPROVED_CONTRACT_SHA }}
       SSM_DOCUMENT_VERSION: ${{ vars.SSM_DOCUMENT_VERSION }}
     steps:
     - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09

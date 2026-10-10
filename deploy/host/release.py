@@ -16,7 +16,7 @@ import urllib.error
 from datetime import datetime, timezone
 from pathlib import Path
 import boto3
-from manifest import REGISTRY, ReleaseError, canonical, checksum, image, require, transition, validate
+from manifest import REGISTRY, ReleaseError, canonical, checksum, image, require, transition, validate, PIPELINE_PROTOCOL, AI_OFF_SMOKE
 
 BASE=Path('/opt/capstone/releases')
 RUNTIME=Path('/run/capstone/releases')
@@ -52,7 +52,7 @@ class Host:
     def __init__(self):
         require(os.geteuid() == 0, 'Root host entry point required')
         require(not (STATE/'release-pending.json').exists(), 'Unresolved release requires investigation')
-        require((STATE/'pipeline-version').read_text().strip()=='3', 'Reviewed pipeline installation required')
+        require((STATE/'pipeline-version').read_text().strip()==PIPELINE_PROTOCOL, 'Reviewed pipeline installation required')
         self.config=private_json(STATE/'production.json')
         self.infrastructure=private_json(STATE/'infrastructure.json')
         self.ssm=boto3.client('ssm',region_name='ap-northeast-2')
@@ -97,7 +97,7 @@ class Host:
         return run(['docker','compose','-f',str(HOST/'production-compose.json'),*args],env=env)
 
     def preflight(self, m, is_resume=False):
-        require(self.config['configRevision']==m['configRevision'] and self.config['approvedContractSha']==m['docsContractSha'], 'Host approved configuration/contract differs')
+        require(self.config['configRevision']==m['configRevision'], 'Host configuration revision differs')
         require(self.config['allowedMode']==m['mode'], 'Host mode differs')
         require(shutil.disk_usage('/').free >= 3*1024**3, 'Insufficient free disk')
         require((STATE/'db-bootstrap-complete').exists(), 'DB account bootstrap not complete')
@@ -121,7 +121,7 @@ class Host:
                 require(metadata['Architecture']=='amd64' and metadata['Os']=='linux', 'Wrong image platform')
                 require(labels.get('org.opencontainers.image.revision')==m[service]['sourceSha'], 'Image source label mismatch')
                 require(labels.get('org.opencontainers.image.source')=='https://github.com/CAUCapstoneDesignPipeline/'+repo, 'Wrong image repository')
-                require(labels.get('art.capsnote.contract-sha')==m['docsContractSha'], 'Image contract label mismatch')
+                require(labels.get('art.capsnote.release-protocol')==PIPELINE_PROTOCOL, 'Image release protocol mismatch')
         finally:
             shutil.rmtree(docker_config,ignore_errors=True)
         versions=m['secretVersions']
@@ -194,9 +194,9 @@ class Host:
             except urllib.error.HTTPError as e: return e.code,e.read()
         require(get('/api/v1/health')[0]==200, 'API health smoke failed')
         require(get('/api/auth/dev/token')[0]==404 and get('/actuator/health')[0]==404, 'Public management boundary failed')
-        smoke=self.config['aiOffSmoke']
+        smoke=AI_OFF_SMOKE
         status, body=get(smoke['path'])
-        require(status==200 and all(json.loads(body).get(k) is v for k,v in smoke['expected'].items()), 'Approved AI-off public contract is not implemented')
+        require(status==200 and all(json.loads(body).get(k) is v for k,v in smoke['expected'].items()), 'Required AI-off public response is not implemented')
         status,body=get('/')
         require(status==200 and b'api-only' in body, 'Preparation page mode mismatch')
 

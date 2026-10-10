@@ -1,5 +1,8 @@
 # AWS P6 실행 파일
 
+2026-10-10 후속 변경: 배포 protocol 4와 manifest schemaVersion 2는 GitHub App·docs 조회·계약 SHA 없이 BE/FE source SHA와 image digest를 사용한다. root production 설정에도 계약 pin·외부 fixture를 넣지 않는다. AI-off의 공개 세 false 값은 `deploy/host/manifest.py`에 고정했다. 앱 배포 전 `capstone-prepare-pipeline`의 새 버전으로 host 파일을 설치하고, `capstone-configure-release`로 `deploy/host/production-config.example.json`의 api-only 설정을 저장한다. 기존 앱/current/pending이 있으면 준비 문서가 거부한다. **runtime 스택은 계속 갱신하지 않는다.** 아래 protocol 3 기록은 이전 설치 이력이다.
+
+
 2026-10-10: 사용자 승인 후 bootstrap Change Set을 검토·적용하고 host metadata PutParameter 두 경로, Deploy/Install version3, prepare/configure version1과 호스트 protocol3 설치를 실제 확인했다. 설치13개·호스트13개·AWS24개 검증이 통과했다. [파이프라인 가이드](../../../capstone_docs/development/release-pipeline-guide.md)와 [권한 적용 기록](../../../aws-permission-handoff/proposed-p8-2026-10-10/README.md)을 따른다. **runtime는 갱신하지 않았다. 로컬 runtime의 UserData는 실제 stack과 다르므로 bootstrap 설치 결과를 근거로 자동 적용하지 않는다.** main 병합·운영 workflow·앱 배포는 미실행이다.
 
 서울 리전 `378040395204` 계정과 `capstone-deploy` profile 전용이다. 기존 IAM 정책·Guardrail·workload boundary를 변경하지 않는다. production 앱 workflow는 실행하지 않는다.

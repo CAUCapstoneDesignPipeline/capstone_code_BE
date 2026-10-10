@@ -95,6 +95,7 @@ def bootstrap():
         'ExpectedRelease':{'type':'String','allowedPattern':'^(none|[a-z0-9][a-z0-9-]{0,63})$','interpolationType':'ENV_VAR'},
         'ManifestJson':{'type':'String','allowedPattern':r'^\{[^\r\n]+\}$','minChars':3,'maxChars':6002,'interpolationType':'ENV_VAR'},
         'Operation':{'type':'String','allowedValues':['deploy','rollback'],'interpolationType':'ENV_VAR'}})
+    r['DeployDocument']['Properties']['Content']['description']='Fixed CAPSTONE release protocol 4; repository-owned AI-off expectations'
     r['DbBootstrapDocument']=document('capstone-bootstrap-db','/opt/capstone/tools/bin/python /opt/capstone/host/ssm-operation.py bootstrap-db')
     r['VerifyDocument']=document('capstone-verify-infra','/opt/capstone/tools/bin/python /opt/capstone/host/ssm-operation.py verify')
     r['TlsDocument']=document('capstone-tls','/opt/capstone/tools/bin/python /opt/capstone/host/ssm-operation.py tls')
