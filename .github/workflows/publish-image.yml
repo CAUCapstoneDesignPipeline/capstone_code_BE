@@ -1,0 +1,89 @@
+name: Publish BE image
+'on':
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency:
+  group: publish-image-${{ github.sha }}
+  cancel-in-progress: false
+jobs:
+  authorize:
+    runs-on: ubuntu-24.04
+    steps:
+    - name: Require explicit image publication on main
+      env:
+        REF: ${{ github.ref }}
+        ENABLED: ${{ vars.IMAGE_PUBLISH_ENABLED }}
+      run: |-
+        python3 - <<'PY'
+        import os
+        if os.environ['REF']!='refs/heads/main' or os.environ['ENABLED']!='true':
+            raise SystemExit('Image publication requires main and IMAGE_PUBLISH_ENABLED=true')
+        PY
+  checks:
+    uses: ./.github/workflows/ci.yml
+    needs: authorize
+  publish:
+    needs: checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    environment: image-publish
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      with:
+        persist-credentials: false
+    - uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708
+      with:
+        role-to-assume: arn:aws:iam::378040395204:role/capstone/capstone-be-publisher
+        aws-region: ap-northeast-2
+        allowed-account-ids: '378040395204'
+        role-session-name: image-${{ github.run_id }}
+    - uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd
+      id: ecr
+    - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
+    - name: Build image for runtime checks
+      uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
+      with:
+        context: .
+        platforms: linux/amd64
+        push: false
+        tags: capstone-ci:test
+        build-args: |-
+          SOURCE_REVISION=${{ github.sha }}
+        provenance: false
+        sbom: false
+        load: true
+    - name: Runtime smoke with repository AI-off expectations
+      run: python3 deploy/pipeline/image-smoke.py
+    - name: Publish tested commit only
+      uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
+      id: image
+      with:
+        context: .
+        platforms: linux/amd64
+        push: true
+        tags: 378040395204.dkr.ecr.ap-northeast-2.amazonaws.com/capstone/be:sha-${{ github.sha }}
+        build-args: |-
+          SOURCE_REVISION=${{ github.sha }}
+        provenance: mode=min
+        sbom: true
+    - name: Write public release metadata only
+      env:
+        IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
+        SOURCE_SHA: ${{ github.sha }}
+      run: |-
+        python3 - <<'PY'
+        import os,json,re
+        from pathlib import Path
+        assert re.fullmatch('sha256:[a-f0-9]{64}',os.environ['IMAGE_DIGEST'])
+        Path('image-metadata.json').write_text(json.dumps({'sourceSha':os.environ['SOURCE_SHA'],'digest':os.environ['IMAGE_DIGEST'],'releaseProtocol':4,'runtimeVerified':True,'aiOffVerified':True,'platform':'linux/amd64'},sort_keys=True)+'\n')
+        PY
+    - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      with:
+        name: be-image-${{ github.sha }}
+        path: image-metadata.json
+        retention-days: 30
+        if-no-files-found: error

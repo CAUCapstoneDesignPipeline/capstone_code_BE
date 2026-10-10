@@ -34,3 +34,7 @@ Thumbs.db
 
 # Local drafts / verification records
 /.local/
+
+# Python deployment tools
+__pycache__/
+*.py[cod]

@@ -13,6 +13,7 @@ public enum ErrorCode {
     NOTE_DELETE_BLOCKED(HttpStatus.CONFLICT),
     NOTE_CONFLICT(HttpStatus.CONFLICT),
     CANDIDATE_CLOSED(HttpStatus.CONFLICT),
+    AI_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE),
     INTERNAL(HttpStatus.INTERNAL_SERVER_ERROR);
 
     private final HttpStatus status;

@@ -68,7 +68,7 @@ class DevTokenIntegrationTest {
                     var api = operation.getValue();
                     assertThat(api.path("summary").asString()).as(path.getKey()).isNotBlank();
                     assertThat(api.path("description").asString()).as(path.getKey()).isNotBlank();
-                    assertThat(api.path("tags").get(0).asString()).isIn("인증", "주제", "노트");
+                    assertThat(api.path("tags").get(0).asString()).isIn("인증", "주제", "노트", "분석");
                     api.path("responses").properties().stream()
                             .filter(entry -> entry.getKey().startsWith("4"))
                             .forEach(entry -> {
