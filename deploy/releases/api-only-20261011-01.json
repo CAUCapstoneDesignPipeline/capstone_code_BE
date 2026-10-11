@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 2,
+  "releaseId": "api-only-20261011-01",
+  "mode": "api-only",
+  "be": {
+    "sourceSha": "dfb2f1590d1eac2c437ea3d864ee29a98649bb5b",
+    "digest": "sha256:7b8eec81be05d8670c6d88e4ef84e2a765c908b74176830b0d42de214c79bd5e"
+  },
+  "web": {
+    "sourceSha": "e652096bb6b3696d1cb9e03e3eecf29fea688fb7",
+    "digest": "sha256:6f0910e76614fa7b906e284a68194d668acad3cc5bedee1ff98b4789aa7632ef"
+  },
+  "configRevision": "api-only-v2",
+  "secretVersions": {
+    "dbPassword": 1,
+    "jwtSecret": 1,
+    "googleClientSecret": 0,
+    "allowedEmails": 0
+  },
+  "flyway": {
+    "before": "empty",
+    "after": "2",
+    "rollbackCompatibleWith": [
+      "2"
+    ],
+    "backup": null
+  },
+  "gates": {
+    "aiOffVerified": true
+  },
+  "aiEnabled": false,
+  "aiImage": null
+}
