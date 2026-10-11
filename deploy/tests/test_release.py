@@ -91,7 +91,7 @@ class ReleaseTests(unittest.TestCase):
         f=Fake();f.saved['flyway']['rollbackCompatibleWith']=[]
         with self.assertRaises(ReleaseError):transition(f,f.saved,'old','rollback')
         self.assertEqual(f.events,[])
-    def test_reject_unapproved_ai_notes_web_tags_unknown_secret_fields(self):
+    def test_reject_ai_missing_oauth_tags_unknown_secret_fields(self):
         for field,value in [('mode','notes-web'),('aiEnabled',True),('releaseId','$(touch /tmp/pwn)'),('be',{'sourceSha':'a'*40,'digest':'latest'}),('password','bad')]:
             m=manifest();m[field]=value
             with self.assertRaises(ReleaseError):validate(m)
@@ -99,5 +99,10 @@ class ReleaseTests(unittest.TestCase):
         with self.assertRaises(ReleaseError):validate(m)
     def test_hash_is_canonical(self):
         m=manifest();self.assertEqual(checksum(m),checksum(dict(reversed(list(m.items())))))
+    def test_notes_web_requires_real_oauth_secret_versions(self):
+        m=manifest();m['mode']='notes-web'
+        with self.assertRaises(ReleaseError):validate(m)
+        m['secretVersions'].update(googleClientSecret=1,allowedEmails=1)
+        self.assertEqual(validate(m)['mode'],'notes-web')
 
 if __name__=='__main__':unittest.main()

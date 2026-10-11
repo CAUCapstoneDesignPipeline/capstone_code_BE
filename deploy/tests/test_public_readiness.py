@@ -16,9 +16,13 @@ class PublicReadinessTests(unittest.TestCase):
         responses=[urllib.error.HTTPError('https://capsnote.art',503,'maintenance',{},None),io.BytesIO(b'{"status":"UP"}'),io.BytesIO(b'api-only')]
         for response in responses[1:]:response.status=200
         with patch.object(host_release.urllib.request,'urlopen',side_effect=responses),patch.object(host_release.time,'sleep'):
-            host_release.Host.smoke_public(object.__new__(host_release.Host),{})
+            host_release.Host.smoke_public(object.__new__(host_release.Host),{'mode':'api-only'})
 
     def test_persistent_maintenance_fails_at_deadline(self):
         error=urllib.error.HTTPError('https://capsnote.art',503,'maintenance',{},None)
         with patch.object(host_release.urllib.request,'urlopen',side_effect=error),patch.object(host_release.time,'monotonic',side_effect=[0,31]):
-            with self.assertRaises(host_release.ReleaseError):host_release.Host.smoke_public(object.__new__(host_release.Host),{})
+            with self.assertRaises(host_release.ReleaseError):host_release.Host.smoke_public(object.__new__(host_release.Host),{'mode':'api-only'})
+
+    def test_notes_web_page_cannot_be_preparation_page(self):
+        self.assertFalse(host_release.web_page_matches({'mode':'notes-web'},b'api-only'))
+        self.assertTrue(host_release.web_page_matches({'mode':'notes-web'},b'<div id="root"></div><script type="module">'))

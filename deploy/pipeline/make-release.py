@@ -19,6 +19,8 @@ def main():
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--be-metadata',required=True);p.add_argument('--web-metadata',required=True)
     p.add_argument('--release-id',required=True);p.add_argument('--config-revision',required=True)
+    p.add_argument('--mode',choices=['api-only','notes-web'],default='api-only')
+    p.add_argument('--google-client-secret-version',type=int,default=0);p.add_argument('--allowed-emails-version',type=int,default=0)
     p.add_argument('--flyway-before',required=True);p.add_argument('--flyway-after',required=True)
     p.add_argument('--compatible-with',action='append',default=[])
     p.add_argument('--db-password-version',type=int,required=True);p.add_argument('--jwt-secret-version',type=int,required=True)
@@ -29,9 +31,9 @@ def main():
         require(evidence['status']=='available' and evidence['flywayBefore']==a.flyway_before, 'Snapshot/schema evidence mismatch')
         backup=evidence['backup']
     require(a.flyway_before=='empty' or a.flyway_before==a.flyway_after or backup is not None, 'Existing DB migration needs actual backup evidence')
-    m=validate({'schemaVersion':2,'releaseId':a.release_id,'mode':'api-only',
+    m=validate({'schemaVersion':2,'releaseId':a.release_id,'mode':a.mode,
         'be':metadata(a.be_metadata,True),'web':metadata(a.web_metadata),
-        'configRevision':a.config_revision,'secretVersions':{'dbPassword':a.db_password_version,'jwtSecret':a.jwt_secret_version,'googleClientSecret':0,'allowedEmails':0},
+        'configRevision':a.config_revision,'secretVersions':{'dbPassword':a.db_password_version,'jwtSecret':a.jwt_secret_version,'googleClientSecret':a.google_client_secret_version,'allowedEmails':a.allowed_emails_version},
         'flyway':{'before':a.flyway_before,'after':a.flyway_after,'rollbackCompatibleWith':a.compatible_with,'backup':backup},
         'gates':{'aiOffVerified':True},'aiEnabled':False,'aiImage':None})
     root=Path(__file__).resolve().parents[2];target=root/'deploy/releases'/(a.release_id+'.json')

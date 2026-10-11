@@ -16,6 +16,8 @@ IAM = f'arn:aws:iam::{ACCOUNT}'
 ARN = f'arn:aws:{{service}}:{REGION}:{ACCOUNT}:{{resource}}'
 TAGS = [{'Key':'Project','Value':'capstone'}, {'Key':'Environment','Value':'prod'}]
 BOUNDARY = IAM + ':policy/CapstoneWorkloadBoundary'
+# Exact deployed runner sources from main 865871a; application images stay protocol 4.
+PIPELINE_BASELINE = {'manifest.py': '3da346f4062252bd57065309b2dd60e009652a38d02f6d924adff28fdf169596', 'release.py': '9a2ae56b7f636bbad3512b44b859932cf28596b422a4c69f4b3548a54a3784a0', 'configure-release.py': '23a1229d35e4303e74e9cd6e9f000c1f9f5883bc27fe57a0c56985071d4b96fb'}
 def ref(x): return {'Ref':x}
 def get(x,y): return {'Fn::GetAtt':[x,y]}
 def sub(x): return {'Fn::Sub':x}
@@ -111,6 +113,13 @@ def bootstrap():
         'RecoveryOperation':{'type':'String','allowedValues':['status','finish-commit'],'interpolationType':'ENV_VAR'},
         'ReleaseId':{'type':'String','allowedPattern':'^[a-z0-9][a-z0-9-]{0,63}$','interpolationType':'ENV_VAR'},
         'ManifestSha':{'type':'String','allowedPattern':'^[a-f0-9]{64}$','interpolationType':'ENV_VAR'}})
+    updater=(HERE/'update-pipeline-host.py').read_text()
+    updater=updater.replace('__BASELINE_HASHES__',repr(PIPELINE_BASELINE))
+    encoded_updater=base64.b64encode(gzip.compress(updater.encode(),mtime=0)).decode()
+    update_command={'Fn::Join':['',["/opt/capstone/tools/bin/python - <<'CAPSTONE_UPDATE_PIPELINE'\nimport base64,gzip,io,tarfile\nwith tarfile.open(fileobj=io.BytesIO(gzip.decompress(base64.b64decode('",archive,"')))) as files:\n REVIEWED_FILES={p.name.removeprefix('host/'):files.extractfile(p).read() for p in files.getmembers() if p.isfile()}\nexec(compile(gzip.decompress(base64.b64decode('"+encoded_updater+"')).decode(),'capstone-update-pipeline','exec'))\nCAPSTONE_UPDATE_PIPELINE"]]}
+    r['UpdatePipelineDocument']=document('capstone-update-pipeline',update_command,{
+        'ExpectedRelease':{'type':'String','allowedPattern':'^[a-z0-9][a-z0-9-]{0,63}$','interpolationType':'ENV_VAR'},
+        'ManifestSha':{'type':'String','allowedPattern':'^[a-f0-9]{64}$','interpolationType':'ENV_VAR'}})
     # Install only this repository's fixed files on a new project host. No user
     # arguments or generic shell access; also supports a failed initial install.
     install_command="set -eu\numask 077\ntest ! -f /etc/capstone/current.json\ntest ! -f /etc/capstone/release-pending.json\npython3 - <<'PY'\nimport base64,gzip,io,tarfile\ndata=base64.b64decode('"+payload()+"')\nwith tarfile.open(fileobj=io.BytesIO(gzip.decompress(data))) as archive: archive.extractall('/opt/capstone')\nPY\nflock -n /run/capstone-install.lock /bin/bash /opt/capstone/host/install.sh\n/opt/capstone/tools/bin/python /opt/capstone/host/ssm-operation.py install"
@@ -122,7 +131,8 @@ def bootstrap():
     prepare_after=after.split('flock -n /run/capstone-install.lock')[0]+'/opt/capstone/tools/bin/python /opt/capstone/host/ssm-operation.py prepare-pipeline'
     r['PreparePipelineDocument']=document('capstone-prepare-pipeline',{'Fn::Join':['',[prepare_before,archive,prepare_after]]})
     r['ConfigureReleaseDocument']=document('capstone-configure-release','/opt/capstone/tools/bin/python /opt/capstone/host/ssm-operation.py configure-release',{
-        'ConfigurationOperation':{'type':'String','allowedValues':['initial-config','backup-evidence'],'interpolationType':'ENV_VAR'},
+        'ConfigurationOperation':{'type':'String','allowedValues':['initial-config','stage-config','backup-evidence'],'interpolationType':'ENV_VAR'},
+        'ExpectedRelease':{'type':'String','default':'none','allowedPattern':'^(none|[a-z0-9][a-z0-9-]{0,63})$','interpolationType':'ENV_VAR'},
         'ConfigurationJson':{'type':'String','allowedPattern':r'^\{[^\r\n]+\}$','minChars':3,'maxChars':3502,'interpolationType':'ENV_VAR'}})
     outputs={n:{'Value':v,'Export':{'Name':'capstone-bootstrap-'+n}} for n,v in {
         'SecretsKeyArn':get('SecretsKey','Arn'),'HostProfile':ref('HostProfile'),'TopicArn':ref('OperationsTopic'),

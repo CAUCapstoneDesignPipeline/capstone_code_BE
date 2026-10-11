@@ -97,8 +97,11 @@ class Host:
         return run(['docker','compose','-f',str(HOST/'production-compose.json'),*args],env=env)
 
     def preflight(self, m, is_resume=False):
+        config_path=STATE/'configurations'/(m['configRevision']+'.json')
+        self.config=private_json(config_path if config_path.exists() else STATE/'production.json')
         require(self.config['configRevision']==m['configRevision'], 'Host configuration revision differs')
         require(self.config['allowedMode']==m['mode'], 'Host mode differs')
+        require(m['mode']!='notes-web' or self.config['googleEnabled'] is True, 'Google login required for notes-web')
         require(shutil.disk_usage('/').free >= 3*1024**3, 'Insufficient free disk')
         require((STATE/'db-bootstrap-complete').exists(), 'DB account bootstrap not complete')
         require(socket.gethostbyname('capsnote.art')=='15.165.127.143', 'DNS does not point to this release host')
@@ -198,7 +201,11 @@ class Host:
         status, body=get(smoke['path'])
         require(status==200 and all(json.loads(body).get(k) is v for k,v in smoke['expected'].items()), 'Required AI-off public response is not implemented')
         status,body=get('/')
-        require(status==200 and b'api-only' in body, 'Preparation page mode mismatch')
+        require(status==200 and web_page_matches(m,body), 'Web page mode mismatch')
+        if m['mode']=='notes-web':
+            status,body=get('/api/auth/providers')
+            providers=json.loads(body)
+            require(status==200 and providers.get('providers')==[{'id':'google','name':'Google'}] and providers.get('devTokenEnabled') is False, 'Real Google login provider required')
 
     def commit(self, m, previous):
         atomic(STATE/'release-pending.json',canonical({'target':m['releaseId'],'phase':'commit'}))
@@ -215,7 +222,7 @@ class Host:
                 with urllib.request.urlopen('https://capsnote.art/api/v1/health',timeout=5) as r:
                     require(r.status==200 and json.load(r).get('status')=='UP', 'External HTTPS API smoke failed')
                 with urllib.request.urlopen('https://capsnote.art/',timeout=5) as r:
-                    require(r.status==200 and b'api-only' in r.read(), 'External HTTPS web smoke failed')
+                    require(r.status==200 and web_page_matches(m,r.read()), 'External HTTPS web smoke failed')
                 return
             except Exception:
                 if time.monotonic()>=deadline:
@@ -225,6 +232,11 @@ class Host:
     def restore(self, m):
         # Existing successful runtime config is retained in tmpfs; never fetch old secret versions.
         self.start_be(m);self.start_web(m)
+
+
+def web_page_matches(m,body):
+    if m['mode']=='api-only': return b'api-only' in body
+    return b'<div id="root"></div>' in body and b'type="module"' in body and b'api-only' not in body
 
 
 def main():
