@@ -105,7 +105,7 @@ jobs:
       id: metadata
     - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
       with:
-        name: be-image-${{ github.sha }}
+        name: be-image-${{ github.sha }}-${{ github.run_attempt }}
         path: image-metadata.json
         retention-days: 30
         if-no-files-found: error
