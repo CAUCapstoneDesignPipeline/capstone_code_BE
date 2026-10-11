@@ -20,4 +20,8 @@ python3 deploy/pipeline/make-release.py \
 
 배포 실패나 SSM 대기 시간 초과 시 새 실행을 반복하지 않는다. command ID의 종료 상태와 pending journal을 조사한다. journal이 남았거나 schema가 변경됐으면 maintenance를 유지하고 개별 복구안을 검토한다. `PRODUCTION_DEPLOY_ENABLED=false`로 추가 운영 실행을 차단할 수 있다.
 
+`capstone-recover-release`는 operator가 호출하는 고정 진단·복구 document다. 현재 main manifest의 `ReleaseId`와 `ManifestSha`를 지정하고 `RecoveryOperation=status`로 먼저 실제 schema·내부/외부 health·컨테이너 digest·저널 단계를 조회한다. `finish-commit`은 이미 기록된 current manifest와 일치하는 commit 저널, 성공 schema, 실행 중인 정확한 이미지와 내부 smoke가 모두 확인된 경우에만 마지막 공개 전환을 완료한다. DB 마이그레이션·컨테이너 재생성·다른 release 승격·비밀값 출력은 하지 않는다. GitHub deploy 역할의 권한은 확대하지 않는다.
+
+이 document는 최초 protocol 4 호스트의 정확한 `release.py` checksum 또는 같은 document가 적용한 수정 checksum만 허용하며, 검토된 공개 readiness 수정과 파일 hash metadata만 갱신한다. 알 수 없는 호스트 변경, switch 단계, 미커밋 릴리스는 복구하지 않는다. HTTPS가 준비되지 않으면 유지보수 상태를 유지한다. 일반 배포의 공개 smoke는 nginx reload 이후 최대 30초 동안 readiness를 확인한다.
+
 현재는 api-only만 허용하고 AI와 개발 토큰은 비활성이다. 실제 OAuth·FE 인증이 없으므로 사용자 개통 완료로 처리하지 않는다.

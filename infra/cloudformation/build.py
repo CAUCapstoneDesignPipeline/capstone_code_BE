@@ -102,6 +102,15 @@ def bootstrap():
     # Inline a fixed verifier so inspection never reinstalls host files or reads secrets.
     verifier=base64.b64encode(gzip.compress((HERE/'verify-tls-host.py').read_bytes(),mtime=0)).decode()
     r['TlsVerifyDocument']=document('capstone-verify-tls',"/opt/capstone/tools/bin/python - <<'CAPSTONE_TLS_VERIFY'\nimport base64,gzip\nexec(compile(gzip.decompress(base64.b64decode('"+verifier+"')).decode(),'capstone-verify-tls','exec'))\nCAPSTONE_TLS_VERIFY")
+    recovery=(HERE/'recover-release-host.py').read_text()
+    recovery=recovery.replace('__ORIGINAL_RELEASE_SHA__','26209200b4d602a0a0dd1a1d06810b19c0b453c8e5697aa98eeeba02f5c36fa4')
+    encoded=base64.b64encode(gzip.compress(recovery.encode(),mtime=0)).decode()
+    archive={'Fn::FindInMap':['HostAssets','Content','Archive']}
+    recovery_command={'Fn::Join':['',["/opt/capstone/tools/bin/python - <<'CAPSTONE_RECOVER_RELEASE'\nimport base64,gzip,io,tarfile\nwith tarfile.open(fileobj=io.BytesIO(gzip.decompress(base64.b64decode('",archive,"')))) as files:\n REVIEWED_RELEASE_BYTES=files.extractfile('host/release.py').read()\nexec(compile(gzip.decompress(base64.b64decode('"+encoded+"')).decode(),'capstone-recover-release','exec'))\nCAPSTONE_RECOVER_RELEASE"]]}
+    r['RecoverReleaseDocument']=document('capstone-recover-release',recovery_command,{
+        'RecoveryOperation':{'type':'String','allowedValues':['status','finish-commit'],'interpolationType':'ENV_VAR'},
+        'ReleaseId':{'type':'String','allowedPattern':'^[a-z0-9][a-z0-9-]{0,63}$','interpolationType':'ENV_VAR'},
+        'ManifestSha':{'type':'String','allowedPattern':'^[a-f0-9]{64}$','interpolationType':'ENV_VAR'}})
     # Install only this repository's fixed files on a new project host. No user
     # arguments or generic shell access; also supports a failed initial install.
     install_command="set -eu\numask 077\ntest ! -f /etc/capstone/current.json\ntest ! -f /etc/capstone/release-pending.json\npython3 - <<'PY'\nimport base64,gzip,io,tarfile\ndata=base64.b64decode('"+payload()+"')\nwith tarfile.open(fileobj=io.BytesIO(gzip.decompress(data))) as archive: archive.extractall('/opt/capstone')\nPY\nflock -n /run/capstone-install.lock /bin/bash /opt/capstone/host/install.sh\n/opt/capstone/tools/bin/python /opt/capstone/host/ssm-operation.py install"
@@ -216,6 +225,8 @@ if __name__=='__main__':
         text=json.dumps(template,indent=2,ensure_ascii=False)+'\n'
         if len(text.encode()) > 51200:
             text=json.dumps(template,indent=1,ensure_ascii=False)+'\n'
+        if len(text.encode()) > 51200:
+            text=json.dumps(template,separators=(',',':'),ensure_ascii=False)+'\n'
         assert len(text.encode()) <= 51200, 'CloudFormation inline template limit exceeded'
         (HERE/(name+'.json')).write_text(text)
         print(name,len(text.encode()),'bytes',len(template['Resources']),'resources')
