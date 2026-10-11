@@ -75,7 +75,7 @@ def bootstrap():
             'Condition':{'StringEquals':{'token.actions.githubusercontent.com:aud':'sts.amazonaws.com','token.actions.githubusercontent.com:sub':subject}}}])
         if n!='DeployRole':
             repo=repositories[0 if n=='BePublisher' else 1]
-            stmts=[statement('ecr:GetAuthorizationToken','*'),statement(['ecr:BatchCheckLayerAvailability','ecr:InitiateLayerUpload','ecr:UploadLayerPart','ecr:CompleteLayerUpload','ecr:PutImage','ecr:DescribeImages'],repo)]
+            stmts=[statement('ecr:GetAuthorizationToken','*'),statement(['ecr:BatchCheckLayerAvailability','ecr:InitiateLayerUpload','ecr:UploadLayerPart','ecr:CompleteLayerUpload','ecr:PutImage','ecr:DescribeImages','ecr:BatchGetImage'],repo)]
         else:
             stmts=[statement('ssm:SendCommand',f'arn:aws:ssm:{REGION}:{ACCOUNT}:document/capstone-deploy'),
                 statement('ssm:SendCommand',f'arn:aws:ec2:{REGION}:{ACCOUNT}:instance/*',{'StringEquals':{'ssm:resourceTag/Project':'capstone'}}),
