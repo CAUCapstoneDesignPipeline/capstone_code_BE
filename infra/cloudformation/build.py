@@ -71,7 +71,8 @@ def bootstrap():
     prefix='repo:CAUCapstoneDesignPipeline@324880339/'
     subjects={'BePublisher':prefix+'capstone_code_BE@1397266620:environment:image-publish',
               'WebPublisher':prefix+'capstone_code_FE@1397258129:environment:image-publish',
-              'DeployRole':prefix+'capstone_code_BE@1397266620:environment:production'}
+              'DeployRole':[prefix+'capstone_code_BE@1397266620:environment:production',
+                            prefix+'capstone_code_FE@1397258129:environment:production']}
     for n,subject in subjects.items():
         oidc=policy([{'Effect':'Allow','Principal':{'Federated':ref('GitHubProvider')},'Action':'sts:AssumeRoleWithWebIdentity',
             'Condition':{'StringEquals':{'token.actions.githubusercontent.com:aud':'sts.amazonaws.com','token.actions.githubusercontent.com:sub':subject}}}])
@@ -82,7 +83,9 @@ def bootstrap():
             stmts=[statement('ssm:SendCommand',f'arn:aws:ssm:{REGION}:{ACCOUNT}:document/capstone-deploy'),
                 statement('ssm:SendCommand',f'arn:aws:ec2:{REGION}:{ACCOUNT}:instance/*',{'StringEquals':{'ssm:resourceTag/Project':'capstone'}}),
                 statement(['ssm:GetCommandInvocation','ssm:ListCommandInvocations','ssm:ListCommands'],'*'),
-                statement(['ecr:DescribeImages','ecr:BatchGetImage'],repositories)]
+                statement(['ecr:DescribeImages','ecr:BatchGetImage'],repositories),
+                dict(statement('ssm:GetParameter',f'arn:aws:ssm:{REGION}:{ACCOUNT}:parameter/capstone/prod/deploy/current',
+                    {'StringEquals':{'aws:RequestedRegion':REGION}}),Sid='ReadCurrentReleaseMetadata')]
         r[n]=role('capstone-'+{'BePublisher':'be-publisher','WebPublisher':'web-publisher','DeployRole':'prod-deploy'}[n],oidc,stmts)
     r['OperationsTopic']=resource('AWS::SNS::Topic',{'TopicName':'capstone-operations','Tags':TAGS})
     r['OperationsTopicPolicy']=resource('AWS::SNS::TopicPolicy',{'Topics':[ref('OperationsTopic')],

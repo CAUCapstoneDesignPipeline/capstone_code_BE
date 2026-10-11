@@ -1,6 +1,9 @@
 name: Publish BE image
 'on':
   workflow_dispatch: {}
+  push:
+    branches:
+    - main
 permissions:
   contents: read
 concurrency:
@@ -10,7 +13,7 @@ jobs:
   authorize:
     runs-on: ubuntu-24.04
     steps:
-    - name: Require explicit image publication on main
+    - name: Require enabled publication on main
       env:
         REF: ${{ github.ref }}
         ENABLED: ${{ vars.IMAGE_PUBLISH_ENABLED }}
@@ -43,6 +46,24 @@ jobs:
         role-session-name: image-${{ github.run_id }}
     - uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd
       id: ecr
+    - name: Resolve immutable commit tag for safe reruns
+      id: existing
+      env:
+        SOURCE_SHA: ${{ github.sha }}
+      run: |-
+        python3 - <<'PY'
+        import json,os,re,subprocess
+        from pathlib import Path
+        result=subprocess.run(['aws','ecr','describe-images','--repository-name','capstone/be','--image-ids','imageTag=sha-'+os.environ['SOURCE_SHA'],'--output','json'],capture_output=True,text=True)
+        if result.returncode:
+            assert 'ImageNotFoundException' in result.stderr,'ECR lookup failed; details suppressed'
+            values='exists=false\n'
+        else:
+            images=json.loads(result.stdout)['imageDetails'];assert len(images)==1
+            digest=images[0]['imageDigest'];assert re.fullmatch('sha256:[a-f0-9]{64}',digest)
+            values='exists=true\ndigest='+digest+'\n'
+        with open(os.environ['GITHUB_OUTPUT'],'a') as output:output.write(values)
+        PY
     - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
     - name: Build image for runtime checks
       uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
@@ -51,8 +72,7 @@ jobs:
         platforms: linux/amd64
         push: false
         tags: capstone-ci:test
-        build-args: |-
-          SOURCE_REVISION=${{ github.sha }}
+        build-args: SOURCE_REVISION=${{ github.sha }}
         provenance: false
         sbom: false
         load: true
@@ -66,13 +86,13 @@ jobs:
         platforms: linux/amd64
         push: true
         tags: 378040395204.dkr.ecr.ap-northeast-2.amazonaws.com/capstone/be:sha-${{ github.sha }}
-        build-args: |-
-          SOURCE_REVISION=${{ github.sha }}
+        build-args: SOURCE_REVISION=${{ github.sha }}
         provenance: mode=min
         sbom: true
+      if: steps.existing.outputs.exists != 'true'
     - name: Write public release metadata only
       env:
-        IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
+        IMAGE_DIGEST: ${{ steps.image.outputs.digest || steps.existing.outputs.digest }}
         SOURCE_SHA: ${{ github.sha }}
       run: |-
         python3 - <<'PY'
@@ -80,10 +100,26 @@ jobs:
         from pathlib import Path
         assert re.fullmatch('sha256:[a-f0-9]{64}',os.environ['IMAGE_DIGEST'])
         Path('image-metadata.json').write_text(json.dumps({'sourceSha':os.environ['SOURCE_SHA'],'digest':os.environ['IMAGE_DIGEST'],'releaseProtocol':4,'runtimeVerified':True,'aiOffVerified':True,'platform':'linux/amd64'},sort_keys=True)+'\n')
+        with open(os.environ['GITHUB_OUTPUT'],'a') as output:output.write('digest='+os.environ['IMAGE_DIGEST']+'\n')
         PY
+      id: metadata
     - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
       with:
-        name: be-image-${{ github.sha }}
+        name: be-image-${{ github.sha }}-${{ github.run_attempt }}
         path: image-metadata.json
         retention-days: 30
         if-no-files-found: error
+    outputs:
+      digest: ${{ steps.metadata.outputs.digest }}
+  deploy:
+    name: Deploy published main image
+    if: github.event_name == 'push'
+    needs: publish
+    uses: ./.github/workflows/auto-release.yml
+    with:
+      service: be
+      source_sha: ${{ github.sha }}
+      image_digest: ${{ needs.publish.outputs.digest }}
+    permissions:
+      contents: read
+      id-token: write
