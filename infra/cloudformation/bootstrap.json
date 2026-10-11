@@ -454,7 +454,8 @@
           "ecr:UploadLayerPart",
           "ecr:CompleteLayerUpload",
           "ecr:PutImage",
-          "ecr:DescribeImages"
+          "ecr:DescribeImages",
+          "ecr:BatchGetImage"
          ],
          "Resource": "arn:aws:ecr:ap-northeast-2:378040395204:repository/capstone/be"
         }
@@ -519,7 +520,8 @@
           "ecr:UploadLayerPart",
           "ecr:CompleteLayerUpload",
           "ecr:PutImage",
-          "ecr:DescribeImages"
+          "ecr:DescribeImages",
+          "ecr:BatchGetImage"
          ],
          "Resource": "arn:aws:ecr:ap-northeast-2:378040395204:repository/capstone/web"
         }
