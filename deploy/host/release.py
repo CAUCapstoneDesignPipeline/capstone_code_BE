@@ -208,10 +208,19 @@ class Host:
         atomic(STATE/'current.json',canonical(m)+'\n')
 
     def smoke_public(self, m):
-        with urllib.request.urlopen('https://capsnote.art/api/v1/health',timeout=5) as r:
-            require(r.status==200 and json.load(r).get('status')=='UP', 'External HTTPS API smoke failed')
-        with urllib.request.urlopen('https://capsnote.art/',timeout=5) as r:
-            require(r.status==200 and b'api-only' in r.read(), 'External HTTPS web smoke failed')
+        # systemctl reload returns before nginx replaces its maintenance workers.
+        deadline=time.monotonic()+30
+        while True:
+            try:
+                with urllib.request.urlopen('https://capsnote.art/api/v1/health',timeout=5) as r:
+                    require(r.status==200 and json.load(r).get('status')=='UP', 'External HTTPS API smoke failed')
+                with urllib.request.urlopen('https://capsnote.art/',timeout=5) as r:
+                    require(r.status==200 and b'api-only' in r.read(), 'External HTTPS web smoke failed')
+                return
+            except Exception:
+                if time.monotonic()>=deadline:
+                    raise ReleaseError('External HTTPS readiness timeout') from None
+                time.sleep(1)
 
     def restore(self, m):
         # Existing successful runtime config is retained in tmpfs; never fetch old secret versions.
