@@ -1,0 +1,13 @@
+*
+!Dockerfile
+!.dockerignore
+!gradlew
+!gradle/
+!gradle/**
+!settings.gradle
+!build.gradle
+!src/
+!src/**
+!deploy/
+!deploy/image/
+!deploy/image/Healthcheck.java

@@ -1,0 +1,6 @@
+{
+  "configRevision": "api-only-v2",
+  "googleEnabled": false,
+  "googleClientId": "",
+  "allowedMode": "api-only"
+}

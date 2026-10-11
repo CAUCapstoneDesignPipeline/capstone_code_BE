@@ -50,7 +50,7 @@ public class SecurityConfig {
                 .requestCache(cache -> cache.disable())
                 .authorizeHttpRequests(requests -> {
                     requests.requestMatchers(HttpMethod.GET,
-                            "/api/v1/health", "/actuator/health", "/actuator/health/**").permitAll();
+                            "/api/v1/health", "/actuator/health", "/actuator/health/**", "/api/capabilities").permitAll();
                     requests.requestMatchers(HttpMethod.GET, "/api/auth/providers",
                             "/api/auth/oauth2/{provider}", "/api/auth/oauth2/{provider}/callback").permitAll();
                     requests.requestMatchers(HttpMethod.POST,
@@ -67,7 +67,8 @@ public class SecurityConfig {
                         .bearerTokenResolver(request -> {
                             String path = request.getRequestURI().substring(request.getContextPath().length());
                             boolean publicGet = "GET".equals(request.getMethod())
-                                    && (path.equals("/api/auth/providers") || path.startsWith("/api/auth/oauth2/"));
+                                    && (path.equals("/api/capabilities") || path.equals("/api/auth/providers")
+                                        || path.startsWith("/api/auth/oauth2/"));
                             boolean publicPost = "POST".equals(request.getMethod()) && List.of(
                                     "/api/auth/refresh", "/api/auth/logout", "/api/auth/dev/token").contains(path);
                             return publicGet || publicPost ? null : bearer.resolve(request);

@@ -114,6 +114,12 @@ public class NoteService {
     private String escapeLike(String query) {
         return query.replace("\\","\\\\").replace("%","\\%").replace("_","\\_");
     }
+    @Transactional(readOnly=true)
+    public void requireOwned(UUID userId,UUID id) {
+        if(!notes.existsByIdAndUserId(id,userId)) {
+            throw new ApiException(ErrorCode.NOT_FOUND,"삭제된 노트입니다");
+        }
+    }
     private Note owned(UUID userId,UUID id,boolean saving) {
         return notes.findByIdAndUserId(id,userId).orElseThrow(() -> new ApiException(ErrorCode.NOT_FOUND,
                 saving?"다른 곳에서 삭제된 노트입니다":"삭제된 노트입니다"));

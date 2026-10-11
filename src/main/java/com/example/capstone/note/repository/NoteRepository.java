@@ -32,6 +32,7 @@ public interface NoteRepository extends JpaRepository<Note,UUID> {
     int unassignTopic(UUID userId,UUID topicId,Instant now);
     long countByUserIdAndTopicId(UUID userId,UUID topicId);
     Optional<Note> findByIdAndUserId(UUID id,UUID userId);
+    boolean existsByIdAndUserId(UUID id,UUID userId);
     @Query("""
             select count(n) > 0 from Note n where n.userId = :userId and n.id <> :except
             and n.title = :title and (n.topicId = :topicId or (:topicId is null and n.topicId is null))
