@@ -1,0 +1,7 @@
+[Unit]
+Description=CAPSTONE host status metrics
+After=network-online.target
+[Service]
+Type=oneshot
+ExecStart=/opt/capstone/tools/bin/python /opt/capstone/host/metrics.py
+User=root

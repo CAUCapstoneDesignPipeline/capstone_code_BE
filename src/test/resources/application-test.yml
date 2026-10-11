@@ -1,0 +1,7 @@
+# Synthetic fixture key, exclusively on the test classpath; never use for local or production.
+capstone:
+  auth:
+    app-url: http://localhost:5173
+    jwt:
+      secret: test-only-fixture-key-with-at-least-32-bytes
+      issuer: capstone-be

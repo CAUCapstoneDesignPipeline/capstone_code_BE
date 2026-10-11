@@ -1,0 +1,81 @@
+{
+  "name": "capstone-production",
+  "services": {
+    "be": {
+      "image": "${BE_IMAGE:?digest required}",
+      "platform": "linux/amd64",
+      "user": "10001:10001",
+      "restart": "unless-stopped",
+      "read_only": true,
+      "init": true,
+      "cpus": 1.25,
+      "mem_limit": "1100m",
+      "pids_limit": 256,
+      "cap_drop": [
+        "ALL"
+      ],
+      "security_opt": [
+        "no-new-privileges:true"
+      ],
+      "tmpfs": [
+        "/tmp:rw,noexec,nosuid,size=64m"
+      ],
+      "ports": [
+        "127.0.0.1:18080:8080"
+      ],
+      "environment": {
+        "SPRING_PROFILES_ACTIVE": "prod",
+        "SPRING_CONFIG_ADDITIONAL_LOCATION": "file:/run/secrets/be.properties"
+      },
+      "volumes": [
+        {
+          "type": "bind",
+          "source": "${RUNTIME_DIR:?runtime required}/be.properties",
+          "target": "/run/secrets/be.properties",
+          "read_only": true,
+          "bind": {
+            "create_host_path": false
+          }
+        },
+        "/etc/capstone/rds-ca.pem:/run/secrets/rds-ca.pem:ro",
+        "/var/log/capstone/be:/var/log/capstone"
+      ],
+      "stop_grace_period": "30s",
+      "logging": {
+        "driver": "none"
+      }
+    },
+    "web": {
+      "image": "${WEB_IMAGE:?digest required}",
+      "platform": "linux/amd64",
+      "user": "101:101",
+      "restart": "unless-stopped",
+      "read_only": true,
+      "cpus": 0.25,
+      "mem_limit": "128m",
+      "pids_limit": 64,
+      "cap_drop": [
+        "ALL"
+      ],
+      "security_opt": [
+        "no-new-privileges:true"
+      ],
+      "tmpfs": [
+        "/tmp:rw,noexec,nosuid,size=32m"
+      ],
+      "ports": [
+        "127.0.0.1:18081:8080"
+      ],
+      "environment": {
+        "CAPSTONE_WEB_MODE": "${WEB_MODE:?mode required}"
+      },
+      "logging": {
+        "driver": "local",
+        "options": {
+          "max-size": "5m",
+          "max-file": "2"
+        }
+      }
+    }
+  }
+}

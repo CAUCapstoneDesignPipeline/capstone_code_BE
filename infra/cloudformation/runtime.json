@@ -1,0 +1,868 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "CAPSTONE P6 Seoul runtime: single amd64 host, EIP, private PostgreSQL 16; no AI/NAT/ALB",
+  "Parameters": {
+    "MasterPasswordVersion": {
+      "Type": "Number",
+      "Default": 1,
+      "MinValue": 1
+    }
+  },
+  "Resources": {
+    "Vpc": {
+      "Type": "AWS::EC2::VPC",
+      "Properties": {
+        "CidrBlock": "10.42.0.0/16",
+        "EnableDnsSupport": true,
+        "EnableDnsHostnames": true,
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "capstone"
+          },
+          {
+            "Key": "Environment",
+            "Value": "prod"
+          }
+        ]
+      }
+    },
+    "AppSubnet": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "VpcId": {
+          "Ref": "Vpc"
+        },
+        "CidrBlock": "10.42.1.0/24",
+        "AvailabilityZone": "ap-northeast-2a",
+        "MapPublicIpOnLaunch": false,
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "capstone"
+          },
+          {
+            "Key": "Environment",
+            "Value": "prod"
+          }
+        ]
+      }
+    },
+    "DbSubnetA": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "VpcId": {
+          "Ref": "Vpc"
+        },
+        "CidrBlock": "10.42.11.0/24",
+        "AvailabilityZone": "ap-northeast-2a",
+        "MapPublicIpOnLaunch": false,
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "capstone"
+          },
+          {
+            "Key": "Environment",
+            "Value": "prod"
+          }
+        ]
+      }
+    },
+    "DbSubnetC": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "VpcId": {
+          "Ref": "Vpc"
+        },
+        "CidrBlock": "10.42.12.0/24",
+        "AvailabilityZone": "ap-northeast-2c",
+        "MapPublicIpOnLaunch": false,
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "capstone"
+          },
+          {
+            "Key": "Environment",
+            "Value": "prod"
+          }
+        ]
+      }
+    },
+    "InternetGateway": {
+      "Type": "AWS::EC2::InternetGateway",
+      "Properties": {
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "capstone"
+          },
+          {
+            "Key": "Environment",
+            "Value": "prod"
+          }
+        ]
+      }
+    },
+    "GatewayAttachment": {
+      "Type": "AWS::EC2::VPCGatewayAttachment",
+      "Properties": {
+        "VpcId": {
+          "Ref": "Vpc"
+        },
+        "InternetGatewayId": {
+          "Ref": "InternetGateway"
+        }
+      }
+    },
+    "PublicRoutes": {
+      "Type": "AWS::EC2::RouteTable",
+      "Properties": {
+        "VpcId": {
+          "Ref": "Vpc"
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "capstone"
+          },
+          {
+            "Key": "Environment",
+            "Value": "prod"
+          }
+        ]
+      }
+    },
+    "PrivateRoutes": {
+      "Type": "AWS::EC2::RouteTable",
+      "Properties": {
+        "VpcId": {
+          "Ref": "Vpc"
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "capstone"
+          },
+          {
+            "Key": "Environment",
+            "Value": "prod"
+          }
+        ]
+      }
+    },
+    "PublicDefaultRoute": {
+      "Type": "AWS::EC2::Route",
+      "Properties": {
+        "RouteTableId": {
+          "Ref": "PublicRoutes"
+        },
+        "DestinationCidrBlock": "0.0.0.0/0",
+        "GatewayId": {
+          "Ref": "InternetGateway"
+        }
+      },
+      "DependsOn": "GatewayAttachment"
+    },
+    "AppSubnetRoutes": {
+      "Type": "AWS::EC2::SubnetRouteTableAssociation",
+      "Properties": {
+        "SubnetId": {
+          "Ref": "AppSubnet"
+        },
+        "RouteTableId": {
+          "Ref": "PublicRoutes"
+        }
+      }
+    },
+    "DbSubnetARoutes": {
+      "Type": "AWS::EC2::SubnetRouteTableAssociation",
+      "Properties": {
+        "SubnetId": {
+          "Ref": "DbSubnetA"
+        },
+        "RouteTableId": {
+          "Ref": "PrivateRoutes"
+        }
+      }
+    },
+    "DbSubnetCRoutes": {
+      "Type": "AWS::EC2::SubnetRouteTableAssociation",
+      "Properties": {
+        "SubnetId": {
+          "Ref": "DbSubnetC"
+        },
+        "RouteTableId": {
+          "Ref": "PrivateRoutes"
+        }
+      }
+    },
+    "AppSecurityGroup": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "Only public HTTP/HTTPS; DB and HTTPS egress",
+        "VpcId": {
+          "Ref": "Vpc"
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "capstone"
+          },
+          {
+            "Key": "Environment",
+            "Value": "prod"
+          }
+        ],
+        "SecurityGroupIngress": [
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 80,
+            "ToPort": 80,
+            "CidrIp": "0.0.0.0/0"
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 443,
+            "ToPort": 443,
+            "CidrIp": "0.0.0.0/0"
+          }
+        ],
+        "SecurityGroupEgress": [
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 443,
+            "ToPort": 443,
+            "CidrIp": "0.0.0.0/0"
+          }
+        ]
+      }
+    },
+    "DbSecurityGroup": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "PostgreSQL only from app SG",
+        "VpcId": {
+          "Ref": "Vpc"
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "capstone"
+          },
+          {
+            "Key": "Environment",
+            "Value": "prod"
+          }
+        ],
+        "SecurityGroupIngress": [
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 5432,
+            "ToPort": 5432,
+            "SourceSecurityGroupId": {
+              "Ref": "AppSecurityGroup"
+            }
+          }
+        ],
+        "SecurityGroupEgress": [
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 1,
+            "ToPort": 1,
+            "CidrIp": "127.0.0.1/32"
+          }
+        ]
+      }
+    },
+    "AppDbEgress": {
+      "Type": "AWS::EC2::SecurityGroupEgress",
+      "Properties": {
+        "GroupId": {
+          "Ref": "AppSecurityGroup"
+        },
+        "IpProtocol": "tcp",
+        "FromPort": 5432,
+        "ToPort": 5432,
+        "DestinationSecurityGroupId": {
+          "Ref": "DbSecurityGroup"
+        }
+      }
+    },
+    "DbSubnetGroup": {
+      "Type": "AWS::RDS::DBSubnetGroup",
+      "Properties": {
+        "DBSubnetGroupName": "capstone-prod",
+        "DBSubnetGroupDescription": "Two private AZ subnets",
+        "SubnetIds": [
+          {
+            "Ref": "DbSubnetA"
+          },
+          {
+            "Ref": "DbSubnetC"
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "capstone"
+          },
+          {
+            "Key": "Environment",
+            "Value": "prod"
+          }
+        ]
+      }
+    },
+    "DbParameters": {
+      "Type": "AWS::RDS::DBParameterGroup",
+      "Properties": {
+        "DBParameterGroupName": "capstone-postgres16",
+        "Description": "CAPSTONE TLS and confidential SQL logging",
+        "Family": "postgres16",
+        "Parameters": {
+          "rds.force_ssl": "1",
+          "log_statement": "none",
+          "log_min_error_statement": "panic"
+        },
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "capstone"
+          },
+          {
+            "Key": "Environment",
+            "Value": "prod"
+          }
+        ]
+      }
+    },
+    "Database": {
+      "Type": "AWS::RDS::DBInstance",
+      "Properties": {
+        "DBInstanceIdentifier": "capstone-prod",
+        "DBName": "capstone",
+        "Engine": "postgres",
+        "EngineVersion": "16.15",
+        "DBInstanceClass": "db.t3.micro",
+        "AllocatedStorage": "20",
+        "StorageType": "gp3",
+        "StorageEncrypted": true,
+        "MultiAZ": false,
+        "AvailabilityZone": "ap-northeast-2a",
+        "PubliclyAccessible": false,
+        "DBSubnetGroupName": {
+          "Ref": "DbSubnetGroup"
+        },
+        "DBParameterGroupName": {
+          "Ref": "DbParameters"
+        },
+        "VPCSecurityGroups": [
+          {
+            "Ref": "DbSecurityGroup"
+          }
+        ],
+        "MasterUsername": "capstone_admin",
+        "MasterUserPassword": {
+          "Fn::Sub": "{{resolve:ssm-secure:/capstone/prod/bootstrap/rds-master-password:${MasterPasswordVersion}}}"
+        },
+        "BackupRetentionPeriod": 1,
+        "DeletionProtection": true,
+        "CopyTagsToSnapshot": true,
+        "AutoMinorVersionUpgrade": true,
+        "MonitoringInterval": 0,
+        "EnablePerformanceInsights": false,
+        "EngineLifecycleSupport": "open-source-rds-extended-support-disabled",
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "capstone"
+          },
+          {
+            "Key": "Environment",
+            "Value": "prod"
+          }
+        ]
+      },
+      "DeletionPolicy": "Snapshot",
+      "UpdateReplacePolicy": "Snapshot",
+      "Metadata": {
+        "cfn-lint": {
+          "config": {
+            "ignore_checks": [
+              "E3691"
+            ]
+          }
+        }
+      }
+    },
+    "Address": {
+      "Type": "AWS::EC2::EIP",
+      "Properties": {
+        "Domain": "vpc",
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "capstone"
+          },
+          {
+            "Key": "Environment",
+            "Value": "prod"
+          }
+        ]
+      },
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain"
+    },
+    "Host": {
+      "Type": "AWS::EC2::Instance",
+      "Properties": {
+        "ImageId": "ami-0870825cefcaafcc8",
+        "InstanceType": "t3.small",
+        "IamInstanceProfile": {
+          "Fn::ImportValue": "capstone-bootstrap-HostProfile"
+        },
+        "SubnetId": {
+          "Ref": "AppSubnet"
+        },
+        "SecurityGroupIds": [
+          {
+            "Ref": "AppSecurityGroup"
+          }
+        ],
+        "MetadataOptions": {
+          "HttpTokens": "required",
+          "HttpPutResponseHopLimit": 1,
+          "HttpEndpoint": "enabled"
+        },
+        "CreditSpecification": {
+          "CPUCredits": "standard"
+        },
+        "Monitoring": false,
+        "EbsOptimized": true,
+        "BlockDeviceMappings": [
+          {
+            "DeviceName": "/dev/xvda",
+            "Ebs": {
+              "VolumeType": "gp3",
+              "VolumeSize": 30,
+              "Encrypted": true,
+              "DeleteOnTermination": false
+            }
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "capstone"
+          },
+          {
+            "Key": "Environment",
+            "Value": "prod"
+          }
+        ],
+        "PropagateTagsToVolumeOnCreation": true,
+        "UserData": {
+          "Fn::Base64": {
+            "Fn::Join": [
+              "",
+              [
+                "#!/bin/bash\nset -euo pipefail\numask 077\nmkdir -p /opt/capstone /etc/capstone\n",
+                "python3 - <<'PY'\nimport base64,gzip,io,tarfile\ndata=base64.b64decode('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')\nwith tarfile.open(fileobj=io.BytesIO(gzip.decompress(data))) as a: a.extractall('/opt/capstone')\nPY\n",
+                "cat > /etc/capstone/infrastructure.json <<'JSON'\n{\"dbEndpoint\":\"",
+                {
+                  "Fn::GetAtt": [
+                    "Database",
+                    "Endpoint.Address"
+                  ]
+                },
+                "\",\"appDomain\":\"capsnote.art\"}\nJSON\n/bin/bash /opt/capstone/host/install.sh\n"
+              ]
+            ]
+          }
+        }
+      },
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "DependsOn": "PublicDefaultRoute"
+    },
+    "AddressAssociation": {
+      "Type": "AWS::EC2::EIPAssociation",
+      "Properties": {
+        "InstanceId": {
+          "Ref": "Host"
+        },
+        "AllocationId": {
+          "Fn::GetAtt": [
+            "Address",
+            "AllocationId"
+          ]
+        }
+      }
+    },
+    "InstanceStatusAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": "capstone-instancestatus",
+        "Namespace": "AWS/EC2",
+        "MetricName": "StatusCheckFailed",
+        "Statistic": "Maximum",
+        "Period": 300,
+        "EvaluationPeriods": 2,
+        "Threshold": 1,
+        "ComparisonOperator": "GreaterThanOrEqualToThreshold",
+        "Dimensions": [
+          {
+            "Name": "InstanceId",
+            "Value": {
+              "Ref": "Host"
+            }
+          }
+        ],
+        "TreatMissingData": "breaching",
+        "AlarmActions": [
+          {
+            "Fn::ImportValue": "capstone-bootstrap-TopicArn"
+          }
+        ],
+        "OKActions": [
+          {
+            "Fn::ImportValue": "capstone-bootstrap-TopicArn"
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "capstone"
+          },
+          {
+            "Key": "Environment",
+            "Value": "prod"
+          }
+        ]
+      }
+    },
+    "DbStorageAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": "capstone-dbstorage",
+        "Namespace": "AWS/RDS",
+        "MetricName": "FreeStorageSpace",
+        "Statistic": "Minimum",
+        "Period": 300,
+        "EvaluationPeriods": 2,
+        "Threshold": 4294967296,
+        "ComparisonOperator": "LessThanThreshold",
+        "Dimensions": [
+          {
+            "Name": "DBInstanceIdentifier",
+            "Value": {
+              "Ref": "Database"
+            }
+          }
+        ],
+        "TreatMissingData": "breaching",
+        "AlarmActions": [
+          {
+            "Fn::ImportValue": "capstone-bootstrap-TopicArn"
+          }
+        ],
+        "OKActions": [
+          {
+            "Fn::ImportValue": "capstone-bootstrap-TopicArn"
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "capstone"
+          },
+          {
+            "Key": "Environment",
+            "Value": "prod"
+          }
+        ]
+      }
+    },
+    "DbCpuAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": "capstone-dbcpu",
+        "Namespace": "AWS/RDS",
+        "MetricName": "CPUUtilization",
+        "Statistic": "Average",
+        "Period": 300,
+        "EvaluationPeriods": 3,
+        "Threshold": 80,
+        "ComparisonOperator": "GreaterThanThreshold",
+        "Dimensions": [
+          {
+            "Name": "DBInstanceIdentifier",
+            "Value": {
+              "Ref": "Database"
+            }
+          }
+        ],
+        "TreatMissingData": "breaching",
+        "AlarmActions": [
+          {
+            "Fn::ImportValue": "capstone-bootstrap-TopicArn"
+          }
+        ],
+        "OKActions": [
+          {
+            "Fn::ImportValue": "capstone-bootstrap-TopicArn"
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "capstone"
+          },
+          {
+            "Key": "Environment",
+            "Value": "prod"
+          }
+        ]
+      }
+    },
+    "DbCpuCreditsAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": "capstone-dbcpucredits",
+        "Namespace": "AWS/RDS",
+        "MetricName": "CPUSurplusCreditsCharged",
+        "Statistic": "Sum",
+        "Period": 300,
+        "EvaluationPeriods": 1,
+        "Threshold": 0,
+        "ComparisonOperator": "GreaterThanThreshold",
+        "Dimensions": [
+          {
+            "Name": "DBInstanceIdentifier",
+            "Value": {
+              "Ref": "Database"
+            }
+          }
+        ],
+        "TreatMissingData": "breaching",
+        "AlarmActions": [
+          {
+            "Fn::ImportValue": "capstone-bootstrap-TopicArn"
+          }
+        ],
+        "OKActions": [
+          {
+            "Fn::ImportValue": "capstone-bootstrap-TopicArn"
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "capstone"
+          },
+          {
+            "Key": "Environment",
+            "Value": "prod"
+          }
+        ]
+      }
+    },
+    "MemoryAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": "capstone-memory",
+        "Namespace": "capstone",
+        "MetricName": "MemoryUsedPercent",
+        "Statistic": "Maximum",
+        "Period": 300,
+        "EvaluationPeriods": 3,
+        "Threshold": 75,
+        "ComparisonOperator": "GreaterThanThreshold",
+        "Dimensions": [
+          {
+            "Name": "Host",
+            "Value": "capstone-prod"
+          }
+        ],
+        "TreatMissingData": "breaching",
+        "AlarmActions": [
+          {
+            "Fn::ImportValue": "capstone-bootstrap-TopicArn"
+          }
+        ],
+        "OKActions": [
+          {
+            "Fn::ImportValue": "capstone-bootstrap-TopicArn"
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "capstone"
+          },
+          {
+            "Key": "Environment",
+            "Value": "prod"
+          }
+        ]
+      }
+    },
+    "DiskAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": "capstone-disk",
+        "Namespace": "capstone",
+        "MetricName": "DiskUsedPercent",
+        "Statistic": "Maximum",
+        "Period": 300,
+        "EvaluationPeriods": 2,
+        "Threshold": 80,
+        "ComparisonOperator": "GreaterThanThreshold",
+        "Dimensions": [
+          {
+            "Name": "Host",
+            "Value": "capstone-prod"
+          }
+        ],
+        "TreatMissingData": "breaching",
+        "AlarmActions": [
+          {
+            "Fn::ImportValue": "capstone-bootstrap-TopicArn"
+          }
+        ],
+        "OKActions": [
+          {
+            "Fn::ImportValue": "capstone-bootstrap-TopicArn"
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "capstone"
+          },
+          {
+            "Key": "Environment",
+            "Value": "prod"
+          }
+        ]
+      }
+    },
+    "HostReadyAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": "capstone-hostready",
+        "Namespace": "capstone",
+        "MetricName": "HostReady",
+        "Statistic": "Minimum",
+        "Period": 300,
+        "EvaluationPeriods": 3,
+        "Threshold": 1,
+        "ComparisonOperator": "LessThanThreshold",
+        "Dimensions": [
+          {
+            "Name": "Host",
+            "Value": "capstone-prod"
+          }
+        ],
+        "TreatMissingData": "breaching",
+        "AlarmActions": [
+          {
+            "Fn::ImportValue": "capstone-bootstrap-TopicArn"
+          }
+        ],
+        "OKActions": [
+          {
+            "Fn::ImportValue": "capstone-bootstrap-TopicArn"
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "capstone"
+          },
+          {
+            "Key": "Environment",
+            "Value": "prod"
+          }
+        ]
+      }
+    },
+    "CertificateAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": "capstone-certificate",
+        "Namespace": "capstone",
+        "MetricName": "CertificateExpiring",
+        "Statistic": "Maximum",
+        "Period": 300,
+        "EvaluationPeriods": 1,
+        "Threshold": 1,
+        "ComparisonOperator": "GreaterThanOrEqualToThreshold",
+        "Dimensions": [
+          {
+            "Name": "Host",
+            "Value": "capstone-prod"
+          }
+        ],
+        "TreatMissingData": "notBreaching",
+        "AlarmActions": [
+          {
+            "Fn::ImportValue": "capstone-bootstrap-TopicArn"
+          }
+        ],
+        "OKActions": [
+          {
+            "Fn::ImportValue": "capstone-bootstrap-TopicArn"
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Project",
+            "Value": "capstone"
+          },
+          {
+            "Key": "Environment",
+            "Value": "prod"
+          }
+        ]
+      }
+    }
+  },
+  "Outputs": {
+    "VpcId": {
+      "Value": {
+        "Ref": "Vpc"
+      }
+    },
+    "InstanceId": {
+      "Value": {
+        "Ref": "Host"
+      }
+    },
+    "ElasticIp": {
+      "Value": {
+        "Ref": "Address"
+      }
+    },
+    "RdsEndpoint": {
+      "Value": {
+        "Fn::GetAtt": [
+          "Database",
+          "Endpoint.Address"
+        ]
+      }
+    },
+    "AppSecurityGroupId": {
+      "Value": {
+        "Ref": "AppSecurityGroup"
+      }
+    },
+    "DbSecurityGroupId": {
+      "Value": {
+        "Ref": "DbSecurityGroup"
+      }
+    }
+  }
+}

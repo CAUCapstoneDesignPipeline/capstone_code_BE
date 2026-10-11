@@ -1,0 +1,43 @@
+name: Deploy production
+'on':
+  workflow_dispatch:
+    inputs:
+      manifest:
+        description: Reviewed deploy/releases/<release-id>.json on main
+        required: true
+        type: string
+      expected_release:
+        description: Current release ID; none only for first deployment
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: capstone-production
+  cancel-in-progress: false
+jobs:
+  authorize:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+    - name: Require explicit production authorization on main
+      env:
+        REF: ${{ github.ref }}
+        ENABLED: ${{ vars.PRODUCTION_DEPLOY_ENABLED }}
+      run: |-
+        python3 - <<'PY'
+        import os
+        if os.environ['REF']!='refs/heads/main' or os.environ['ENABLED']!='true':
+            raise SystemExit('Production execution requires main and PRODUCTION_DEPLOY_ENABLED=true')
+        PY
+  release:
+    uses: ./.github/workflows/release.yml
+    with:
+      operation: deploy
+      manifest: ${{ inputs.manifest }}
+      expected_release: ${{ inputs.expected_release }}
+    needs: authorize
+    permissions:
+      contents: read
+      id-token: write

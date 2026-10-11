@@ -1,0 +1,6 @@
+{
+  "Statement": [
+    {"Effect":"Allow","Principal":"*","Action":"Update:*","Resource":"*"},
+    {"Effect":"Deny","Principal":"*","Action":["Update:Replace","Update:Delete"],"Resource":"*","Condition":{"StringEquals":{"ResourceType":["AWS::RDS::DBInstance","AWS::EC2::Instance","AWS::EC2::EIP"]}}}
+  ]
+}
