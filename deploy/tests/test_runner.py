@@ -15,6 +15,16 @@ class Result:
         self.returncode=0;self.stderr='';self.stdout=json.dumps({'Status':status,'ResponseCode':code,'StandardOutputContent':'sensitive','StandardErrorContent':'sensitive'})
 
 class RunnerTests(unittest.TestCase):
+    def test_previous_manifest_can_be_supplied_for_rollback_without_git_commit(self):
+        value=test_release.manifest()
+        with patch.dict(os.environ,{'ROLLBACK_MANIFEST_JSON':json.dumps(value)},clear=True):
+            self.assertEqual(runner.load_request('','rollback'),value)
+    def test_inline_manifest_cannot_be_used_for_deploy(self):
+        with patch.dict(os.environ,{'ROLLBACK_MANIFEST_JSON':json.dumps(test_release.manifest())},clear=True):
+            with self.assertRaises(runner.ReleaseError):runner.load_request('','deploy')
+    def test_ambiguous_rollback_manifest_is_rejected(self):
+        with patch.dict(os.environ,{'ROLLBACK_MANIFEST_JSON':json.dumps(test_release.manifest())},clear=True):
+            with self.assertRaises(runner.ReleaseError):runner.load_request('deploy/releases/previous.json','rollback')
     def test_default_execution_disabled(self):
         with patch.dict(os.environ,{},clear=True):
             with self.assertRaises(runner.ReleaseError):runner.check(test_release.manifest())

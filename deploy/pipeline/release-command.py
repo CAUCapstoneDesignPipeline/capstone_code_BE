@@ -15,6 +15,11 @@ REGION='ap-northeast-2'
 ACCOUNT='378040395204'
 HOST='i-066c6e88c43ff81a5'
 
+class CommandFailed(ReleaseError):
+    def __init__(self,status):
+        super().__init__('SSM command failed; inspect maintenance before retry')
+        self.status=status
+
 def aws(*args):
     r=subprocess.run(['aws',*args,'--region',REGION,'--output','json'],capture_output=True,text=True)
     require(r.returncode==0, 'AWS operation failed (details suppressed)')
@@ -24,6 +29,14 @@ def load(path):
     require(re.fullmatch(r'deploy/releases/[a-z0-9][a-z0-9-]{0,63}\.json',path), 'Manifest must be a reviewed release file')
     require(not Path(path).is_symlink(), 'Manifest symlink rejected')
     return validate(json.loads(Path(path).read_text()))
+
+def load_request(path,operation):
+    inline=os.environ.get('ROLLBACK_MANIFEST_JSON','').strip()
+    if inline:
+        require(not path and operation=='rollback','Inline manifest is only for previous-release rollback')
+        require(len(inline)<=6002,'Rollback manifest is too large')
+        return validate(json.loads(inline))
+    return load(path)
 
 def check(m, remote=False):
     require(os.environ.get('GITHUB_REF')=='refs/heads/main', 'Production requires main')
@@ -48,7 +61,8 @@ def wait(command_id, deadline_seconds=930):
         if status in ['Pending','InProgress','Delayed']: time.sleep(5);continue
         # Do not print command stdout/stderr: future scripts may contain sensitive error text.
         print(json.dumps({'commandId':command_id,'status':status,'responseCode':invocation['ResponseCode']}))
-        require(status=='Success' and invocation['ResponseCode']==0, 'SSM command failed; inspect maintenance before retry')
+        if status!='Success' or invocation['ResponseCode']!=0:
+            raise CommandFailed(status)
         return
     raise ReleaseError('SSM wait deadline exceeded; command may still be running. Inspect it before retrying')
 
@@ -60,7 +74,8 @@ def main():
     if a.operation=='wait':
         require(bool(a.command_id and re.fullmatch(r'[a-f0-9-]{36}',a.command_id)), 'Command ID required')
         wait(a.command_id);return
-    m=load(a.manifest);check(m,remote=a.operation!='validate')
+    operation=os.environ.get('OPERATION','deploy') if a.operation=='validate' else a.operation
+    m=load_request(a.manifest,operation);check(m,remote=a.operation!='validate')
     if a.operation=='validate': print(json.dumps({'releaseId':m['releaseId'],'manifestSha':checksum(m),'mode':m['mode']}));return
     require(isinstance(a.expected_release,str) and re.fullmatch(r'none|[a-z0-9][a-z0-9-]{0,63}',a.expected_release), 'Explicit expected release required')
     parameters={k:[v] for k,v in {'ReleaseId':m['releaseId'],'BeDigest':m['be']['digest'],'WebDigest':m['web']['digest'],
