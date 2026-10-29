@@ -142,3 +142,40 @@ run "reject_unreviewed_federation" {
   }
   expect_failures = [terraform_data.federation_gate]
 }
+
+run "budget_is_project_scoped_and_not_a_shutdown" {
+  command = plan
+  variables {
+    notification_email = "test@example.com"
+    budget = {
+      billing_account = "AAAAAA-BBBBBB-CCCCCC"
+      currency_code   = "USD"
+      monthly_amount  = 500
+    }
+  }
+  assert {
+    condition = (
+      toset(google_billing_budget.project[0].budget_filter[0].projects) == toset(["projects/169516793433"]) &&
+      google_billing_budget.project[0].budget_filter[0].credit_types_treatment == "EXCLUDE_ALL_CREDITS" &&
+      google_billing_budget.project[0].amount[0].specified_amount[0].currency_code == "USD" &&
+      google_billing_budget.project[0].amount[0].specified_amount[0].units == "500" &&
+      google_billing_budget.project[0].all_updates_rule[0].disable_default_iam_recipients &&
+      !google_billing_budget.project[0].all_updates_rule[0].enable_project_level_recipients &&
+      length(google_billing_budget.project[0].threshold_rules) == 4 &&
+      google_billing_budget.project[0].deletion_policy == "PREVENT"
+    )
+    error_message = "Budget must be project-only, in verified currency, with explicit recipients and current/forecast alerts."
+  }
+}
+
+run "budget_requires_recipient" {
+  command = plan
+  variables {
+    budget = {
+      billing_account = "AAAAAA-BBBBBB-CCCCCC"
+      currency_code   = "USD"
+      monthly_amount  = 500
+    }
+  }
+  expect_failures = [google_billing_budget.project[0]]
+}

@@ -11,3 +11,8 @@ github_federation_enabled = false
 # Resolve and pin the exact image AFTER Compute API activation has been approved.
 # app_image = "projects/ubuntu-os-cloud/global/images/<exact-reviewed-image>"
 # notification_email = "team-operated-address@example.com" # set a real recipient before apply
+# budget = {
+#   billing_account = "AAAAAA-BBBBBB-CCCCCC" # existing account, not a new link
+#   currency_code   = "USD"                 # verify actual account currency
+#   monthly_amount  = 500                   # proposal only; requires review
+# }
