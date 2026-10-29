@@ -35,6 +35,7 @@ public class MigrationAcceptance {
                 services += "[" + item[0] + "]\nhost=127.0.0.1\nport=5432\ndbname=" + item[1]
                     + "\nuser=capstone_app\npassword=synthetic-fixture-only\n";
             }
+            services += "[admin_target]\nhost=127.0.0.1\nport=5432\ndbname=rehearsal\nuser=" + db.getUsername() + "\npassword=" + db.getPassword() + "\n";
             db.copyFileToContainer(Transferable.of(services.getBytes(), 0600), "/tmp/migration-services.conf");
             var process = new ProcessBuilder("python3", "deploy/gcp/tests/migration_acceptance.py", db.getContainerId())
                 .directory(root.toFile()).inheritIO().start();
