@@ -29,3 +29,19 @@ class PlanGuardTest(unittest.TestCase):
                 guard.check(plan, self.backend)
         with self.assertRaises(guard.InvalidPlan):
             guard.check(cases[0], dict(self.backend, prefix='gcp/bootstrap'))
+
+    def test_paid_plan_requires_scoped_positive_budget(self):
+        plan = self.plan('google_sql_database_instance', {})
+        with self.assertRaises(guard.InvalidPlan):
+            guard.check(plan, self.backend)
+        budget = {'budget_filter': [{'projects': ['projects/169516793433']}],
+                  'amount': [{'specified_amount': [{'currency_code': 'USD', 'units': '500'}]}]}
+        plan['resource_changes'] += self.plan('google_billing_budget', budget)['resource_changes']
+        self.assertFalse(guard.check(plan, self.backend)['approval'])
+        budget['budget_filter'][0]['projects'] = []
+        with self.assertRaises(guard.InvalidPlan):
+            guard.check(plan, self.backend)
+        budget['budget_filter'][0]['projects'] = ['projects/169516793433']
+        budget['amount'][0]['specified_amount'][0]['units'] = '0'
+        with self.assertRaises(guard.InvalidPlan):
+            guard.check(plan, self.backend)

@@ -22,6 +22,18 @@ def check(plan, backend, *, bootstrap=False):
     changes = plan.get('resource_changes', [])
     if not changes:
         errors.append('plan has no resource changes to review')
+    if not bootstrap and any(c['type'] in {'google_compute_instance', 'google_sql_database_instance'} for c in changes):
+        budgets = [c['change'].get('after') or {} for c in changes if c['type'] == 'google_billing_budget']
+        if not budgets:
+            errors.append('reviewed project budget required before paid infrastructure provisioning')
+        for budget in budgets:
+            filters = budget.get('budget_filter') or [{}]
+            if filters[0].get('projects') != ['projects/169516793433']:
+                errors.append('budget must cover only the reviewed project')
+            amount = (budget.get('amount') or [{}])[0]
+            specified = (amount.get('specified_amount') or [{}])[0]
+            if not re.fullmatch(r'[A-Z]{3}', specified.get('currency_code') or '') or not str(specified.get('units', '')).isdigit() or int(specified.get('units') or 0) <= 0:
+                errors.append('reviewed billing currency and positive budget required')
     for change in changes:
         actions = change['change']['actions']
         kind = change['type']
