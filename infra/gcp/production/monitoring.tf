@@ -69,3 +69,22 @@ resource "google_monitoring_alert_policy" "capacity" {
   }
   depends_on = [google_project_service.required]
 }
+
+resource "google_monitoring_alert_policy" "runtime_health" {
+  for_each              = toset(["app", "ai"])
+  display_name          = "${local.prefix}-${each.key}-readiness-tls"
+  combiner              = "OR"
+  enabled               = var.notification_email != null
+  notification_channels = google_monitoring_notification_channel.email[*].name
+  conditions {
+    display_name = "Runtime degraded or TLS certificate expires within 30 days"
+    condition_matched_log {
+      filter = "jsonPayload.component=\"capstone-${each.key}\" AND (jsonPayload.state=\"degraded\" OR jsonPayload.tlsExpiring=true)"
+    }
+  }
+  alert_strategy {
+    auto_close = "1800s"
+    notification_rate_limit { period = "300s" }
+  }
+  depends_on = [google_project_service.required]
+}

@@ -40,7 +40,8 @@ run "mvp_security_boundaries" {
       google_iam_workload_identity_pool.github.disabled &&
       google_iam_workload_identity_pool_provider.github.disabled &&
       output.ai_enabled == false &&
-      alltrue([for policy in google_monitoring_alert_policy.capacity : !policy.enabled])
+      alltrue([for policy in google_monitoring_alert_policy.capacity : !policy.enabled]) &&
+      alltrue([for policy in google_monitoring_alert_policy.runtime_health : !policy.enabled])
     )
     error_message = "Federation, AI and recipient-less alerts must stay inactive during initial review."
   }
@@ -77,6 +78,7 @@ run "optional_ha_and_notifications" {
       google_sql_database_instance.main.settings[0].availability_type == "REGIONAL" &&
       google_sql_database_instance.main.settings[0].location_preference[0].secondary_zone != var.zone &&
       alltrue([for policy in google_monitoring_alert_policy.capacity : policy.enabled]) &&
+      alltrue([for policy in google_monitoring_alert_policy.runtime_health : policy.enabled]) &&
       length(google_monitoring_notification_channel.email) == 1
     )
     error_message = "HA needs a different standby zone and enabled alerts need a recipient."
