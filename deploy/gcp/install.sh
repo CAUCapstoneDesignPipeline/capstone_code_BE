@@ -6,7 +6,9 @@ test "$(id -u)" = 0
 . /etc/os-release
 test "$ID:$VERSION_ID:$(uname -m)" = 'ubuntu:24.04:x86_64'
 test -f /etc/capstone-gcp/installation-approved
-test ! -e /var/lib/capstone-gcp/operations
+test ! -f /etc/capstone-gcp/bootstrap-complete
+! compgen -G '/var/lib/capstone-gcp/operations/*.json' >/dev/null
+test -x /opt/google-cloud-ops-agent/bin/google_cloud_ops_agent_engine
 test -f /etc/letsencrypt/live/capsnote.art/fullchain.pem
 test -f /etc/letsencrypt/live/capsnote.art/privkey.pem
 # Existing network ranges must be reviewed before allocating the container subnet.
@@ -32,3 +34,5 @@ install -m 0644 /opt/capstone-gcp/ops-agent.yaml /etc/google-cloud-ops-agent/con
 systemctl restart google-cloud-ops-agent
 # DNS-01/manual issuance is not automatic renewal acceptance. Rehearsal must run dry-run.
 systemctl enable --now certbot.timer
+
+touch /etc/capstone-gcp/bootstrap-complete

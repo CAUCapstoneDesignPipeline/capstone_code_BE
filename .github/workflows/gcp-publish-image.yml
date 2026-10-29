@@ -1,0 +1,95 @@
+name: Publish BE image to GCP
+'on':
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency:
+  group: gcp-publish-be-${{ github.sha }}
+  cancel-in-progress: false
+jobs:
+  checks:
+    if: github.repository == 'CAUCapstoneDesignPipeline/capstone_code_BE' && github.ref == 'refs/heads/main' && vars.GCP_IMAGE_PUBLISH_ENABLED == 'true'
+    uses: ./.github/workflows/ci.yml
+  publish:
+    needs: checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: image-publish
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      GCP_IMAGE_PUBLISH_ENABLED: ${{ vars.GCP_IMAGE_PUBLISH_ENABLED }}
+      GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      GCP_PROJECT_NUMBER: ${{ vars.GCP_PROJECT_NUMBER }}
+      GCP_REGION: ${{ vars.GCP_REGION }}
+      GCP_WIF_PROVIDER: ${{ vars.GCP_WIF_PROVIDER }}
+      GCP_IMAGE_SERVICE_ACCOUNT: ${{ vars.GCP_IMAGE_SERVICE_ACCOUNT }}
+      AR_REPOSITORY: ${{ vars.AR_REPOSITORY }}
+    outputs:
+      digest: ${{ steps.metadata.outputs.digest }}
+    steps:
+    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      with:
+        ref: ${{ github.sha }}
+        persist-credentials: false
+    - name: Validate publication target and source
+      id: target
+      run: python3 deploy/gcp/publish_image.py preflight
+    - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
+    - name: Build exact source for Linux amd64
+      uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
+      with:
+        context: .
+        platforms: linux/amd64
+        load: true
+        push: false
+        tags: ${{ steps.target.outputs.tag }}
+        build-args: SOURCE_REVISION=${{ github.sha }}
+        provenance: false
+        sbom: false
+    - name: Verify candidate runtime
+      run: python3 deploy/pipeline/image-smoke.py
+      env:
+        TEST_IMAGE: ${{ steps.target.outputs.tag }}
+    - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
+      with:
+        workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+        service_account: ${{ vars.GCP_IMAGE_SERVICE_ACCOUNT }}
+        create_credentials_file: true
+    - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db
+    - name: Configure only Seoul registry
+      run: gcloud auth configure-docker asia-northeast3-docker.pkg.dev --quiet
+    - name: Resolve immutable source tag
+      id: existing
+      run: python3 deploy/gcp/publish_image.py lookup
+    - name: Publish the tested image without rebuilding
+      if: steps.existing.outputs.exists != 'true'
+      env:
+        IMAGE_TAG: ${{ steps.target.outputs.tag }}
+      run: docker push "$IMAGE_TAG"
+    - name: Resolve published digest
+      id: published
+      run: python3 deploy/gcp/publish_image.py lookup
+    - name: Pull exact published digest
+      env:
+        IMAGE: ${{ steps.target.outputs.image }}
+        DIGEST: ${{ steps.published.outputs.digest }}
+      run: |-
+        test -n "$DIGEST"
+        docker pull --platform linux/amd64 "$IMAGE@$DIGEST"
+    - name: Verify published image including reruns
+      run: python3 deploy/pipeline/image-smoke.py
+      env:
+        TEST_IMAGE: ${{ steps.target.outputs.image }}@${{ steps.published.outputs.digest }}
+    - name: Record public source and digest metadata
+      id: metadata
+      run: python3 deploy/gcp/publish_image.py metadata
+      env:
+        IMAGE_DIGEST: ${{ steps.published.outputs.digest }}
+    - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      with:
+        name: gcp-be-image-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+        path: image-metadata.json
+        retention-days: 30
+        if-no-files-found: error

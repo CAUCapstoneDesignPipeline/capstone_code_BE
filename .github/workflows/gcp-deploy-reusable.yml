@@ -1,0 +1,74 @@
+name: Reviewed GCP app deployment
+'on':
+  workflow_call:
+    inputs:
+      operation: {required: true, type: string}
+      component: {required: true, type: string}
+      source_sha: {required: true, type: string}
+      image_digest: {required: true, type: string}
+      manifest_path: {required: true, type: string}
+      expected_release: {required: true, type: string}
+      operation_id: {required: true, type: string}
+      deploy_tool_sha: {required: true, type: string}
+    outputs:
+      operation_id:
+        value: ${{ jobs.deploy.outputs.operation_id }}
+      release_id:
+        value: ${{ jobs.deploy.outputs.release_id }}
+permissions:
+  contents: read
+concurrency:
+  group: gcp-app-${{ github.repository }}
+  cancel-in-progress: false
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main' && vars.GCP_DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      operation_id: ${{ steps.execute.outputs.operation_id }}
+      release_id: ${{ steps.execute.outputs.release_id }}
+    env:
+      OPERATION: ${{ inputs.operation }}
+      COMPONENT: ${{ inputs.component }}
+      SOURCE_SHA: ${{ inputs.source_sha }}
+      IMAGE_DIGEST: ${{ inputs.image_digest }}
+      MANIFEST_PATH: ${{ inputs.manifest_path }}
+      EXPECTED_RELEASE: ${{ inputs.expected_release }}
+      OPERATION_ID: ${{ inputs.operation_id }}
+      DEPLOY_TOOL_SHA: ${{ inputs.deploy_tool_sha }}
+      GCP_DEPLOY_ENABLED: ${{ vars.GCP_DEPLOY_ENABLED }}
+      GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      GCP_ZONE: ${{ vars.GCP_ZONE }}
+      GCP_VM_NAME: ${{ vars.GCP_VM_NAME }}
+    steps:
+    - name: Validate approved tool pin before checkout
+      env:
+        APPROVED_TOOL_SHA: ${{ vars.GCP_DEPLOY_TOOL_SHA }}
+      run: |-
+        python3 - <<'PYCODE'
+        import os,re
+        expected=os.environ['APPROVED_TOOL_SHA']
+        if not re.fullmatch('[a-f0-9]{40}',expected) or expected!=os.environ['DEPLOY_TOOL_SHA']:
+            raise SystemExit('Tool SHA must match the reviewed production environment pin')
+        PYCODE
+    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      with:
+        repository: CAUCapstoneDesignPipeline/capstone_code_BE
+        ref: ${{ inputs.deploy_tool_sha }}
+        persist-credentials: false
+    - name: Validate canonical caller and reviewed inputs before cloud authentication
+      run: python3 deploy/gcp/pipeline.py validate
+    - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
+      with:
+        workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+        service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+        create_credentials_file: true
+    - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db
+    - name: Submit and observe host operation
+      id: execute
+      run: python3 deploy/gcp/pipeline.py

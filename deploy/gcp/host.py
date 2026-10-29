@@ -16,6 +16,8 @@ import tempfile
 import time
 import urllib.request
 import zipfile
+import uuid
+import zlib
 from contract import ReleaseError, canonical, checksum, match, require, validate, validate_request, version, ID
 from storage import Cloud
 import engine
@@ -132,8 +134,8 @@ class Host:
                 require(image['Architecture'] == 'amd64' and image['Os'] == 'linux', 'Wrong image platform')
                 if component != 'proxy':
                     require(image['Config']['Labels']['org.opencontainers.image.revision'] == m[component]['sourceSha'], 'Image/source mismatch')
-                    require(image['Config']['User'] not in ['', 'root', '0', '0:0'], 'Nonroot app image required')
-        self.check_image_migrations(m)
+                    require(image['Config']['User'].split(':')[0] not in ['', 'root', '0'], 'Nonroot app image required')
+        self.check_image_migrations(m, history)
         if not resume and version(history) != 'empty' and version(history) != m['flyway']['after']:
             backup = trusted(CONFIG / 'backup-evidence.json')
             require(backup['reference'] == m['flyway']['backupReference'] and backup['status'] == 'SUCCESSFUL' and backup['history'] == history, 'Matching completed SQL backup required')
@@ -158,19 +160,26 @@ class Host:
         os.chown(path, 10001, 10001)
         self.compose(m, 'config', '--quiet')
 
-    def check_image_migrations(self, m):
-        name = 'capstone-inventory-' + m['releaseId']
-        command(['docker', 'create', '--name', name, m['be']['image']])
+    def check_image_migrations(self, m, history):
+        name = 'capstone-inventory-' + uuid.uuid4().hex
+        command(['docker', 'create', '--label', 'art.capsnote.purpose=migration-inventory', '--name', name, m['be']['image']])
         try:
             with tempfile.TemporaryDirectory(prefix='migration-inventory-') as directory:
                 jar = Path(directory) / 'app.jar'
                 command(['docker', 'cp', name + ':/app/app.jar', str(jar)])
                 with zipfile.ZipFile(jar) as archive:
                     actual = []
+                    checksums = {}
                     for entry in archive.namelist():
                         found = re.fullmatch(r'BOOT-INF/classes/db/migration/V([0-9]+)__[^/]+\.sql', entry)
                         if found:
-                            actual.append({'version': found[1], 'sha256': hashlib.sha256(archive.read(entry)).hexdigest()})
+                            raw = archive.read(entry)
+                            actual.append({'version': found[1], 'sha256': hashlib.sha256(raw).hexdigest()})
+                            crc = 0
+                            for line in raw.decode('utf-8-sig').splitlines():
+                                crc = zlib.crc32(line.encode('utf-8'), crc)
+                            checksums[found[1]] = crc if crc < 2**31 else crc - 2**32
+                require(all(row['success'] is True and (row['version'] is None or checksums.get(str(row['version'])) == row['checksum']) for row in history), 'Applied Flyway checksum differs from image')
                 require(sorted(actual, key=lambda x: int(x['version'])) == m['flyway']['migrations'], 'Image migration inventory mismatch')
         finally:
             command(['docker', 'rm', name])
@@ -242,9 +251,10 @@ def main():
                     m = state['current']
                     host.maintenance(True)
                     host.prepare_database(m)
-                    require(version(host.history(m)) in m['flyway']['rollbackCompatibleWith'], 'Schema incompatible at boot')
+                    require(version(host.history(m)) == m['flyway']['after'], 'Current schema differs at boot; migration forbidden')
                     host.preflight(m, host.history(m), resume=True)
                     host.activate(m)
+                    require(version(host.history(m)) == m['flyway']['after'], 'Schema changed during boot')
                     host.smoke(m)
                     host.maintenance(False)
                     host.smoke_public(m)
