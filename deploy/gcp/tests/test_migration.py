@@ -22,6 +22,18 @@ class MigrationTest(unittest.TestCase):
                 'gates':{k:True for k in ['restoreCompared','flywayVerified','tlsVerified','oauthVerified','aiOffVerified','backupVerified','aiStandaloneAccepted','feBeDeployAccepted']},
                 'rollback':'before-writes-source-preserved','gcpWritesResumed':False}
         self.assertFalse(m.cutover_check(record)['executed'])
+        for invalid in ['false',1,None]:
+            bad=copy.deepcopy(record);bad['gates']['restoreCompared']=invalid
+            with self.assertRaises(m.MigrationError):m.cutover_check(bad)
+            bad=copy.deepcopy(record);bad['gcpWritesResumed']=invalid
+            with self.assertRaises(m.MigrationError):m.cutover_check(bad)
         record['gcpWritesResumed']=True
         with self.assertRaises(m.MigrationError):m.cutover_check(record)
         record['rollback']='gcp-forward-or-release-rollback';m.cutover_check(record)
+
+    def test_other_dump_source_or_digest_rejected_before_restore(self):
+        class NoCalls:
+            def __getattr__(self,name):raise AssertionError('Database access before provenance validation')
+        evidence={'sourceIdentity':{'database':'source-a'},'sha256':'a'*64,'format':'postgresql16-custom'}
+        for source,sha in [({'database':'source-b'},'a'*64),({'database':'source-a'},'b'*64)]:
+            with self.assertRaises(m.MigrationError):m.restore_database(NoCalls(),'target',Path('/unused'),evidence,source,sha)

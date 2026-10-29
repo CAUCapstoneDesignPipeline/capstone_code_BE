@@ -6,6 +6,17 @@
   "approvalReference": "",
   "expiresAtEpoch": 0,
   "dataClass": "approved-migration",
-  "sourceIdentity": {"database": "capstone", "user": "", "serverAddress": "", "serverPort": 5432},
-  "targetIdentity": {"database": "capstone", "user": "", "serverAddress": "", "serverPort": 5432}
+  "sourceIdentity": {
+    "database": "capstone",
+    "user": "",
+    "serverAddress": "",
+    "serverPort": 5432
+  },
+  "targetIdentity": {
+    "database": "capstone",
+    "user": "",
+    "serverAddress": "",
+    "serverPort": 5432
+  },
+  "dumpSha256": ""
 }

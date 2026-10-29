@@ -82,6 +82,10 @@ SELECT json_build_object('kind','extension','name',extname,'version',extversion)
 SELECT json_build_object('kind','constraint','table',conrelid::regclass::text,'name',conname,
  'definition',pg_get_constraintdef(oid),'validated',convalidated)
  FROM pg_constraint WHERE connamespace='public'::regnamespace ORDER BY conrelid::regclass::text,conname;
+SELECT json_build_object('kind','index','table',t.relname,'name',i.relname,
+ 'definition',pg_get_indexdef(i.oid),'valid',x.indisvalid,'ready',x.indisready)
+ FROM pg_index x JOIN pg_class i ON i.oid=x.indexrelid JOIN pg_class t ON t.oid=x.indrelid
+ JOIN pg_namespace n ON n.oid=t.relnamespace WHERE n.nspname='public' ORDER BY t.relname,i.relname;
 SELECT json_build_object('kind','column','table',table_name,'name',column_name,'position',ordinal_position,
  'type',data_type,'nullable',is_nullable,'default',column_default)
  FROM information_schema.columns WHERE table_schema='public' ORDER BY table_name,ordinal_position;
@@ -111,6 +115,7 @@ def inventory(client,service):
     for value in values:
         if value['kind']=='table':require(value['sha256'] is not None,'Table too large for reviewed digest budget')
         if value['kind']=='constraint':require(value['validated'],'Unvalidated constraint')
+        if value['kind']=='index':require(value['valid'] is True and value['ready'] is True,'Invalid index')
         if value['kind']=='flyway':require(all(row['success'] for row in value['history']),'Failed source Flyway migration')
     require(any(v['kind']=='flyway' for v in values),'Flyway history required')
     return {'schemaVersion':1,'inventory':values}
@@ -130,7 +135,8 @@ def writers_closed(record):
 def cutover_check(record):
     writers_closed(record['writersStopped'])
     required={'restoreCompared','flywayVerified','tlsVerified','oauthVerified','aiOffVerified','backupVerified','aiStandaloneAccepted','feBeDeployAccepted'}
-    require(set(record['gates'])==required and all(record['gates'].values()),'Cutover acceptance missing')
+    require(set(record['gates'])==required and all(v is True for v in record['gates'].values()),'Cutover acceptance missing')
+    require(type(record['gcpWritesResumed']) is bool,'Write-resume state must be boolean')
     require(record['rollback'] in ['before-writes-source-preserved','gcp-forward-or-release-rollback'],'Explicit rollback strategy required')
     require(not record['gcpWritesResumed'] or record['rollback']=='gcp-forward-or-release-rollback','DNS-only rollback forbidden after GCP writes')
     return {'readyForApproval':True,'executed':False}
@@ -150,12 +156,18 @@ def dump_database(client,source,path,final=False,writers=None):
     except Exception:
         # Preserve partial dump for explicit operator inspection/removal, never use it as successful evidence.
         raise
-    return {'sha256':digest(path),'bytes':path.stat().st_size,'complete':True}
+    return {'sha256':digest(path),'bytes':path.stat().st_size,'complete':True,'sourceIdentity':client.identity(source),'createdAtEpoch':time.time(),'format':'postgresql16-custom'}
 
 
-def restore_database(client,target,path,evidence):
+def restore_database(client,target,path,evidence,expected_source,expected_digest):
+    require(evidence['sourceIdentity']==expected_source and evidence['sha256']==expected_digest,'Dump provenance differs from approved source/digest')
+    require(evidence['format']=='postgresql16-custom','Unexpected dump format')
     require(path.is_file() and not path.is_symlink() and not path.stat().st_mode&0o077,'Dump must be private regular file')
     require(evidence['complete'] is True and digest(path)==evidence['sha256'] and path.stat().st_size==evidence['bytes'],'Dump evidence mismatch')
+    identity=client.identity(target)
+    require(identity['user']=='capstone_app','Restore must run as the application schema owner')
+    role=client.sql(target, "SELECT NOT (rolsuper OR rolcreatedb OR rolcreaterole OR rolreplication) FROM pg_roles WHERE rolname=current_user;").strip()
+    require(role=='t','Restore role must not be privileged')
     count=int(client.sql(target,"SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname NOT IN ('pg_catalog','information_schema') AND n.nspname NOT LIKE 'pg_toast%' AND c.relkind IN ('r','p','S','v','m','f');").strip())
     require(count==0,'Restore target must be empty, including Flyway history')
     # pg_restore reads stdin; no local/container dump path confusion or shell redirection.
@@ -165,6 +177,8 @@ def restore_database(client,target,path,evidence):
         result=subprocess.run(cmd,stdin=stream,stdout=subprocess.PIPE,stderr=subprocess.PIPE,
                               env=dict(os.environ,PGSERVICEFILE=client.file,PGCONNECT_TIMEOUT='10'),timeout=1800)
         require(result.returncode==0,'Restore failed atomically; output suppressed')
+    owned=client.sql(target, "SELECT coalesce(bool_and(pg_get_userbyid(c.relowner)=current_user),false) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relkind IN ('r','p','S');").strip()
+    require(owned=='t','Restored tables/sequences must be owned by runtime role')
     return {'restored':True,'sha256':evidence['sha256']}
 
 
@@ -191,7 +205,7 @@ def main():
         if args.action=='inventory':result=inventory(client,args.source)
         elif args.action=='dump':
             result=dump_database(client,args.source,args.input,args.final,json.loads(args.writers.read_text()) if args.writers else None)
-        else:result=restore_database(client,args.target,args.input,json.loads(args.evidence.read_text()))
+        else:result=restore_database(client,args.target,args.input,json.loads(args.evidence.read_text()),scope['sourceIdentity'],scope['dumpSha256'])
     private_write(args.output,result)
     print('Migration step completed; private evidence saved; no data emitted')
 

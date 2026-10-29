@@ -24,17 +24,25 @@ with tempfile.TemporaryDirectory(prefix='capstone-migration-test-') as directory
     approval.write_text(json.dumps(scope))
     assert subprocess.run(args,capture_output=True).returncode != 0
     before=m.inventory(client,'source')
+    before_identity=client.identity('source')
     evidence=m.dump_database(client,'source',dump)
-    m.restore_database(client,'target',dump,evidence)
+    m.restore_database(client,'target',dump,evidence,before_identity,evidence['sha256'])
     after=m.inventory(client,'target')
     m.compare(before,after)
-    try:m.restore_database(client,'target',dump,evidence)
+    try:m.restore_database(client,'target',dump,evidence,before_identity,evidence['sha256'])
     except m.MigrationError:pass
     else:raise AssertionError('Nonempty target accepted')
     wrong=dict(evidence,sha256='0'*64)
-    try:m.restore_database(client,'target',dump,wrong)
+    try:m.restore_database(client,'target',dump,wrong,before_identity,evidence['sha256'])
     except m.MigrationError:pass
     else:raise AssertionError('Wrong checksum accepted')
+    client.sql('target','DROP INDEX analysis_job_one_active;')
+    try:m.compare(before,m.inventory(client,'target'))
+    except m.MigrationError:pass
+    else:raise AssertionError('Lost partial unique index accepted')
+    index=next(v['definition'] for v in before['inventory'] if v['kind']=='index' and v['name']=='analysis_job_one_active')
+    client.sql('target',index+';')
+    m.compare(before,m.inventory(client,'target'))
     # Data change, including another user's note, must change comparison evidence.
     client.sql('target',"UPDATE note SET version=version+1 WHERE user_id='00000000-0000-0000-0000-000000000002';")
     try:m.compare(before,m.inventory(client,'target'))
