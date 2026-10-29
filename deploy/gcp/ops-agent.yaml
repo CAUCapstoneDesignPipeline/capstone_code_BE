@@ -8,7 +8,17 @@ metrics:
       host:
         receivers: [hostmetrics]
 logging:
+  receivers:
+    app_health:
+      type: files
+      include_paths: [/var/log/capstone-gcp/health.json]
+  processors:
+    health_json:
+      type: parse_json
   service:
     pipelines:
       default_pipeline:
         receivers: []
+      app_health:
+        receivers: [app_health]
+        processors: [health_json]
