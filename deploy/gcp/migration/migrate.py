@@ -97,6 +97,17 @@ SELECT format($query$SELECT json_build_object('kind','table','name',%L,'rows',co
 SELECT format('SELECT json_build_object(''kind'',''sequence'',''name'',%L,''lastValue'',last_value,''isCalled'',is_called) FROM %I.%I',
  sequencename,schemaname,sequencename) FROM pg_sequences WHERE schemaname='public' ORDER BY sequencename
 \gexec
+SELECT format($q$SELECT json_build_object('kind','foreignKey','name',%L,'orphans',count(*)) FROM %s s WHERE %s AND NOT EXISTS (SELECT 1 FROM %s r WHERE %s)$q$,
+ c.conname,c.conrelid::regclass,
+ (SELECT string_agg(format('s.%I IS NOT NULL',a.attname),' AND ' ORDER BY k.ord)
+  FROM unnest(c.conkey) WITH ORDINALITY k(attnum,ord) JOIN pg_attribute a ON a.attrelid=c.conrelid AND a.attnum=k.attnum),
+ c.confrelid::regclass,
+ (SELECT string_agg(format('s.%I = r.%I',a.attname,b.attname),' AND ' ORDER BY k.ord)
+  FROM unnest(c.conkey,c.confkey) WITH ORDINALITY k(src,dst,ord)
+  JOIN pg_attribute a ON a.attrelid=c.conrelid AND a.attnum=k.src
+  JOIN pg_attribute b ON b.attrelid=c.confrelid AND b.attnum=k.dst))
+ FROM pg_constraint c WHERE c.contype='f' AND c.connamespace='public'::regnamespace ORDER BY c.conrelid::regclass::text,c.conname
+\gexec
 SELECT json_build_object('kind','flyway','history',coalesce(json_agg(t ORDER BY installed_rank),'[]'))
  FROM (SELECT installed_rank,version,type,script,checksum,success FROM public.flyway_schema_history) t;
 COMMIT;
@@ -116,6 +127,7 @@ def inventory(client,service):
         if value['kind']=='table':require(value['sha256'] is not None,'Table too large for reviewed digest budget')
         if value['kind']=='constraint':require(value['validated'],'Unvalidated constraint')
         if value['kind']=='index':require(value['valid'] is True and value['ready'] is True,'Invalid index')
+        if value['kind']=='foreignKey':require(value['orphans']==0,'Orphan records detected')
         if value['kind']=='flyway':require(all(row['success'] for row in value['history']),'Failed source Flyway migration')
     require(any(v['kind']=='flyway' for v in values),'Flyway history required')
     return {'schemaVersion':1,'inventory':values}

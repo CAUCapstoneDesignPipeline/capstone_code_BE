@@ -52,4 +52,9 @@ with tempfile.TemporaryDirectory(prefix='capstone-migration-test-') as directory
     try:m.compare(before,m.inventory(client,'target'))
     except m.MigrationError:pass
     else:raise AssertionError('Changed Flyway checksum accepted')
+    client.sql('target',"UPDATE flyway_schema_history SET checksum=checksum-1 WHERE version='2';")
+    client.sql('admin_target',"SET session_replication_role=replica; INSERT INTO note(user_id,title,body) VALUES ('00000000-0000-0000-0000-000000009999','orphan fixture','synthetic'); SET session_replication_role=origin;")
+    try:m.inventory(client,'target')
+    except m.MigrationError:pass
+    else:raise AssertionError('Orphan data accepted')
     print('PostgreSQL16 Testcontainers: dump/empty restore, full table and sequence hashes, two users, OAuth identities, refresh hashes, Flyway history, nonempty target and corruption rejection PASS')
