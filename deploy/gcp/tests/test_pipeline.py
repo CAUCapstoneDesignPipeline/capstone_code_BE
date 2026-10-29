@@ -11,14 +11,14 @@ import publish_image
 class PipelineTest(unittest.TestCase):
     def test_valid_be_fe_and_rejected_identity_inputs(self):
         with tempfile.TemporaryDirectory() as directory:
-            root=Path(directory);p=root/'deploy/gcp/releases/next.json';p.parent.mkdir(parents=True);p.write_text(json.dumps(manifest()))
+            root=Path(directory);p=root/'reviewed-release/deploy/gcp/releases/next.json';p.parent.mkdir(parents=True);p.write_text(json.dumps(manifest()))
             for repo,(number,component) in pipeline.REPOSITORIES.items():
                 env={'GITHUB_REPOSITORY':repo,'GITHUB_REPOSITORY_ID':number,'GITHUB_REPOSITORY_OWNER_ID':pipeline.OWNER,
                      'GITHUB_REF':'refs/heads/main','GITHUB_EVENT_NAME':'workflow_dispatch',
                      'GITHUB_WORKFLOW_REF':repo+'/.github/workflows/gcp-deploy.yml@refs/heads/main',
                      'GCP_DEPLOY_ENABLED':'true','COMPONENT':component,'DEPLOY_TOOL_SHA':'a'*40,
                      'SOURCE_SHA':manifest()[component]['sourceSha'],'IMAGE_DIGEST':manifest()[component]['image'].split('@')[1],
-                     'MANIFEST_PATH':'deploy/gcp/releases/next.json','OPERATION_ID':'op1','OPERATION':'deploy',
+                     'MANIFEST_SHA':'a'*40,'MANIFEST_PATH':'deploy/gcp/releases/next.json','OPERATION_ID':'op1','OPERATION':'deploy',
                      'EXPECTED_RELEASE':'old','GCP_PROJECT_ID':'capsnote','GCP_ZONE':'asia-northeast3-a','GCP_VM_NAME':'capsnote-prod-app'}
                 with patch.object(pipeline.subprocess,'check_output',return_value='a'*40+'\n'):
                     self.assertEqual(pipeline.prepare(env,root)['operationId'],'op1')

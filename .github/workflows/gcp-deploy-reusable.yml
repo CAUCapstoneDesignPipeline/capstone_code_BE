@@ -41,6 +41,7 @@ jobs:
       EXPECTED_RELEASE: ${{ inputs.expected_release }}
       OPERATION_ID: ${{ inputs.operation_id }}
       DEPLOY_TOOL_SHA: ${{ inputs.deploy_tool_sha }}
+      MANIFEST_SHA: ${{ vars.GCP_RELEASE_MANIFEST_SHA }}
       GCP_DEPLOY_ENABLED: ${{ vars.GCP_DEPLOY_ENABLED }}
       GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
       GCP_ZONE: ${{ vars.GCP_ZONE }}
@@ -53,6 +54,8 @@ jobs:
         python3 - <<'PYCODE'
         import os,re
         expected=os.environ['APPROVED_TOOL_SHA']
+        if not re.fullmatch('[a-f0-9]{40}',os.environ['MANIFEST_SHA']):
+            raise SystemExit('Reviewed manifest source SHA required')
         if not re.fullmatch('[a-f0-9]{40}',expected) or expected!=os.environ['DEPLOY_TOOL_SHA']:
             raise SystemExit('Tool SHA must match the reviewed production environment pin')
         PYCODE
@@ -60,6 +63,12 @@ jobs:
       with:
         repository: CAUCapstoneDesignPipeline/capstone_code_BE
         ref: ${{ inputs.deploy_tool_sha }}
+        persist-credentials: false
+    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      with:
+        repository: CAUCapstoneDesignPipeline/capstone_code_BE
+        ref: ${{ vars.GCP_RELEASE_MANIFEST_SHA }}
+        path: reviewed-release
         persist-credentials: false
     - name: Validate canonical caller and reviewed inputs before cloud authentication
       run: python3 deploy/gcp/pipeline.py validate

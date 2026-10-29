@@ -249,15 +249,19 @@ def main():
                 state, _ = host.cloud.read('state.json')
                 if state and state['current']:
                     m = state['current']
-                    host.maintenance(True)
-                    host.prepare_database(m)
-                    require(version(host.history(m)) == m['flyway']['after'], 'Current schema differs at boot; migration forbidden')
-                    host.preflight(m, host.history(m), resume=True)
-                    host.activate(m)
-                    require(version(host.history(m)) == m['flyway']['after'], 'Schema changed during boot')
-                    host.smoke(m)
-                    host.maintenance(False)
-                    host.smoke_public(m)
+                    try:
+                        host.maintenance(True)
+                        host.prepare_database(m)
+                        require(version(host.history(m)) == m['flyway']['after'], 'Current schema differs at boot; migration forbidden')
+                        host.preflight(m, host.history(m), resume=True)
+                        host.activate(m)
+                        require(version(host.history(m)) == m['flyway']['after'], 'Schema changed during boot')
+                        host.smoke(m)
+                        host.maintenance(False)
+                        host.smoke_public(m)
+                    except Exception:
+                        host.maintenance(True)
+                        raise
         else:
             require(match(ID, args.operation), 'Invalid operation ID')
             request = trusted(ROOT / 'requests' / (args.operation + '.json'))
