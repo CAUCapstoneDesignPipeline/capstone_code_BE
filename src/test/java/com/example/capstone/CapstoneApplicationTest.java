@@ -68,11 +68,22 @@ class CapstoneApplicationTest {
     void startsContextAndConnectsToPostgresWithFlywayEnabled() throws Exception {
         assertThat(query("SELECT 1")).containsExactly("1");
         assertThat(flywayMigrationInitializer).isNotNull();
-        assertThat(flyway.info().applied()).hasSize(2);
-        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("2");
+        assertThat(java.util.Arrays.stream(flyway.info().applied()).map(m -> m.getVersion().getVersion())).containsExactly("1","2","3","4");
+        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("4");
         assertThat(flyway.info().pending()).isEmpty();
         assertThat(flyway.validateWithResult().validationSuccessful).isTrue();
         assertThat(flyway.migrate().migrationsExecuted).isZero();
+    }
+
+    @Test
+    void preservesAppliedLegacyMigrationBytes() throws Exception {
+        for(var expected:java.util.Map.of("V1__initial_schema.sql","c26c36b8984752a4da05440ec39bf5b93bf6e89b5876feb15a67ec67896904fb",
+                "V2__oauth_attempt.sql","af1501d310de19c65a133a5d5b23c86565ca2f00079e577afd31dcdf098d0aee").entrySet()) {
+            try(var input=getClass().getResourceAsStream("/db/migration/"+expected.getKey())) {
+                assertThat(input).isNotNull();
+                assertThat(java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(input.readAllBytes()))).isEqualTo(expected.getValue());
+            }
+        }
     }
 
     @Test
@@ -85,7 +96,9 @@ class CapstoneApplicationTest {
                 .containsExactlyInAnyOrder("app_user", "user_identity", "refresh_token", "topic", "note",
                         "analysis_job", "concept", "concept_mention", "concept_merge", "relation_type",
                         "relation_type_rule", "evidence_span", "relation", "relation_evidence", "candidate",
-                        "candidate_step", "candidate_claim", "verification_result", "review", "oauth_attempt");
+                        "candidate_step", "candidate_claim", "verification_result", "review", "oauth_attempt",
+                        "analysis_snapshot", "analysis_stage", "analysis_fact", "analysis_result", "analysis_result_evidence",
+                        "analysis_dependency", "analysis_review_event", "analysis_graph_item");
         assertThat(query("SELECT count(*) FROM relation_type")).containsExactly("0");
         assertThat(query("SELECT count(*) FROM relation_type_rule")).containsExactly("0");
     }
