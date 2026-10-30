@@ -38,3 +38,18 @@ Thumbs.db
 # Python deployment tools
 __pycache__/
 *.py[cod]
+
+# Terraform local cache, state, plans and real environment inputs
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.tfplan.json
+*.tfvars
+*.tfvars.json
+!*.tfvars.example
+!*.tfvars.json.example
+backend.tf
+backend.hcl
+crash.log
+crash.*.log
