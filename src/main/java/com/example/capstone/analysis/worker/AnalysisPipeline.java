@@ -8,6 +8,7 @@ import tools.jackson.databind.JsonNode;
 /** External computation runs outside transactions; outputs are committed only after a final fence. */
 public interface AnalysisPipeline {
     PipelineOutput run(Work work);
+    default String policyFingerprint() { return null; }
     record Work(UUID id, UUID userId, UUID noteId, UUID leaseToken, long graphRevision,
             Instant deadline, List<JsonNode> documents) { }
     record PipelineOutput(List<JsonNode> facts,List<JsonNode> graphItems,List<JsonNode> results) { }
