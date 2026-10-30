@@ -43,6 +43,12 @@ public final class AiHttpClient {
     private final HttpClient http;
     private final URI base;
     private final Semaphore permits;
+    @org.springframework.beans.factory.annotation.Autowired
+    public AiHttpClient(com.example.capstone.analysis.config.AiProperties flags,AiClientProperties config,ObjectMapper mapper,
+            AiSchemaValidator schemas,AiResponseValidator validator,Environment environment) {
+        this(flags.enabled()?config:new AiClientProperties(null,null,null,config.connectTimeout(),config.callTimeout(),config.embeddingTimeout(),config.maxAttempts(),config.maxConcurrent(),config.retryBase()),
+                mapper,schemas,validator,environment);
+    }
     public AiHttpClient(AiClientProperties config, ObjectMapper mapper, AiSchemaValidator schemas,
             AiResponseValidator validator, Environment environment) {
         this.config = config; this.mapper = mapper; this.schemas = schemas; this.validator = validator;
@@ -73,12 +79,15 @@ public final class AiHttpClient {
     }
     public boolean configured() { return http != null; }
     public void ready(Set<String> requiredProfiles) {
-        var response = exchange("health/ready", null, UUID.randomUUID().toString(), config.callTimeout(), Instant.now().plusSeconds(130));
+        var response = exchange("health/ready", null, UUID.randomUUID().toString(), config.callTimeout(), Instant.now().plusSeconds(130), () -> { });
         schemas.validate("Readiness", response.body());
         Set<String> actual = new HashSet<>(); response.body().path("profileVersions").forEach(n -> actual.add(n.asString()));
         if (!actual.containsAll(requiredProfiles)) throw new AiCallException(AiCallException.Reason.PROFILE);
     }
     public CallResult call(AiOperation operation, JsonNode payload, Instant deadline) {
+        return call(operation,payload,deadline,()->{ });
+    }
+    public CallResult call(AiOperation operation, JsonNode payload, Instant deadline, Runnable reserveAttempt) {
         schemas.validate(operation.requestSchema(), payload);
         validator.validateRequest(payload);
         byte[] body = mapper.writeValueAsBytes(payload);
@@ -90,11 +99,11 @@ public final class AiHttpClient {
         Duration callLimit=operation == AiOperation.EMBEDDINGS ? config.embeddingTimeout() : config.callTimeout();
         Duration readCeiling=Duration.ofSeconds(operation == AiOperation.EMBEDDINGS ? 35 : 125);
         var result = exchange(operation.path(), body, requestId,
-                callLimit.compareTo(readCeiling)<0?callLimit:readCeiling, deadline);
+                callLimit.compareTo(readCeiling)<0?callLimit:readCeiling, deadline,reserveAttempt);
         validator.validate(operation, payload, result.body());
         return result;
     }
-    private CallResult exchange(String path, byte[] body, String requestId, Duration timeout, Instant deadline) {
+    private CallResult exchange(String path, byte[] body, String requestId, Duration timeout, Instant deadline,Runnable reserveAttempt) {
         if (!configured()) throw configuration();
         if (!permits.tryAcquire()) throw new AiCallException(AiCallException.Reason.UNAVAILABLE);
         long started = System.nanoTime();
@@ -112,6 +121,7 @@ public final class AiHttpClient {
                 else request.header("Content-Type", "application/json").header("X-Input-SHA256", hashBytes(body))
                         .POST(HttpRequest.BodyPublishers.ofByteArray(body));
                 long delay = Math.min(4000, config.retryBase().toMillis() * (1L << (attempt - 1)));
+                reserveAttempt.run();
                 CompletableFuture<HttpResponse<byte[]>> future = http.sendAsync(request.build(), ignored -> new BoundedBody(RESPONSE_LIMIT));
                 try {
                     var response = future.get(Math.max(1, limit.toMillis()), TimeUnit.MILLISECONDS);
