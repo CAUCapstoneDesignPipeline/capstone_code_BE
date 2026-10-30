@@ -28,13 +28,13 @@ public class AnalysisWorkService {
     @Transactional
     public JsonNode submit(UUID user,UUID note,String policyDigest) {
         users.lockById(user).orElseThrow(()->new ApiException(ErrorCode.UNAUTHENTICATED,"로그인이 필요합니다."));
-        if(!gate.allowed()) throw new ApiException(ErrorCode.AI_UNAVAILABLE,"AI 분석은 현재 사용할 수 없습니다.");
+        if(!gate.allowed()) throw new ApiException(ErrorCode.AI_UNAVAILABLE,"AI 분석은 아직 사용할 수 없습니다.",java.util.Map.of("reason","MISCONFIGURED"));
         String extractor=policyDigest==null?"ai-integration-2026-10-30-adopted.1":"policy:"+policyDigest;
         String previous=repository.latestPolicy(user);
         if(policyDigest!=null && previous!=null && !previous.equals(extractor)) invalidation.policyChanged(user);
         repository.retireUnresumable(user,note);
         repository.lockRuntime();
-        if(!gate.stillAllowed())throw new ApiException(ErrorCode.AI_UNAVAILABLE,"AI 분석은 현재 사용할 수 없습니다.");
+        if(!gate.stillAllowed())throw new ApiException(ErrorCode.AI_UNAVAILABLE,"AI 분석은 아직 사용할 수 없습니다.",java.util.Map.of("reason","MISCONFIGURED"));
         repository.retireUnresumable(user,note);
         JsonNode active=repository.active(user,note); if(active!=null) return active;
         List<JsonNode> documents=repository.documents(user,note);
@@ -43,7 +43,7 @@ public class AnalysisWorkService {
         String body=primary.path("body").asString();
         if(body.codePointCount(0,body.length())>50000) throw new ApiException(ErrorCode.VALIDATION_FAILED,"분석할 노트는 50,000자 이하여야 합니다.");
         repository.lockRuntime();
-        if(!gate.stillAllowed())throw new ApiException(ErrorCode.AI_UNAVAILABLE,"AI 분석은 현재 사용할 수 없습니다.");
+        if(!gate.stillAllowed())throw new ApiException(ErrorCode.AI_UNAVAILABLE,"AI 분석은 아직 사용할 수 없습니다.",java.util.Map.of("reason","MISCONFIGURED"));
         UUID job=UUID.randomUUID();
         repository.create(job,user,note,primary.path("noteVersion").asInt(),primary.path("inputRevision").asLong(),repository.graphRevision(user),Instant.now().plusSeconds(900),extractor);
         documents.forEach(doc->repository.snapshot(job,user,doc)); return repository.job(user,job);
