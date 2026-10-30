@@ -14,7 +14,7 @@ public class ConversionCleanup {
     @Scheduled(fixedDelayString="${capstone.conversion.cleanup-ms:60000}",initialDelayString="${capstone.conversion.cleanup-ms:60000}")
     public void sweep() {
         if(!storage.configured())return;
-        for(var f:tx.execute(status->db.dueFiles()))service.deleteSource(UUID.fromString(f.path("user_id").asString()),UUID.fromString(f.path("id").asString()));
+        for(var f:tx.execute(status->db.dueFiles()))service.expireSourceIfEligible(UUID.fromString(f.path("user_id").asString()),UUID.fromString(f.path("id").asString()));
         deletePending();
         storage.garbageCollect(key->tx.execute(status->db.referenced(key)));
     }
