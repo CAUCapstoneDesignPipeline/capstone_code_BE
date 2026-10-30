@@ -80,12 +80,17 @@ public final class AiHttpClient {
     }
     public CallResult call(AiOperation operation, JsonNode payload, Instant deadline) {
         schemas.validate(operation.requestSchema(), payload);
+        validator.validateRequest(payload);
         byte[] body = mapper.writeValueAsBytes(payload);
         if (body.length > REQUEST_LIMIT) throw new AiCallException(AiCallException.Reason.INPUT_LIMIT);
         String requestId = payload.path("context").path("stageExecutionId").asString();
         try { UUID.fromString(requestId); } catch (RuntimeException invalid) { throw new AiCallException(AiCallException.Reason.INVALID_RESPONSE); }
+        // JDK HTTP has one whole-response future. Enforce the read ceiling conservatively
+        // from dispatch, so connect/header/body together cannot exceed 125s (embedding 35s).
+        Duration callLimit=operation == AiOperation.EMBEDDINGS ? config.embeddingTimeout() : config.callTimeout();
+        Duration readCeiling=Duration.ofSeconds(operation == AiOperation.EMBEDDINGS ? 35 : 125);
         var result = exchange(operation.path(), body, requestId,
-                operation == AiOperation.EMBEDDINGS ? config.embeddingTimeout() : config.callTimeout(), deadline);
+                callLimit.compareTo(readCeiling)<0?callLimit:readCeiling, deadline);
         validator.validate(operation, payload, result.body());
         return result;
     }

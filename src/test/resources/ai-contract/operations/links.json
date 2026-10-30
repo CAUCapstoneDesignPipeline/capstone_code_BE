@@ -1,0 +1,193 @@
+{
+  "request": {
+    "context": {
+      "analysisJobId": "ffd91f42-cb06-4f22-bbd4-70f99186d3a0",
+      "stageExecutionId": "98a6c147-910f-4ac3-ba3c-cb81d69812f4",
+      "userId": "c49bdcd3-9f13-5186-93c2-28eccf386140",
+      "noteId": "a3704f11-838c-56ca-8a61-5bdee3250fc0",
+      "noteVersion": 1,
+      "inputRevision": 1,
+      "graphRevision": 1,
+      "pipelineVersion": "test-1"
+    },
+    "profileVersion": "links-det-1",
+    "note": {
+      "noteId": "a3704f11-838c-56ca-8a61-5bdee3250fc0",
+      "noteVersion": 1,
+      "inputRevision": 1,
+      "title": "synthetic-a",
+      "body": "# WAL\n\n**WAL**은 Write Ahead Logging이다.\n\n## 로그 버퍼\n\n**로그 버퍼**는 WAL의 구성 요소다. 로그 버퍼는 메모리에 있다.\n",
+      "bodySha256": "b81dddc599f4c803b19bd5a71d1544edb264940383a4d780f25937ae8adfec80",
+      "topic": {
+        "id": null,
+        "name": "미분류"
+      }
+    },
+    "candidates": [
+      {
+        "noteId": "0782c1c3-7bc3-5823-a00b-b04c05cb88a7",
+        "noteVersion": 1,
+        "inputRevision": 1,
+        "title": "synthetic-b",
+        "body": "# 저널링\n\n저널링은 파일 시스템의 변경을 먼저 기록한다. DB의 **WAL**처럼, 저널을 쓴다.\nWAL은 복구를 위해 쓰인다.\n",
+        "bodySha256": "a898ab3f4b682784a007996c8f46f11c4b98c68fd7dfd5976ac12dea1ec603c7",
+        "topic": {
+          "id": null,
+          "name": "미분류"
+        }
+      },
+      {
+        "noteId": "68eaf97a-26b1-5f3a-95e8-94716f8e379e",
+        "noteVersion": 1,
+        "inputRevision": 1,
+        "title": "synthetic-c",
+        "body": "# 회귀\n\n선형 회귀는 오차를 줄인다.\n",
+        "bodySha256": "353566d491c360a7669fa9e9dc0519c07cd6c7cd462e9fd276028a50b97a90f8",
+        "topic": {
+          "id": null,
+          "name": "미분류"
+        }
+      }
+    ],
+    "policy": {
+      "version": "synthetic-links-1",
+      "relationTypes": [
+        {
+          "code": "is_a",
+          "label": "is_a",
+          "description": "is_a"
+        },
+        {
+          "code": "part_of",
+          "label": "part_of",
+          "description": "part_of"
+        },
+        {
+          "code": "used_for",
+          "label": "used_for",
+          "description": "used_for"
+        },
+        {
+          "code": "analogous_to",
+          "label": "analogous_to",
+          "description": "analogous_to"
+        }
+      ],
+      "compositionRules": [
+        {
+          "firstType": "part_of",
+          "secondType": "used_for",
+          "resultType": "used_for"
+        }
+      ]
+    },
+    "k": 5,
+    "minConfidence": 0.0
+  },
+  "response": {
+    "context": {
+      "analysisJobId": "ffd91f42-cb06-4f22-bbd4-70f99186d3a0",
+      "stageExecutionId": "98a6c147-910f-4ac3-ba3c-cb81d69812f4",
+      "userId": "c49bdcd3-9f13-5186-93c2-28eccf386140",
+      "noteId": "a3704f11-838c-56ca-8a61-5bdee3250fc0",
+      "noteVersion": 1,
+      "inputRevision": 1,
+      "graphRevision": 1,
+      "pipelineVersion": "test-1"
+    },
+    "meta": {
+      "profileVersion": "links-det-1",
+      "provider": "local",
+      "model": "kiwi-tfidf-adamic-adar",
+      "modelRevision": "a621afb47d71",
+      "promptVersion": "links-det-1",
+      "schemaVersion": "1.0",
+      "preprocessingVersion": "md-plain-1",
+      "durationMs": 2
+    },
+    "links": [
+      {
+        "noteId": "0782c1c3-7bc3-5823-a00b-b04c05cb88a7",
+        "score": 0.554,
+        "bridges": [
+          {
+            "label": "WAL",
+            "candidateLabel": "WAL",
+            "confidence": 0.9151,
+            "candidateConfidence": 0.6651,
+            "contribution": 0.554002,
+            "evidence": {
+              "noteId": "a3704f11-838c-56ca-8a61-5bdee3250fc0",
+              "startOffset": 7,
+              "endOffset": 38,
+              "quote": "**WAL**은 Write Ahead Logging이다."
+            },
+            "candidateEvidence": {
+              "noteId": "0782c1c3-7bc3-5823-a00b-b04c05cb88a7",
+              "startOffset": 56,
+              "endOffset": 72,
+              "quote": "WAL은 복구를 위해 쓰인다."
+            }
+          }
+        ],
+        "paths": [
+          {
+            "source": "로그 버퍼",
+            "bridge": "WAL",
+            "target": "복구",
+            "steps": [
+              {
+                "stepOrder": 1,
+                "noteId": "a3704f11-838c-56ca-8a61-5bdee3250fc0",
+                "fromLabel": "로그 버퍼",
+                "toLabel": "WAL",
+                "typeCode": "part_of",
+                "evidence": [
+                  {
+                    "noteId": "a3704f11-838c-56ca-8a61-5bdee3250fc0",
+                    "startOffset": 50,
+                    "endOffset": 73,
+                    "quote": "**로그 버퍼**는 WAL의 구성 요소다."
+                  }
+                ],
+                "context": [
+                  {
+                    "noteId": "a3704f11-838c-56ca-8a61-5bdee3250fc0",
+                    "startOffset": 74,
+                    "endOffset": 89,
+                    "quote": "로그 버퍼는 메모리에 있다."
+                  }
+                ]
+              },
+              {
+                "stepOrder": 2,
+                "noteId": "0782c1c3-7bc3-5823-a00b-b04c05cb88a7",
+                "fromLabel": "WAL",
+                "toLabel": "복구",
+                "typeCode": "used_for",
+                "evidence": [
+                  {
+                    "noteId": "0782c1c3-7bc3-5823-a00b-b04c05cb88a7",
+                    "startOffset": 56,
+                    "endOffset": 72,
+                    "quote": "WAL은 복구를 위해 쓰인다."
+                  }
+                ],
+                "context": [
+                  {
+                    "noteId": "0782c1c3-7bc3-5823-a00b-b04c05cb88a7",
+                    "startOffset": 33,
+                    "endOffset": 55,
+                    "quote": "DB의 **WAL**처럼, 저널을 쓴다."
+                  }
+                ]
+              }
+            ],
+            "proposedTypeCode": "used_for"
+          }
+        ]
+      }
+    ]
+  },
+  "verificationScope": "actual HTTP response"
+}

@@ -73,10 +73,15 @@ final class AiReferenceValidator {
         }
         for(var derivation:derivations.values()) {
             var dependency=derivation.path("dependsOn");
+            if("R1".equals(derivation.path("rule").asString())) require(dependency.isNull());
+            else require(!dependency.isNull());
             if(!dependency.isNull()) {
                 JsonNode parent=derivations.get(dependency.asString());
                 require(parent!=null && "R2".equals(derivation.path("rule").asString())
                         && "R1".equals(parent.path("rule").asString()) && parent.path("dependsOn").isNull());
+                for(String key:new String[]{"algorithm","structure"}) require(parent.path(key).path("key").equals(derivation.path(key).path("key")));
+                require(parent.path("role").equals(derivation.path("role")));
+                require(strings(derivation.path("premiseFactIds")).containsAll(strings(parent.path("premiseFactIds"))));
             }
         }
         require(facts.containsAll(ids(response.path("unusedFacts"),"factId")));
