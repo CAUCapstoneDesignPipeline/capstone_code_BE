@@ -1,0 +1,21 @@
+# Non-secret review inputs. Copy to production.tfvars (ignored) before a real plan.
+# Budget: KRW 1,350/USD; 50 days; existing credit 250,000 + planned top-up 420,000.
+# Usage-only estimate ~665,799 KRW; VAT/external LLM/migration rehearsals are excluded.
+# This example does not purchase credits, create a billing budget, or authorize apply.
+project_id                = "capsnote"
+project_number            = "169516793433"
+zone                      = "asia-northeast3-a"
+app_machine_type          = "e2-standard-2"
+ai_machine_type           = "e2-highmem-2"
+db_tier                   = "db-custom-1-3840"
+db_availability_type      = "ZONAL"
+db_disk_size_gb           = 50
+github_federation_enabled = false
+# Resolve and pin the exact image AFTER Compute API activation has been approved.
+# app_image = "projects/ubuntu-os-cloud/global/images/<exact-reviewed-image>"
+# notification_email = "team-operated-address@example.com" # set a real recipient before apply
+# budget = {
+#   billing_account = "AAAAAA-BBBBBB-CCCCCC" # existing account, not a new link
+#   currency_code   = "USD"                 # verify actual account currency
+#   monthly_amount  = 500                   # proposal only; requires review
+# }

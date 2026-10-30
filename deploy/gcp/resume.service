@@ -1,0 +1,11 @@
+[Unit]
+Description=Reconcile CAPSTONE GCP current and durable journal after reboot
+After=docker.service nginx.service network-online.target capstone-gcp-boundary.service
+Requires=docker.service nginx.service capstone-gcp-boundary.service
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /opt/capstone-gcp/host.py --resume
+TimeoutStartSec=1800
+UMask=0077
+[Install]
+WantedBy=multi-user.target

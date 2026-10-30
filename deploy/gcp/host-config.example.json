@@ -1,0 +1,9 @@
+{
+  "releaseBucket": "capsnote-169516793433-releases",
+  "sqlConnection": "capsnote:asia-northeast3:REQUIRES-REHEARSAL-INSTANCE",
+  "database": "capstone",
+  "databaseUser": "capstone_app",
+  "databasePurpose": "isolated-rehearsal",
+  "restoreVerified": false,
+  "googleClientId": "REQUIRES-REVIEWED-PUBLIC-CLIENT-ID"
+}
