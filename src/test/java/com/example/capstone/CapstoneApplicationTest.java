@@ -68,8 +68,8 @@ class CapstoneApplicationTest {
     void startsContextAndConnectsToPostgresWithFlywayEnabled() throws Exception {
         assertThat(query("SELECT 1")).containsExactly("1");
         assertThat(flywayMigrationInitializer).isNotNull();
-        assertThat(java.util.Arrays.stream(flyway.info().applied()).map(m -> m.getVersion().getVersion())).containsExactly("1","2","3","4","5");
-        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("5");
+        assertThat(java.util.Arrays.stream(flyway.info().applied()).map(m -> m.getVersion().getVersion())).containsExactly("1","2","3","4","5","6");
+        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("6");
         assertThat(flyway.info().pending()).isEmpty();
         assertThat(flyway.validateWithResult().validationSuccessful).isTrue();
         assertThat(flyway.migrate().migrationsExecuted).isZero();
@@ -98,7 +98,7 @@ class CapstoneApplicationTest {
                         "relation_type_rule", "evidence_span", "relation", "relation_evidence", "candidate",
                         "candidate_step", "candidate_claim", "verification_result", "review", "oauth_attempt",
                         "analysis_snapshot", "analysis_stage", "analysis_fact", "analysis_result", "analysis_result_evidence",
-                        "analysis_dependency", "analysis_review_event", "analysis_graph_item", "analysis_runtime_fence");
+                        "analysis_dependency", "analysis_review_event", "analysis_graph_item", "analysis_runtime_fence", "source_file", "conversion_job", "conversion_confirmation", "conversion_submission");
         assertThat(query("SELECT count(*) FROM relation_type")).containsExactly("0");
         assertThat(query("SELECT count(*) FROM relation_type_rule")).containsExactly("0");
     }

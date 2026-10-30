@@ -1,12 +1,26 @@
 spring:
   application:
     name: capstone-be
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 11MB
+      file-size-threshold: 0
   jpa:
     hibernate:
       ddl-auto: validate
     open-in-view: false
 
 capstone:
+  conversion:
+    enabled: ${CAPSTONE_CONVERSION_ENABLED:false}
+    storage-root: ${CAPSTONE_CONVERSION_STORAGE_ROOT:}
+    validator-jar: ${CAPSTONE_CONVERSION_VALIDATOR_JAR:}
+    validation-seconds: ${CAPSTONE_CONVERSION_VALIDATION_SECONDS:20}
+    call-seconds: ${CAPSTONE_CONVERSION_CALL_SECONDS:120}
+    worker-enabled: ${CAPSTONE_CONVERSION_WORKER_ENABLED:false}
+    budget-microunits: ${CAPSTONE_CONVERSION_BUDGET_MICROUNITS:0}
+    currency: ${CAPSTONE_CONVERSION_CURRENCY:}
   ai:
     enabled: ${CAPSTONE_AI_ENABLED:false}
     runtime:
@@ -57,3 +71,5 @@ logging:
   level:
     org.hibernate.orm.jdbc.error: OFF
     org.hibernate.engine.jdbc.spi.SqlExceptionHelper: OFF
+
+# 선택적 업로드/변환 설정: 미설정 상태에서도 기존 CRUD를 제공한다.
