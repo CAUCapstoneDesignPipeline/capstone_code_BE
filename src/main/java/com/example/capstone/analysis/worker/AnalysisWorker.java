@@ -17,16 +17,24 @@ public class AnalysisWorker {
     private final AnalysisWorkService work;
     private final AiActivationService activation;
     private final ObjectProvider<AnalysisPipeline> pipeline;
+    private volatile long disabledRevision=-1;
+    private final AtomicBoolean closing=new AtomicBoolean();
     private final AtomicBoolean busy=new AtomicBoolean();
     private final ScheduledExecutorService heartbeats=Executors.newSingleThreadScheduledExecutor(Thread.ofPlatform().daemon(true).name("analysis-heartbeat").factory());
     public AnalysisWorker(AnalysisWorkService work,AiActivationService activation,ObjectProvider<AnalysisPipeline> pipeline) {
         this.work=work;this.activation=activation;this.pipeline=pipeline;
     }
-    @Scheduled(fixedDelayString="${capstone.ai.execution.poll-ms:1000}")
-    public void tick() { if(activation.workerEnabled()) runOne(); }
+    @Scheduled(fixedDelayString="${capstone.ai.execution.poll-ms:1000}",initialDelayString="${capstone.ai.execution.poll-ms:1000}")
+    public void tick() {
+        if(!activation.configured()) { long revision=activation.stateRevision();if(disabledRevision!=revision) { work.cancelActive();disabledRevision=revision; } }
+        else { disabledRevision=-1;if(activation.workerEnabled())runOne(); }
+    }
+    @org.springframework.context.event.EventListener(org.springframework.boot.context.event.ApplicationReadyEvent.class)
+    public void startup() { if(!activation.configured()) { work.cancelActive();disabledRevision=activation.stateRevision(); } }
     public boolean runOne() {
-        if(!activation.configured() || !busy.compareAndSet(false,true)) return false;
+        if(closing.get() || !activation.configured() || !busy.compareAndSet(false,true)) return false;
         try {
+            if(!activation.available()) { work.expire();return false; }
             var claimed=work.claim();if(claimed==null) return false;
             AtomicBoolean lost=new AtomicBoolean();
             var heartbeat=heartbeats.scheduleAtFixedRate(()->{
@@ -35,6 +43,7 @@ public class AnalysisWorker {
             try {
                 if(!work.current(claimed,pipeline.getObject().policyFingerprint())) return true;
                 var output=pipeline.getObject().run(claimed);
+                if(closing.get()) return true;
                 if(!lost.get() && activation.configured()) work.complete(claimed,output);
                 else work.fail(claimed,"CANCELLED");
             } catch(AnalysisWorkService.LeaseLostException stale) {
@@ -45,5 +54,5 @@ public class AnalysisWorker {
             return true;
         } finally { busy.set(false); }
     }
-    @PreDestroy void close() { heartbeats.shutdownNow(); }
+    @PreDestroy void close() { closing.set(true);heartbeats.shutdownNow(); }
 }

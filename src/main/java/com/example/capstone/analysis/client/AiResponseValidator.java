@@ -16,7 +16,7 @@ public final class AiResponseValidator {
     public void validate(AiOperation operation, JsonNode request, JsonNode response) {
         schemas.validate(operation.responseSchema(), response);
         require(sameJson(response.path("context"),request.path("context")));
-        require(response.path("meta").path("profileVersion").equals(request.path("profileVersion")));
+        if(!response.path("meta").path("profileVersion").equals(request.path("profileVersion"))) throw new AiCallException(AiCallException.Reason.PROFILE);
         Map<String, JsonNode> documents = new HashMap<>();
         if (request.has("note")) add(documents, request.get("note"));
         for (var doc : request.path("documents")) add(documents, doc);

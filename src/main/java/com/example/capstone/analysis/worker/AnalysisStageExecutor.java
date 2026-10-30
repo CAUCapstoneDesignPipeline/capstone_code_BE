@@ -18,12 +18,15 @@ public class AnalysisStageExecutor {
     private final com.example.capstone.analysis.config.AiPipelineConfiguration configuration;
     public AnalysisStageExecutor(AiHttpClient client,AiResponseValidator validator,AnalysisWorkService work,com.example.capstone.analysis.config.AiPipelineConfiguration configuration) { this.client=client;this.validator=validator;this.work=work;this.configuration=configuration; }
     public JsonNode execute(AnalysisPipeline.Work job,String key,AiOperation operation,ObjectNode request) {
+        if(!work.current(job)) throw new AnalysisWorkService.LeaseLostException();
         String id=UUID.nameUUIDFromBytes((job.id()+":"+key).getBytes(StandardCharsets.UTF_8)).toString();
         ((ObjectNode)request.path("context")).put("stageExecutionId",id);
         String hash=AiResponseValidator.hash(request.toString());
         JsonNode previous=work.checkpoint(job,key,hash);
-        if(previous!=null) { validator.validate(operation,request,previous);configuration.verify(operation,previous.path("meta"));return previous; }
-        var result=client.call(operation,request,job.deadline(),()->work.reserveAttempt(job,key,operation.name(),request));
+        if(previous!=null) { validator.validate(operation,request,previous);configuration.verify(operation,previous.path("meta"));if(!work.current(job))throw new AnalysisWorkService.LeaseLostException();return previous; }
+        AiHttpClient.CallResult result;
+        try { result=client.call(operation,request,job.deadline(),()->work.reserveAttempt(job,key,operation.name(),request)); }
+        catch(com.example.capstone.analysis.client.AiCallException failure) { if(failure.reason()==com.example.capstone.analysis.client.AiCallException.Reason.PROFILE)configuration.quarantine();throw failure; }
         configuration.verify(operation,result.body().path("meta"));
         work.checkpoint(job,key,operation.name(),request,result);
         return result.body();

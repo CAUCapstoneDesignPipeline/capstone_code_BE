@@ -17,15 +17,18 @@ import com.example.capstone.global.exception.ErrorCode;
 @Service
 public class AnalysisWorkService {
     private final AnalysisWorkRepository repository;
+    private final com.example.capstone.analysis.config.AiFeatureGate gate;
+    private final com.example.capstone.analysis.config.AiPipelineConfiguration configuration;
     private final AppUserRepository users;
     private final AnalysisInvalidationService invalidation;
     private final com.example.capstone.analysis.repository.AnalysisResultRepository results;
-    public AnalysisWorkService(AnalysisWorkRepository repository,AppUserRepository users,com.example.capstone.analysis.repository.AnalysisResultRepository results,AnalysisInvalidationService invalidation) { this.repository=repository;this.users=users;this.results=results;this.invalidation=invalidation; }
+    public AnalysisWorkService(AnalysisWorkRepository repository,AppUserRepository users,com.example.capstone.analysis.repository.AnalysisResultRepository results,AnalysisInvalidationService invalidation,com.example.capstone.analysis.config.AiFeatureGate gate,com.example.capstone.analysis.config.AiPipelineConfiguration configuration) { this.repository=repository;this.users=users;this.results=results;this.invalidation=invalidation;this.gate=gate;this.configuration=configuration; }
     @Transactional
     public JsonNode submit(UUID user,UUID note) { return submit(user,note,null); }
     @Transactional
     public JsonNode submit(UUID user,UUID note,String policyDigest) {
         users.lockById(user).orElseThrow(()->new ApiException(ErrorCode.UNAUTHENTICATED,"로그인이 필요합니다."));
+        if(!gate.allowed()) throw new ApiException(ErrorCode.AI_UNAVAILABLE,"AI 분석은 현재 사용할 수 없습니다.");
         String extractor=policyDigest==null?"ai-integration-2026-10-30-adopted.1":"policy:"+policyDigest;
         String previous=repository.latestPolicy(user);
         if(policyDigest!=null && previous!=null && !previous.equals(extractor)) invalidation.policyChanged(user);
@@ -42,36 +45,39 @@ public class AnalysisWorkService {
     }
     @Transactional
     public Work claim() {
+        if(!gate.allowed()) { cancelActive();return null; }
         UUID token=UUID.randomUUID(); JsonNode job=repository.claim(token); if(job==null) return null;
         UUID id=UUID.fromString(job.path("id").asString()),user=UUID.fromString(job.path("user_id").asString());
         return new Work(id,user,UUID.fromString(job.path("note_id").asString()),token,job.path("graph_revision").asLong(),
                 Instant.parse(job.path("deadline").asString()),repository.snapshots(user,id),job.path("extractor").asString());
     }
-    @Transactional public boolean heartbeat(Work work) { return repository.heartbeat(work.id(),work.leaseToken()); }
+    @Transactional public boolean heartbeat(Work work) { if(!permitted(work))return false;return repository.heartbeat(work.id(),work.leaseToken()); }
     @Transactional
     public boolean current(Work work) { return current(work,null); }
     @Transactional
     public boolean current(Work work,String policyFingerprint) {
         users.lockById(work.userId()).orElseThrow();
+        if(!permitted(work)) { repository.cancelUser(work.userId());return false; }
         if(!repository.lockValid(work.userId(),work.id(),work.leaseToken())) return false;
         if(policyFingerprint!=null && !("policy:"+policyFingerprint).equals(work.inputPolicy())) { invalidation.policyChanged(work.userId());return false; }
         if(!repository.inputsCurrent(work.userId(),work.id())) { repository.finish(work.id(),work.leaseToken(),"superseded","STALE_INPUT");return false; }
         return true;
     }
     @Transactional public void fail(Work work,String reason) {
+        users.lockById(work.userId()).orElseThrow();if(!permitted(work)) { repository.cancelUser(work.userId());return; }
         if(repository.lockValid(work.userId(),work.id(),work.leaseToken())) repository.finish(work.id(),work.leaseToken(),"failed",reason);
     }
     @Transactional(readOnly=true) public JsonNode cachedFacts(Work work,String key,UUID note) { return repository.cachedFacts(work.userId(),key,note); }
     @Transactional(readOnly=true) public JsonNode checkpoint(Work work,String key,String hash) { return repository.checkpoint(work.id(),key,hash); }
     @Transactional public void reserveAttempt(Work work,String key,String operation,JsonNode request) {
         users.lockById(work.userId()).orElseThrow();
-        if(!repository.lockValid(work.userId(),work.id(),work.leaseToken()) || !repository.inputsCurrent(work.userId(),work.id())) throw new LeaseLostException();
+        if(!permitted(work) || !repository.lockValid(work.userId(),work.id(),work.leaseToken()) || !repository.inputsCurrent(work.userId(),work.id())) throw new LeaseLostException();
         if(!repository.reserve(UUID.fromString(request.path("context").path("stageExecutionId").asString()),work.userId(),work.id(),key,operation,AiResponseValidator.hash(request.toString())))
             throw new com.example.capstone.analysis.client.AiCallException(com.example.capstone.analysis.client.AiCallException.Reason.UNAVAILABLE);
     }
     @Transactional public void checkpoint(Work work,String key,String operation,JsonNode request,AiHttpClient.CallResult result) {
         users.lockById(work.userId()).orElseThrow();
-        if(!repository.lockValid(work.userId(),work.id(),work.leaseToken()) || !repository.inputsCurrent(work.userId(),work.id())) throw new LeaseLostException();
+        if(!permitted(work) || !repository.lockValid(work.userId(),work.id(),work.leaseToken()) || !repository.inputsCurrent(work.userId(),work.id())) throw new LeaseLostException();
         repository.checkpoint(UUID.fromString(request.path("context").path("stageExecutionId").asString()),work.userId(),work.id(),key,operation,
                 AiResponseValidator.hash(request.toString()),result.body(),result.attempts(),result.durationMs());
         if(!repository.lockValid(work.userId(),work.id(),work.leaseToken())) throw new LeaseLostException();
@@ -80,10 +86,16 @@ public class AnalysisWorkService {
         users.lockById(work.userId()).orElseThrow();
         if(!repository.lockValid(work.userId(),work.id(),work.leaseToken())) throw new LeaseLostException();
         if(!repository.inputsCurrent(work.userId(),work.id())) { repository.finish(work.id(),work.leaseToken(),"superseded","STALE_INPUT");return; }
+        if(!permitted(work)) { repository.cancelUser(work.userId());return; }
         results.publish(work,output);
-        if(!repository.inputsCurrent(work.userId(),work.id())) throw new LeaseLostException();
+        if(!permitted(work) || !repository.inputsCurrent(work.userId(),work.id())) throw new LeaseLostException();
         if(!output.graphItems().isEmpty()) repository.advanceGraph(work.userId());
         if(!repository.finish(work.id(),work.leaseToken(),"succeeded",null)) throw new LeaseLostException();
     }
+    @Transactional public void expire() { repository.expire(); }
+    @Transactional public void cancelActive() {
+        for(UUID user:repository.activeUsers()) { if(users.lockById(user).isPresent()) repository.cancelUser(user); }
+    }
+    private boolean permitted(Work work) { return gate.allowed() && (!work.inputPolicy().startsWith("policy:") || configuration.configured()); }
     public static final class LeaseLostException extends RuntimeException { public LeaseLostException() { super("Analysis lease or input changed"); } }
 }

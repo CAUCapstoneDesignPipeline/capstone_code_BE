@@ -59,7 +59,7 @@ class AnalysisWorkerIntegrationTest extends ApiIntegrationSupport {
         UUID note=note("primary",null,"본문");UUID another=note("candidate",null,"근거");
         UUID job=submit(note);assertEquals(job,submit(note));
         assertEquals(2,jdbc.queryForObject("select count(*) from analysis_snapshot where job_id=?",Integer.class,job));
-        assertTrue(worker.runOne());
+        ready();assertTrue(worker.runOne());
         assertEquals("succeeded",json(call("GET","/api/notes/"+note+"/analysis",null)).path("job").path("lifecycleState").asString());
         assertEquals(0,jdbc.queryForObject("select count(*) from analysis_snapshot where job_id=? and user_id<>?",Integer.class,job,userId));
     }
@@ -69,7 +69,7 @@ class AnalysisWorkerIntegrationTest extends ApiIntegrationSupport {
         UUID fresh=submit(note);assertNotEquals(legacy,fresh);
         assertEquals("failed",jdbc.queryForObject("select status from analysis_job where id=?",String.class,legacy));
         assertEquals("legacy",jdbc.queryForObject("select extractor from analysis_job where id=?",String.class,legacy));
-        assertTrue(worker.runOne());assertEquals("succeeded",jdbc.queryForObject("select status from analysis_job where id=?",String.class,fresh));
+        ready();assertTrue(worker.runOne());assertEquals("succeeded",jdbc.queryForObject("select status from analysis_job where id=?",String.class,fresh));
     }
     @Test void concurrentAdmissionsAndClaimsDoNotDuplicateActiveWork() throws Exception {
         UUID note=note("concurrent",null,"본문");ready();ready();
@@ -110,7 +110,7 @@ class AnalysisWorkerIntegrationTest extends ApiIntegrationSupport {
         CountDownLatch entered=new CountDownLatch(1),release=new CountDownLatch(1);
         action.set(w->{ entered.countDown();try { if(!release.await(5,TimeUnit.SECONDS)) throw new IllegalStateException(); } catch(InterruptedException e) { Thread.currentThread().interrupt();throw new IllegalStateException(); }return EMPTY; });
         try(var executor=Executors.newVirtualThreadPerTaskExecutor()) {
-            var future=executor.submit(worker::runOne);assertTrue(entered.await(5,TimeUnit.SECONDS));
+            ready();var future=executor.submit(worker::runOne);assertTrue(entered.await(5,TimeUnit.SECONDS));
             call("PUT","/api/notes/"+note,"{\"title\":\"edit\",\"body\":\"after\",\"version\":0}").andExpect(status().isOk());
             release.countDown();assertTrue(future.get(5,TimeUnit.SECONDS));
         } finally { release.countDown(); }

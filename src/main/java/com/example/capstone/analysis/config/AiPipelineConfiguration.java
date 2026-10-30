@@ -49,9 +49,12 @@ public class AiPipelineConfiguration {
                 AiResponseValidator.require(release.path("kind").asString().equals("ai") && release.path("image").asString().matches(".+@sha256:[0-9a-f]{64}")
                     && release.path("sourceSha").asString().matches("[0-9a-f]{40}") && release.path("idf").path("sha256").asString().matches("[0-9a-f]{64}"));
                 AiResponseValidator.require(profile(AiOperation.EMBEDDINGS).equals("embeddings-bge-m3-1") && release.path("model").path("profile").asString().equals("embeddings-bge-m3-1")
-                    && release.path("model").path("revision").asString().equals("5617a9f61b028005a4858fdac845db406aefb181"));
+                    && release.path("model").path("name").asString().equals("BAAI/bge-m3") && release.path("model").path("revision").asString().equals("5617a9f61b028005a4858fdac845db406aefb181"));
                 var manifestProfiles=new java.util.HashSet<String>();release.path("profiles").forEach(p->manifestProfiles.add(p.asString()));AiResponseValidator.require(manifestProfiles.containsAll(profiles.values()));
                 for(String profile:profiles.values()) { JsonNode meta=attestation.path("expectedMeta").path(profile);schemas.validate("ModelStamp",meta);AiResponseValidator.require(meta.path("profileVersion").asString().equals(profile)); }
+                JsonNode embedding=attestation.path("expectedMeta").path(profile(AiOperation.EMBEDDINGS));
+                AiResponseValidator.require(embedding.path("model").equals(release.path("model").path("name")) && embedding.path("modelRevision").equals(release.path("model").path("revision")));
+                if(Files.size(Path.of(client.caCertificate()))>2*1024*1024) { rejected=true;return; }
                 AiResponseValidator.require(AiResponseValidator.hash(Files.readString(Path.of(client.caCertificate()))).equals(release.path("tls").path("caSha256").asString()));
             }
             fingerprint=AiResponseValidator.hash("pipeline-adopted.1:"+policy+":"+profiles+":"+(attestation==null?"synthetic-only":attestation.toString()));
@@ -74,5 +77,6 @@ public class AiPipelineConfiguration {
         JsonNode expected=attestation.path("expectedMeta").path(profile(operation));
         for(String field:new String[]{"profileVersion","provider","model","modelRevision","promptVersion","schemaVersion","preprocessingVersion"}) if(!expected.path(field).equals(meta.path(field))) reject();
     }
+    public void quarantine() { rejected=true; }
     private void reject() { rejected=true;throw new AiCallException(AiCallException.Reason.PROFILE); }
 }

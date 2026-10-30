@@ -9,6 +9,9 @@ spring:
 capstone:
   ai:
     enabled: ${CAPSTONE_AI_ENABLED:false}
+    runtime:
+      release-authorized: ${CAPSTONE_AI_RELEASE_AUTHORIZED:false}
+      suspension-file: ${CAPSTONE_AI_SUSPENSION_FILE:}
     pipeline:
       policy-file: ${CAPSTONE_AI_POLICY_FILE:}
       attestation-file: ${CAPSTONE_AI_ATTESTATION_FILE:}
@@ -48,3 +51,9 @@ management:
     health:
       show-details: never
       show-components: never
+
+# 제약 위반 로그의 DB 행/원문 출력을 차단합니다. 오류 응답은 공통 처리기가 담당합니다.
+logging:
+  level:
+    org.hibernate.orm.jdbc.error: OFF
+    org.hibernate.engine.jdbc.spi.SqlExceptionHelper: OFF

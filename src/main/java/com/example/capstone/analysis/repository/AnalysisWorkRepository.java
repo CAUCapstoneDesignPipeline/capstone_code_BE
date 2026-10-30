@@ -66,11 +66,14 @@ public class AnalysisWorkRepository {
           """,p);
     }
     public JsonNode job(UUID user,UUID job) { return db.one("select to_jsonb(j)::text from analysis_job j where id=:job and user_id=:user",Map.of("user",user,"job",job)); }
-    public JsonNode claim(UUID token) {
+    public void expire() {
         db.write("""
           update analysis_job set status='failed',lifecycle_state='failed',failure_code='TIMEOUT',finished_at=clock_timestamp(),lease_token=null,lease_until=null
           where lifecycle_state in ('queued','running') and (deadline<=clock_timestamp() or (attempt>=3 and lease_until<clock_timestamp()))
           """,Map.of());
+    }
+    public JsonNode claim(UUID token) {
+        expire();
         return db.one("""
           with candidate as (select id from analysis_job where user_id is not null and deadline>clock_timestamp() and attempt<3
            and (lifecycle_state='queued' or (lifecycle_state='running' and lease_until<clock_timestamp())) order by created_at,id for update skip locked limit 1)
@@ -113,6 +116,13 @@ public class AnalysisWorkRepository {
           update analysis_job set status=case when :state='succeeded' then 'succeeded' else 'failed' end,lifecycle_state=:state,
            failure_code=:failure,finished_at=clock_timestamp(),lease_token=null,lease_until=null where id=:job and lease_token=:token and lifecycle_state='running' and lease_until>clock_timestamp() and deadline>clock_timestamp()
           """,p)==1;
+    }
+    public List<UUID> activeUsers() { return db.rows("select distinct to_jsonb(user_id)::text from analysis_job where user_id is not null and lifecycle_state in ('queued','running') order by 1",Map.of()).stream().map(n->UUID.fromString(n.asString())).toList(); }
+    public void cancelUser(UUID user) {
+        db.write("""
+          update analysis_job set status='failed',lifecycle_state='cancelled',failure_code='CANCELLED',lease_token=null,lease_until=null,finished_at=clock_timestamp()
+          where user_id=:user and lifecycle_state in ('queued','running')
+          """,Map.of("user",user));
     }
     public JsonNode cachedFacts(UUID user,String key,UUID note) {
         return db.one("""

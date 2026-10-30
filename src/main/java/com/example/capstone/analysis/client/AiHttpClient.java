@@ -47,22 +47,27 @@ public final class AiHttpClient {
     public AiHttpClient(com.example.capstone.analysis.config.AiProperties flags,AiClientProperties config,ObjectMapper mapper,
             AiSchemaValidator schemas,AiResponseValidator validator,Environment environment) {
         this(flags.enabled()?config:new AiClientProperties(null,null,null,config.connectTimeout(),config.callTimeout(),config.embeddingTimeout(),config.maxAttempts(),config.maxConcurrent(),config.retryBase()),
-                mapper,schemas,validator,environment);
+                mapper,schemas,validator,environment,false);
     }
     public AiHttpClient(AiClientProperties config, ObjectMapper mapper, AiSchemaValidator schemas,
-            AiResponseValidator validator, Environment environment) {
-        this.config = config; this.mapper = mapper; this.schemas = schemas; this.validator = validator;
-        permits = new Semaphore(config.maxConcurrent());
-        if (config.baseUrl() == null || config.baseUrl().isBlank()) { base = null; http = null; return; }
+            AiResponseValidator validator, Environment environment) { this(config,mapper,schemas,validator,environment,true); }
+    private AiHttpClient(AiClientProperties config,ObjectMapper mapper,AiSchemaValidator schemas,AiResponseValidator validator,Environment environment,boolean strict) {
+        this.config=config;this.mapper=mapper;this.schemas=schemas;this.validator=validator;permits=new Semaphore(config.maxConcurrent());
+        Transport transport=null;
+        try { if(config.baseUrl()!=null && !config.baseUrl().isBlank())transport=transport(config,environment); }
+        catch(AiCallException invalid) { if(strict)throw invalid; }
+        base=transport==null?null:transport.base();http=transport==null?null:transport.client();
+    }
+    private Transport transport(AiClientProperties config,Environment environment) {
         URI uri;
         try { uri = URI.create(config.baseUrl()); } catch (RuntimeException invalid) { throw configuration(); }
-        boolean test = java.util.Arrays.asList(environment.getActiveProfiles()).contains("test");
+        boolean test = environment.matchesProfiles("test") && !environment.matchesProfiles("prod");
         boolean loopback = test && "http".equals(uri.getScheme()) && Set.of("127.0.0.1", "localhost").contains(uri.getHost());
         if ((!"https".equals(uri.getScheme()) && !loopback) || uri.getHost() == null || uri.getUserInfo() != null
                 || uri.getQuery() != null || uri.getFragment() != null || !Set.of("", "/").contains(uri.getPath())
                 || config.serviceToken() == null || config.serviceToken().length() < 16
                 || config.serviceToken().chars().anyMatch(c -> c < 33 || c > 126)) throw configuration();
-        base = URI.create(uri.toString().replaceAll("/$", "") + "/internal/v1/");
+        URI base = URI.create(uri.toString().replaceAll("/$", "") + "/internal/v1/");
         var builder = HttpClient.newBuilder().connectTimeout(config.connectTimeout()).followRedirects(HttpClient.Redirect.NEVER);
         if ("https".equals(uri.getScheme())) {
             if (config.caCertificate() == null || config.caCertificate().isBlank()) throw configuration();
@@ -75,11 +80,12 @@ public final class AiHttpClient {
                 var ssl = SSLContext.getInstance("TLS"); ssl.init(null, factory.getTrustManagers(), null); builder.sslContext(ssl);
             } catch (Exception invalid) { throw configuration(); }
         }
-        http = builder.build();
+        return new Transport(base,builder.build());
     }
+    private record Transport(URI base,HttpClient client) { }
     public boolean configured() { return http != null; }
     public void ready(Set<String> requiredProfiles) {
-        var response = exchange("health/ready", null, UUID.randomUUID().toString(), config.callTimeout(), Instant.now().plusSeconds(130), () -> { });
+        var response = exchange("health/ready", null, UUID.randomUUID().toString(), Duration.ofSeconds(3), Instant.now().plusSeconds(3), () -> { });
         schemas.validate("Readiness", response.body());
         Set<String> actual = new HashSet<>(); response.body().path("profileVersions").forEach(n -> actual.add(n.asString()));
         if (!actual.containsAll(requiredProfiles)) throw new AiCallException(AiCallException.Reason.PROFILE);
@@ -134,6 +140,10 @@ public final class AiHttpClient {
                         catch (RuntimeException malformed) { throw new AiCallException(AiCallException.Reason.INVALID_RESPONSE); }
                     }
                     if (status == 401 || status == 403) throw new AiCallException(AiCallException.Reason.AUTHENTICATION);
+                    if(status==422) {
+                        try { if("UNSUPPORTED_PROFILE".equals(mapper.readTree(response.body()).path("error").path("code").asString())) throw new AiCallException(AiCallException.Reason.PROFILE); }
+                        catch(AiCallException profile) { throw profile; }catch(RuntimeException invalid) { throw new AiCallException(AiCallException.Reason.INVALID_RESPONSE); }
+                    }
                     if (status != 429 && status != 503) throw new AiCallException(AiCallException.Reason.INVALID_RESPONSE);
                     last = new AiCallException(AiCallException.Reason.UNAVAILABLE);
                     try {
