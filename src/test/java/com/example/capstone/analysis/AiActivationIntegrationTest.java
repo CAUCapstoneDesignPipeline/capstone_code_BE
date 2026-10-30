@@ -43,6 +43,7 @@ class AiActivationIntegrationTest extends ApiIntegrationSupport {
     @AfterAll static void cleanup() throws Exception { server.close();Files.deleteIfExists(stop);Files.delete(policy);Files.delete(root); }
     @Autowired AnalysisWorkService work;
     @Autowired AnalysisWorker worker;
+    @org.springframework.test.context.bean.override.mockito.MockitoSpyBean com.example.capstone.analysis.config.AiFeatureGate gate;
     @Autowired org.springframework.transaction.PlatformTransactionManager transactions;
     @BeforeEach void reset() throws Exception { Files.deleteIfExists(stop);server.mode="normal";server.readiness="ready";server.requests.clear();server.release.countDown(); }
     UUID submit(UUID note) throws Exception { return UUID.fromString(json(call("POST","/api/notes/"+note+"/analysis",null).andExpect(status().isAccepted())).path("id").asString()); }
@@ -108,6 +109,24 @@ class AiActivationIntegrationTest extends ApiIntegrationSupport {
             assertEquals("cancelled",jdbc.queryForObject("select lifecycle_state from analysis_job where id=?",String.class,queued));
             assertNotEquals(queued,submit(queuedNote));work.fail(work.claim(),"CANCELLED");
         } finally { commit.countDown();Files.deleteIfExists(stop); }
+    }
+    @Test void transientStopAtFinalSharedFenceIsDurableBeforeRollbackReturns() throws Exception {
+        UUID note=note("최종 경계",null,"원문");UUID job=submit(note);var claimed=work.claim();
+        long epoch=jdbc.queryForObject("select epoch from analysis_runtime_fence",Long.class);
+        org.mockito.Mockito.doAnswer(invocation->{
+            Files.writeString(stop,"disabled");
+            try { return invocation.callRealMethod(); } finally { Files.delete(stop); }
+        }).when(gate).stillAllowed();
+        assertThrows(AnalysisWorkService.LeaseLostException.class,()->work.complete(claimed,new PipelineOutput(List.of(),List.of(),List.of())));
+        assertTrue(jdbc.queryForObject("select epoch from analysis_runtime_fence",Long.class)>epoch);
+        org.mockito.Mockito.doCallRealMethod().when(gate).stillAllowed();work.retireDisabled(claimed);
+        assertEquals("cancelled",jdbc.queryForObject("select lifecycle_state from analysis_job where id=?",String.class,job));
+        assertFalse(work.current(claimed));assertNull(work.claim());
+        // 접수의 503도 rollback 후 영속화가 끝나기 전에 응답하지 않는다.
+        long before=jdbc.queryForObject("select epoch from analysis_runtime_fence",Long.class);
+        org.mockito.Mockito.doAnswer(invocation->{ Files.writeString(stop,"disabled");try { return invocation.callRealMethod(); }finally{Files.delete(stop);} }).when(gate).stillAllowed();
+        call("POST","/api/notes/"+note+"/analysis",null).andExpect(status().isServiceUnavailable());
+        assertTrue(jdbc.queryForObject("select epoch from analysis_runtime_fence",Long.class)>before);
     }
     @Test @DirtiesContext void responseProfileMismatchQuarantinesCapabilitiesUntilRestart() throws Exception {
         UUID note=note("앞",null,"A>B");note("뒤",null,"B>C");UUID job=submit(note);server.mode="profile-mismatch";assertTrue(worker.runOne());
