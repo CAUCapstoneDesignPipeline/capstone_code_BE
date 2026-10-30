@@ -125,7 +125,10 @@ class AiActivationIntegrationTest extends ApiIntegrationSupport {
         // 접수의 503도 rollback 후 영속화가 끝나기 전에 응답하지 않는다.
         long before=jdbc.queryForObject("select epoch from analysis_runtime_fence",Long.class);
         org.mockito.Mockito.doAnswer(invocation->{ Files.writeString(stop,"disabled");try { return invocation.callRealMethod(); }finally{Files.delete(stop);} }).when(gate).stillAllowed();
-        call("POST","/api/notes/"+note+"/analysis",null).andExpect(status().isServiceUnavailable());
+        var refused=call("POST","/api/notes/"+note+"/analysis",null).andExpect(status().isServiceUnavailable());
+        assertEquals("AI 분석은 아직 사용할 수 없습니다.",json(refused).path("error").path("message").asString());
+        assertEquals("MISCONFIGURED",json(refused).path("error").path("details").path("reason").asString());
+        var captures=mapper.createArrayNode();capture(captures,"final-fence-stop","POST","/notes/{noteId}/analysis",refused,503);writeCaptures("final-fence",captures);
         assertTrue(jdbc.queryForObject("select epoch from analysis_runtime_fence",Long.class)>before);
     }
     @Test @DirtiesContext void responseProfileMismatchQuarantinesCapabilitiesUntilRestart() throws Exception {
