@@ -31,6 +31,7 @@ public class AiActivationService {
         boolean configured=gate.allowed() && client.configured() && pipeline.getIfAvailable()!=null && pipeline.getObject().configured()
                 && execution.budgetMicrounits()>0 && execution.currency()!=null && execution.currency().matches("[A-Z]{3}")
                 && execution.requiredProfiles()!=null && !execution.requiredProfiles().isEmpty();
+        if(!configured)gate.configurationUnavailable();
         if(previousState.getAndSet(configured)!=configured)stateRevision.incrementAndGet();
         return configured;
     }

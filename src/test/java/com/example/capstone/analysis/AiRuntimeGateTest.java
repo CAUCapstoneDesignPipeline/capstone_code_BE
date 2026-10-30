@@ -68,4 +68,12 @@ class AiRuntimeGateTest {
             assertFalse(new AiPipelineConfiguration(new AiProperties(true),new AiPipelineProperties(policy.toString(),proof.toString(),pin,false,Map.of()),client("https://ai.internal","synthetic-service-token",ca.toString()),mapper,schemas,environment("prod")).configured(),change);
         }
     }
+    @org.junit.jupiter.api.Test void typedBoundsDisableOptionalTransportWithoutThrowing() {
+        for(boolean enabled:java.util.List.of(false,true)) {
+            var config=new AiClientProperties("https://ai.invalid","synthetic-service-token",null,Duration.ofSeconds(3),Duration.ofSeconds(130),Duration.ofSeconds(40),4,0,Duration.ofSeconds(5));
+            assertFalse(config.valid());
+            assertFalse(new AiHttpClient(new AiProperties(enabled),config,mapper,schemas,validator,environment("prod")).configured());
+        }
+    }
+
 }

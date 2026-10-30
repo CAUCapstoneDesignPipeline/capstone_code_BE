@@ -16,7 +16,7 @@ import com.example.capstone.support.ApiIntegrationSupport;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@SpringBootTest(properties={"capstone.ai.enabled=true","capstone.ai.client.base-url=https://ai.invalid","capstone.ai.client.service-token=short","capstone.ai.execution.worker-enabled=false"})
+@SpringBootTest(properties={"capstone.ai.enabled=true","capstone.ai.client.max-attempts=4","capstone.ai.client.max-concurrent=0","capstone.ai.client.retry-base=5s","capstone.ai.client.base-url=https://ai.invalid","capstone.ai.client.service-token=short","capstone.ai.execution.worker-enabled=false"})
 @AutoConfigureMockMvc(print=MockMvcPrint.NONE)
 @ActiveProfiles("test")
 @Testcontainers

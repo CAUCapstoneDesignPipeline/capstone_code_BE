@@ -52,9 +52,9 @@ public final class AiHttpClient {
     public AiHttpClient(AiClientProperties config, ObjectMapper mapper, AiSchemaValidator schemas,
             AiResponseValidator validator, Environment environment) { this(config,mapper,schemas,validator,environment,true); }
     private AiHttpClient(AiClientProperties config,ObjectMapper mapper,AiSchemaValidator schemas,AiResponseValidator validator,Environment environment,boolean strict) {
-        this.config=config;this.mapper=mapper;this.schemas=schemas;this.validator=validator;permits=new Semaphore(config.maxConcurrent());
+        this.config=config;this.mapper=mapper;this.schemas=schemas;this.validator=validator;permits=new Semaphore(config.valid()?config.maxConcurrent():1);
         Transport transport=null;
-        try { if(config.baseUrl()!=null && !config.baseUrl().isBlank())transport=transport(config,environment); }
+        try { if(!config.valid())throw configuration();if(config.baseUrl()!=null && !config.baseUrl().isBlank())transport=transport(config,environment); }
         catch(AiCallException invalid) { if(strict)throw invalid; }
         base=transport==null?null:transport.base();http=transport==null?null:transport.client();
     }
