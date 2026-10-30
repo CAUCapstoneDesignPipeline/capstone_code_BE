@@ -43,6 +43,14 @@ class AiHttpClientTest {
             assertEquals(f.path("response"), result.body()); assertFalse(result.toString().contains("알고리즘"));
         }
     }
+    @Test void oversizedResponseIsBoundedAndNeverRetriedAsTransportFailure() throws Exception {
+        try(var server=new ScriptedAiServer(TOKEN,AiHttpClient.REQUEST_LIMIT)) {
+            server.enqueue(new ScriptedAiServer.Reply(200," ".repeat(AiHttpClient.RESPONSE_LIMIT+1),Map.of()));
+            var error=assertThrows(AiCallException.class,()->client(server,TOKEN,Duration.ofSeconds(2)).call(AiOperation.FACTS,fixture().path("request"),Instant.now().plusSeconds(5)));
+            assertEquals(AiCallException.Reason.INVALID_RESPONSE,error.reason());server.takeRequest(Duration.ofSeconds(1));
+            assertThrows(IllegalStateException.class,()->server.takeRequest(Duration.ofMillis(100)));
+        }
+    }
     @Test void authenticationIsNotRetriedAndHasNoRemotePayload() throws Exception {
         try (var server = new ScriptedAiServer(TOKEN, AiHttpClient.REQUEST_LIMIT)) {
             var failure = assertThrows(AiCallException.class, () -> client(server, "wrong-synthetic-token", Duration.ofSeconds(1))

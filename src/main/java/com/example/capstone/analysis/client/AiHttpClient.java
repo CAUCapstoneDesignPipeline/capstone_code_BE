@@ -145,8 +145,10 @@ public final class AiHttpClient {
                 } catch (java.util.concurrent.ExecutionException failed) {
                     future.cancel(true);
                     Throwable cause = failed.getCause();
-                    if (cause instanceof AiCallException bounded) throw bounded;
-                    if (cause instanceof javax.net.ssl.SSLException) throw new AiCallException(AiCallException.Reason.AUTHENTICATION);
+                    for(int depth=0;cause!=null && depth<16;depth++,cause=cause.getCause()) {
+                        if(cause instanceof AiCallException bounded) throw bounded;
+                        if(cause instanceof javax.net.ssl.SSLException) throw new AiCallException(AiCallException.Reason.AUTHENTICATION);
+                    }
                     last = new AiCallException(AiCallException.Reason.UNAVAILABLE);
                 } catch (InterruptedException interrupted) {
                     future.cancel(true); Thread.currentThread().interrupt(); throw new AiCallException(AiCallException.Reason.UNAVAILABLE);
