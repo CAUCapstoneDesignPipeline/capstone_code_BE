@@ -40,3 +40,10 @@ dependencies {
 tasks.named('test') {
     useJUnitPlatform()
 }
+
+// Explicit local compatibility probe. Requires a private synthetic-only configuration file.
+tasks.register('aiCompatibilitySmoke', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'com.example.capstone.analysis.AiCompatibilitySmoke'
+}

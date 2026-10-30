@@ -9,6 +9,10 @@ spring:
 capstone:
   ai:
     enabled: ${CAPSTONE_AI_ENABLED:false}
+    client:
+      base-url: ${CAPSTONE_AI_BASE_URL:}
+      service-token: ${CAPSTONE_AI_SERVICE_TOKEN:}
+      ca-certificate: ${CAPSTONE_AI_CA_CERTIFICATE:}
   auth:
     app-url: ${CAPSTONE_APP_URL:http://localhost:5173}
     allowed-emails: ${CAPSTONE_ALLOWED_EMAILS:}

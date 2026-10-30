@@ -1,0 +1,119 @@
+{
+  "request": {
+    "context": {
+      "analysisJobId": "19ac213a-07ef-4936-9a9a-db93bd3a778c",
+      "stageExecutionId": "8028c9b9-deb6-4ec5-8b42-28278797f2de",
+      "userId": "c49bdcd3-9f13-5186-93c2-28eccf386140",
+      "noteId": "10f77e94-6b1f-5e82-b8cd-f6847b0e5479",
+      "noteVersion": 3,
+      "inputRevision": 4,
+      "graphRevision": 7,
+      "pipelineVersion": "pipeline-fixture-1"
+    },
+    "profileVersion": "extract-det-3",
+    "note": {
+      "noteId": "10f77e94-6b1f-5e82-b8cd-f6847b0e5479",
+      "noteVersion": 3,
+      "inputRevision": 4,
+      "title": "검증 예시 note-1",
+      "body": "# 지식 🧠\n**재시도**는 중복을 만든다.\n",
+      "bodySha256": "f74ba80f796eecfc7f65b9f5ac89f7d1976da171cbe6cdcf2311f0a1bf7371d3",
+      "topic": {
+        "id": null,
+        "name": "미분류"
+      }
+    },
+    "policy": {
+      "version": "relations-fixture-1",
+      "relationTypes": [
+        {
+          "code": "cause",
+          "label": "원인",
+          "description": "예시"
+        }
+      ],
+      "compositionRules": []
+    }
+  },
+  "response": {
+    "context": {
+      "analysisJobId": "19ac213a-07ef-4936-9a9a-db93bd3a778c",
+      "stageExecutionId": "8028c9b9-deb6-4ec5-8b42-28278797f2de",
+      "userId": "c49bdcd3-9f13-5186-93c2-28eccf386140",
+      "noteId": "10f77e94-6b1f-5e82-b8cd-f6847b0e5479",
+      "noteVersion": 3,
+      "inputRevision": 4,
+      "graphRevision": 7,
+      "pipelineVersion": "pipeline-fixture-1"
+    },
+    "meta": {
+      "profileVersion": "extract-det-3",
+      "provider": "local",
+      "model": "kiwi-tfidf-markdown",
+      "modelRevision": "cfg-96e7d8b1f8d7+idf-a0b9bfe5b0e6",
+      "promptVersion": "rules-96e7d8b1f8d7",
+      "schemaVersion": "1.0",
+      "preprocessingVersion": "md-mask-96e7d8b1f8d7",
+      "durationMs": 381
+    },
+    "concepts": [
+      {
+        "ref": "c-1",
+        "label": "지식 🧠",
+        "mentions": [
+          {
+            "startOffset": 2,
+            "endOffset": 7,
+            "quote": "지식 🧠"
+          }
+        ],
+        "confidence": 1.0
+      },
+      {
+        "ref": "c-2",
+        "label": "재시도",
+        "mentions": [
+          {
+            "startOffset": 10,
+            "endOffset": 13,
+            "quote": "재시도"
+          }
+        ],
+        "confidence": 0.75
+      },
+      {
+        "ref": "c-3",
+        "label": "중복",
+        "mentions": [
+          {
+            "startOffset": 17,
+            "endOffset": 19,
+            "quote": "중복"
+          }
+        ],
+        "confidence": 0.415
+      }
+    ],
+    "evidence": [
+      {
+        "ref": "e-1",
+        "startOffset": 8,
+        "endOffset": 25,
+        "quote": "**재시도**는 중복을 만든다."
+      }
+    ],
+    "relations": [
+      {
+        "ref": "r-1",
+        "sourceRef": "c-2",
+        "targetRef": "c-3",
+        "typeCode": "cause",
+        "evidenceRefs": [
+          "e-1"
+        ],
+        "confidence": 0.85
+      }
+    ]
+  },
+  "verificationScope": "actual HTTP response"
+}
