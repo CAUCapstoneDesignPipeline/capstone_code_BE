@@ -2,6 +2,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.DriverManager;
 import java.util.UUID;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.sql.Connection;
 import org.flywaydb.core.Flyway;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.images.builder.Transferable;
@@ -20,7 +25,7 @@ public class MigrationAcceptance {
             }
             Flyway.configure().dataSource(db.getJdbcUrl(), "capstone_app", "synthetic-fixture-only")
                 .locations("filesystem:" + root.resolve("src/main/resources/db/migration"))
-                .load().migrate();
+                .target("2").load().migrate();
             try (var connection = DriverManager.getConnection(db.getJdbcUrl(), db.getUsername(), db.getPassword());
                  var sql = connection.createStatement()) {
 
@@ -40,6 +45,50 @@ public class MigrationAcceptance {
             var process = new ProcessBuilder("python3", "deploy/gcp/tests/migration_acceptance.py", db.getContainerId())
                 .directory(root.toFile()).inheritIO().start();
             if (process.waitFor() != 0) throw new IllegalStateException("Migration acceptance failed; data suppressed");
+            // The source/restore acceptance above deliberately uses the existing V1/V2 release.
+            // Upgrade only these disposable databases, preserving all original column values.
+            int upgraded = 0;
+            for (String database : List.of("capstone", "rehearsal")) {
+                String url = "jdbc:postgresql://" + db.getHost() + ":" + db.getMappedPort(5432) + "/" + database;
+                try (var connection = DriverManager.getConnection(url, "capstone_app", "synthetic-fixture-only")) {
+                    Map<String, String> queries = originalQueries(connection);
+                    Map<String, List<String>> before = capture(connection, queries);
+                    var flyway = Flyway.configure().dataSource(url, "capstone_app", "synthetic-fixture-only")
+                        .locations("filesystem:" + root.resolve("src/main/resources/db/migration")).load();
+                    upgraded += flyway.migrate().migrationsExecuted;
+                    flyway.validate();
+                    if (!before.equals(capture(connection, queries)))
+                        throw new IllegalStateException("Feature migration changed original data/history; values suppressed");
+                    if (flyway.migrate().migrationsExecuted != 0)
+                        throw new IllegalStateException("Feature migration was not repeatable without changes");
+                }
+            }
+            System.out.println("V2 restored data and Flyway checksums preserved; new migrations applied across two isolated databases: " + upgraded);
         }
     }
+    private static Map<String, String> originalQueries(Connection connection) throws Exception {
+        Map<String, String> queries = new LinkedHashMap<>();
+        try (var statement = connection.createStatement();
+             var rows = statement.executeQuery("SELECT table_name, string_agg(quote_ident(column_name), ',' ORDER BY ordinal_position) AS columns FROM information_schema.columns WHERE table_schema='public' GROUP BY table_name ORDER BY table_name")) {
+            while (rows.next()) {
+                String table = rows.getString(1);
+                String predicate = table.equals("flyway_schema_history") ? " WHERE version IN ('1','2')" : "";
+                queries.put(table, "SELECT row_to_json(v)::text FROM (SELECT " + rows.getString(2) + " FROM \"" + table.replace("\"", "\"\"") + "\"" + predicate + ") v ORDER BY 1");
+            }
+        }
+        return queries;
+    }
+
+    private static Map<String, List<String>> capture(Connection connection, Map<String, String> queries) throws Exception {
+        Map<String, List<String>> values = new LinkedHashMap<>();
+        for (var entry : queries.entrySet()) {
+            List<String> table = new ArrayList<>();
+            try (var statement = connection.createStatement(); var rows = statement.executeQuery(entry.getValue())) {
+                while (rows.next()) table.add(rows.getString(1));
+            }
+            values.put(entry.getKey(), table);
+        }
+        return values;
+    }
+
 }
