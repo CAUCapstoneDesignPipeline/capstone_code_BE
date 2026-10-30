@@ -37,10 +37,10 @@ variable "app_image" {
 
 variable "db_tier" {
   type    = string
-  default = "db-custom-2-7680"
+  default = "db-custom-1-3840"
   validation {
-    condition     = contains(["db-custom-2-7680", "db-custom-4-15360"], var.db_tier)
-    error_message = "Use the reviewed 2/7.5 or 4/15 vCPU/GiB SQL size."
+    condition     = contains(["db-custom-1-3840", "db-custom-2-7680", "db-custom-4-15360"], var.db_tier)
+    error_message = "Use the 1/3.75 vCPU/GiB baseline; larger reviewed sizes require a revised budget."
   }
 }
 

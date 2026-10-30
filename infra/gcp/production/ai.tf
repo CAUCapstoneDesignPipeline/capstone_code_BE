@@ -1,11 +1,12 @@
 # AI infrastructure is created in the first provisioning batch. Product AI remains off
 # until the BE integration and release contract are implemented and validated.
 variable "ai_machine_type" {
-  type    = string
-  default = "e2-standard-4"
+  description = "50-day budget baseline: 2 vCPU / 16 GiB. Retain model memory; re-cost any override."
+  type        = string
+  default     = "e2-highmem-2"
   validation {
-    condition     = contains(["e2-standard-2", "e2-standard-4", "e2-standard-8"], var.ai_machine_type)
-    error_message = "Choose a reviewed CPU-only E2 size after model memory/latency measurements."
+    condition     = contains(["e2-highmem-2", "e2-standard-4", "e2-standard-8"], var.ai_machine_type)
+    error_message = "Keep at least 16 GiB for the CPU model; larger sizes require latency measurements and a revised budget."
   }
 }
 
