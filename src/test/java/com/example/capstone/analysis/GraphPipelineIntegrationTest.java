@@ -72,6 +72,16 @@ class GraphPipelineIntegrationTest extends ApiIntegrationSupport {
         assertEquals(4,jdbc.queryForObject("select count(distinct identity_sha256) from analysis_result where user_id=?",Integer.class,userId));
         assertTrue(json(call("GET","/api/graph?scope=all",null)).path("nodes").size()>=4);
     }
+    @Test void reusedAliasCannotLoseItsSourceSnapshotWhenScopeChanges() throws Exception {
+        UUID first=note("앞",null,"A>B"),outside=note("뒤1",null,"B>C");note("뒤2",null,"B>D");execute(first);
+        for(int i=0;i<20;i++)note("새 문서 "+i,null,"원문");execute(first);
+        UUID latest=jdbc.queryForObject("select id from analysis_job where user_id=? order by created_at desc limit 1",UUID.class,userId);
+        assertEquals(0,jdbc.queryForObject("select count(*) from analysis_snapshot where job_id=? and original_note_id=?",Integer.class,latest,outside));
+        assertEquals(0,jdbc.queryForObject("select count(*) from analysis_graph_item where job_id=? and kind='concept' and jsonb_array_length(value->'aliases')<>1",Integer.class,latest));
+        call("PUT","/api/notes/"+outside,"{\"title\":\"뒤1\",\"body\":\"변경\",\"version\":0}").andExpect(status().isOk());
+        assertEquals(20,jdbc.queryForObject("select count(*) from analysis_snapshot where job_id=? and freshness='current'",Integer.class,latest));
+        var graph=json(call("GET","/api/notes/"+first+"/graph",null).andExpect(status().isOk()));assertEquals(2,graph.path("concepts").size());
+    }
     @Test void wrongCompositionFailsBeforeBridgeAndPersistsNoResults() throws Exception {
         UUID first=note("앞",null,"A>B");note("뒤",null,"B>C");server.mode="bad-composition";UUID job=submit(first);assertTrue(worker.runOne());
         assertEquals("failed",jdbc.queryForObject("select status from analysis_job where id=?",String.class,job));assertEquals(0,jdbc.queryForObject("select count(*) from analysis_result where job_id=?",Integer.class,job));

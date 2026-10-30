@@ -77,6 +77,7 @@ public final class SyntheticPipelineServer implements AutoCloseable {
             case "/verifications/edges" -> {
                 ArrayNode verdicts=r.putArray("verdicts");for(var edge:q.path("edges")) verdicts.addObject().put("edgeId",edge.path("edgeId").asString()).put("outcome",mode.equals("contradiction")?"contradicted":"entailed").put("confidence",1).put("reason","합성 근거 검증");
             }
+            case "/facts" -> { r.putArray("facts");r.putArray("dropped"); }
             case "/explanations" -> {
                 var explanation=r.putObject("explanation").put("summary","두 원문의 합성 설명");var claims=explanation.putArray("claims");
                 int index=0;ArrayNode refs=mapper.createArrayNode();for(var step:q.path("path").path("steps")) { var evidence=step.path("evidenceIds");refs.add(evidence.get(0));var claim=claims.addObject().put("claimRef","premise-"+(++index)).put("kind","premise").put("text","원문 전제 "+index);claim.set("evidenceIds",evidence); }
