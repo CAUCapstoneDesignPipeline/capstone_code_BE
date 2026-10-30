@@ -23,6 +23,8 @@ import com.example.capstone.global.exception.ApiException;
 import com.example.capstone.global.exception.ErrorCode;
 
 @RestController
+@io.swagger.v3.oas.annotations.tags.Tag(name="발견")
+@io.swagger.v3.oas.annotations.security.SecurityRequirement(name="bearerAuth")
 public class InsightController {
     private final InsightService service;
     public InsightController(InsightService service) { this.service=service; }

@@ -68,6 +68,14 @@ class InsightApiIntegrationTest extends ApiIntegrationSupport {
         assertEquals(0,jdbc.queryForObject("select count(*) from relation where origin='confirmed'",Integer.class));
         writeCaptures();
     }
+    @Test void repeatedSemanticIdentityUsesLatestProjectionWhileHistoryAndDifferentConditionsRemain() throws Exception {
+        UUID first=seed("conclusion","sound",2),second=seed("conclusion","sound",2),different=seed("conclusion","sound",2);
+        String identity=AiResponseValidator.hash("same-condition-and-scope");
+        jdbc.update("update analysis_result set identity_sha256=? where id in (?,?)",identity,first,second);
+        JsonNode list=json(call("GET","/api/candidates",null));assertEquals(2,list.path("results").size());
+        assertEquals(3,json(call("GET","/api/candidates?view=history",null)).path("results").size());
+        assertTrue(list.path("results").toString().contains(different.toString()));
+    }
     @Test void concurrentReviewsHaveOneWinnerAndUnknownOrMissingFieldsAreRejected() throws Exception {
         UUID id=seed("conclusion","sound",2);CountDownLatch start=new CountDownLatch(1);
         try(var executor=Executors.newVirtualThreadPerTaskExecutor()) {
