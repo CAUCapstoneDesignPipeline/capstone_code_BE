@@ -37,6 +37,7 @@ public class AnalysisWorkRepository {
     public String latestPolicy(UUID user) {
         JsonNode value=db.one("select to_jsonb(extractor)::text from analysis_job where user_id=:user order by created_at desc,id desc limit 1",Map.of("user",user));return value==null?null:value.asString();
     }
+    public void advanceGraph(UUID user) { db.write("update app_user set graph_revision=graph_revision+1 where id=:user",Map.of("user",user)); }
     public long graphRevision(UUID user) {
         return db.one("select to_jsonb(graph_revision)::text from app_user where id=:user",Map.of("user",user)).asLong();
     }

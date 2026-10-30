@@ -13,9 +13,9 @@ public class AnalysisInvalidationRepository {
     public void policyChanged(UUID user) {
         List<UUID> ids=db.rows("select to_jsonb(id)::text from note where user_id=:user order by id",Map.of("user",user)).stream().map(n->UUID.fromString(n.asString())).toList();
         invalidate(user,ids,true);
-        db.write("update app_user set graph_revision=graph_revision+1 where id=:user",Map.of("user",user));
     }
     public void invalidate(UUID user,List<UUID> ids,boolean inputChanged) {
+        db.write("update app_user set graph_revision=graph_revision+1 where id=:user",Map.of("user",user));
         if(ids.isEmpty()) return;
         var p=Map.of("user",user,"ids",ids);
         if(inputChanged) db.write("update note set input_revision=input_revision+1 where user_id=:user and id in (:ids)",p);

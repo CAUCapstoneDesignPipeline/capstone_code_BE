@@ -9,6 +9,11 @@ spring:
 capstone:
   ai:
     enabled: ${CAPSTONE_AI_ENABLED:false}
+    pipeline:
+      policy-file: ${CAPSTONE_AI_POLICY_FILE:}
+      attestation-file: ${CAPSTONE_AI_ATTESTATION_FILE:}
+      attestation-sha256: ${CAPSTONE_AI_ATTESTATION_SHA256:}
+      synthetic-stub: ${CAPSTONE_AI_SYNTHETIC_STUB:false}
     execution:
       worker-enabled: ${CAPSTONE_AI_WORKER_ENABLED:true}
       budget-microunits: ${CAPSTONE_AI_BUDGET_MICROUNITS:0}

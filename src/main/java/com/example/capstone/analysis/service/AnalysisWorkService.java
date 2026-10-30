@@ -80,7 +80,9 @@ public class AnalysisWorkService {
         if(!repository.lockValid(work.userId(),work.id(),work.leaseToken())) throw new LeaseLostException();
         if(!repository.inputsCurrent(work.userId(),work.id())) { repository.finish(work.id(),work.leaseToken(),"superseded","STALE_INPUT");return; }
         results.publish(work,output);
-        if(!repository.inputsCurrent(work.userId(),work.id()) || !repository.finish(work.id(),work.leaseToken(),"succeeded",null)) throw new LeaseLostException();
+        if(!repository.inputsCurrent(work.userId(),work.id())) throw new LeaseLostException();
+        if(!output.graphItems().isEmpty()) repository.advanceGraph(work.userId());
+        if(!repository.finish(work.id(),work.leaseToken(),"succeeded",null)) throw new LeaseLostException();
     }
     public static final class LeaseLostException extends RuntimeException { public LeaseLostException() { super("Analysis lease or input changed"); } }
 }
