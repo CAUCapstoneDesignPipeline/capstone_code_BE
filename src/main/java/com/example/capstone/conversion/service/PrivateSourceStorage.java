@@ -54,7 +54,8 @@ public class PrivateSourceStorage implements SourceStorage {
         if(!validators.tryAcquire())throw unavailable();Process child=null;
         try {
             var builder=new ProcessBuilder(Path.of(System.getProperty("java.home"),"bin","java").toString(),"-Xms16m","-Xmx256m","-XX:+ExitOnOutOfMemoryError","-Djava.awt.headless=true","-jar",Path.of(config.validatorJar()).toAbsolutePath().toString(),file.toString(),type);
-            for(String key:List.of("JAVA_TOOL_OPTIONS","JDK_JAVA_OPTIONS","_JAVA_OPTIONS","CLASSPATH"))builder.environment().remove(key);
+            // parser 자식에게 DB/JWT/provider 환경 비밀과 JVM 주입 옵션을 전달하지 않는다.
+            builder.environment().clear();builder.environment().put("LANG","C.UTF-8");
             builder.redirectError(ProcessBuilder.Redirect.DISCARD);child=builder.start();
             if(!child.waitFor(config.validationSeconds(),TimeUnit.SECONDS))throw unsupported();
             byte[] output=child.getInputStream().readNBytes(128);

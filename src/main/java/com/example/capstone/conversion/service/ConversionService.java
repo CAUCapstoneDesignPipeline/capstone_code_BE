@@ -39,21 +39,26 @@ public class ConversionService {
     public record Download(byte[] bytes,String media,String hash) { }
     @Transactional(readOnly=true) public Download download(UUID user,UUID file) { var f=source(user,file,false);return new Download(storage.read(id(f,"object_key"),f.path("content_sha256").asString(),f.path("byte_size").asLong()),f.path("media_type").asString(),f.path("content_sha256").asString()); }
     @Transactional public void deleteSource(UUID user,UUID file) { lock(user);var row=db.file(user,file,true);if(row==null)throw missing();db.tombstone(user,file); }
+    @Transactional public void expireSourceIfEligible(UUID user,UUID file) {
+        lock(user);var row=db.file(user,file,true);
+        if(row!=null && row.path("deleted_at").isNull() && !db.retained(user,file)
+                && (!Instant.parse(row.path("expires_at").asString()).isAfter(Instant.now()) || db.deletedConfirmedNote(user,file)))db.tombstone(user,file);
+    }
     @Transactional public JsonNode start(UUID user,JsonNode request) {
         wire.fields(request,"fileId","idempotencyKey");UUID file=wire.uuid(request.path("fileId"));String key=wire.text(request.path("idempotencyKey"),1,80);
-        lock(user);source(user,file,true);if(!configured())throw unavailable();
+        lock(user);source(user,file,true);if(!configured())throw unavailable();db.expireJobs(user);
         var replay=db.replay(user,key);if(replay!=null) { if(!id(replay,"file_id").equals(file))throw conflict();return wire.job(ownedJob(user,id(replay,"job_id"),false)); }
         var active=db.active(user,file);UUID job;
         if(active!=null)job=id(active,"id");else { job=UUID.randomUUID();db.create(user,file,job,key,converters.getObject().engineRevision()); }
         db.submit(user,file,job,key);return wire.job(ownedJob(user,job,false));
     }
-    @Transactional(readOnly=true) public JsonNode get(UUID user,UUID job) { return wire.job(ownedJob(user,job,false)); }
+    @Transactional public JsonNode get(UUID user,UUID job) { lock(user);db.expireJobs(user);return wire.job(ownedJob(user,job,false)); }
     @Transactional(readOnly=true) public JsonNode result(UUID user,UUID job) { var j=ownedJob(user,job,false);source(user,id(j,"file_id"),false);if(!j.path("status").asString().equals("succeeded") || j.path("result").isNull())throw conflict();return j.path("result"); }
     @Transactional public void cancel(UUID user,UUID job) { lock(user);var existing=ownedJob(user,job,false);source(user,id(existing,"file_id"),true);ownedJob(user,job,true);if(db.confirmation(user,job)!=null)throw conflict();db.cancel(user,job); }
     @Transactional public JsonNode confirm(UUID user,UUID job,JsonNode request) {
         wire.fields(request,"expectedResultRevision","idempotencyKey","title","topicId","markdown","expectedMarkdownSha256");int revision=wire.integer(request.path("expectedResultRevision"),1,Integer.MAX_VALUE);String key=wire.text(request.path("idempotencyKey"),1,80);
-        String title=TextValidation.title(wire.text(request.path("title"),1,200),"title","제목",200);UUID topic=request.path("topicId").isNull()?null:wire.uuid(request.path("topicId"));
-        String markdown=Normalizer.normalize(wire.text(request.path("markdown"),0,50000),Normalizer.Form.NFC);String hash=wire.hash(request.path("expectedMarkdownSha256"));if(!AiResponseValidator.hash(markdown).equals(hash))throw invalid();
+        String title=TextValidation.title(wire.text(request.path("title"),0,Integer.MAX_VALUE),"title","제목",200);UUID topic=request.path("topicId").isNull()?null:wire.uuid(request.path("topicId"));
+        String markdown=Normalizer.normalize(wire.text(request.path("markdown"),0,Integer.MAX_VALUE),Normalizer.Form.NFC);if(markdown.codePointCount(0,markdown.length())>50000)throw invalid();String hash=wire.hash(request.path("expectedMarkdownSha256"));if(!AiResponseValidator.hash(markdown).equals(hash))throw invalid();
         var normalized=mapper.createObjectNode().put("expectedResultRevision",revision).put("idempotencyKey",key).put("title",title).put("markdown",markdown).put("expectedMarkdownSha256",hash);if(topic==null)normalized.putNull("topicId");else normalized.put("topicId",topic.toString());String payloadHash=AiResponseValidator.hash(AiResponseValidator.canonicalJson(normalized));
         lock(user);var existing=ownedJob(user,job,false);UUID file=id(existing,"file_id");var f=source(user,file,true);var j=ownedJob(user,job,true);var prior=db.confirmation(user,job);
         if(prior!=null) { if(prior.path("note_id").isNull())throw missing();if(!prior.path("idempotency_key").asString().equals(key) || !prior.path("request_sha256").asString().equals(payloadHash))throw conflict();return confirmationView(user,prior); }
@@ -81,7 +86,7 @@ public class ConversionService {
     @Transactional public void finish(UUID user,UUID job,UUID lease,JsonNode request,JsonNode response,String error) {
         lock(user);var initial=ownedJob(user,job,false);JsonNode f=db.file(user,id(initial,"file_id"),true);var j=ownedJob(user,job,true);
         if(!db.valid(j,lease))return;
-        if(!configured() || f==null || !f.path("deleted_at").isNull() || (!Instant.parse(f.path("expires_at").asString()).isAfter(Instant.now()) && !db.retained(user,id(f,"id")))) { db.cancel(user,job);return; }
+        if(!configured() || !j.path("engine_revision").asString().equals(converters.getObject().engineRevision()) || f==null || !f.path("deleted_at").isNull() || (!Instant.parse(f.path("expires_at").asString()).isAfter(Instant.now()) && !db.retained(user,id(f,"id")))) { db.cancel(user,job);return; }
         if(response!=null && (request==null || !j.path("attempt_id").asString().equals(request.path("attemptId").asString()) || j.path("conversion_revision").asInt()!=request.path("conversionRevision").asInt()))throw new Lost();
         db.finish(job,lease,response,error);
     }

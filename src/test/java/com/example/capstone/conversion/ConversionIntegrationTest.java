@@ -50,6 +50,7 @@ class ConversionIntegrationTest extends ApiIntegrationSupport {
         }
     }
     @Autowired Stub converter;@Autowired ConversionWorker worker;@Autowired ConversionService service;@Autowired ConversionCleanup cleanup;@Autowired PrivateSourceStorage storage;
+    @Autowired org.springframework.transaction.PlatformTransactionManager transactions;
     ArrayNode captures;
     @BeforeEach void reset(){converter.enabled=true;converter.mode="normal";converter.requests.clear();converter.release.countDown();captures=mapper.createArrayNode();}
     @AfterEach void saveCaptures(TestInfo info)throws Exception {var envelope=mapper.createObjectNode().put("schemaVersion",1).put("syntheticOnly",true);envelope.putObject("producer").put("commit","working-tree").put("suite",getClass().getSimpleName());envelope.set("cases",captures);Path p=Path.of(".local/verification/results/ocr-"+info.getTestMethod().orElseThrow().getName()+".json");Files.createDirectories(p.getParent());Files.writeString(p,envelope.toPrettyString());}
@@ -60,7 +61,7 @@ class ConversionIntegrationTest extends ApiIntegrationSupport {
     JsonNode result(UUID job)throws Exception{return json(capture("result","GET","/conversions/{conversionId}/result",call("GET","/api/conversions/"+job+"/result",null),200));}
     ObjectNode confirmPayload(JsonNode result,String key,String title,String body){return mapper.createObjectNode().put("expectedResultRevision",result.path("resultRevision").asInt()).put("idempotencyKey",key).put("title",title).putNull("topicId").put("markdown",body).put("expectedMarkdownSha256",AiResponseValidator.hash(body));}
     @Test void privateUploadConversionsEditedConfirmationReplayAndSourceDeletion()throws Exception {
-        UUID file=file();var download=call("GET","/api/source-files/"+file,null).andExpect(status().isOk()).andReturn().getResponse();assertArrayEquals(UploadValidationTest.png(),download.getContentAsByteArray());assertEquals("no-store",download.getHeader("Cache-Control"));assertTrue(download.getHeader("Content-Disposition").startsWith("attachment"));
+        UUID file=file();var download=call("GET","/api/source-files/"+file,null).andExpect(status().isOk()).andReturn().getResponse();assertArrayEquals(UploadValidationTest.png(),download.getContentAsByteArray());assertEquals("no-store",download.getHeader("Cache-Control"));assertEquals("application/octet-stream",download.getContentType());assertTrue(download.getHeader("Content-Disposition").startsWith("attachment"));
         capture("foreign-file","GET","/source-files/{fileId}",call("GET","/api/source-files/"+file,null,otherBearer),404);
         UUID job=start(file,"start"),same=start(file,"alias");assertEquals(job,same);assertTrue(worker.runOne());assertEquals(job,start(file,"alias"));
         var converted=result(job);var request=confirmPayload(converted,"confirm","수정 노트","수정된 🧠 원문");
@@ -110,4 +111,54 @@ class ConversionIntegrationTest extends ApiIntegrationSupport {
         Files.delete(original.resolve("block"));Files.delete(original);cleanup.deletePending();assertNotNull(jdbc.queryForObject("select physical_deleted_at from source_file where id=?",Object.class,file));
         UUID expired=file();jdbc.update("update source_file set expires_at=clock_timestamp()-interval '1 second' where id=?",expired);capture("expired","GET","/source-files/{fileId}",call("GET","/api/source-files/"+expired,null),404);cleanup.sweep();assertNotNull(jdbc.queryForObject("select deleted_at from source_file where id=?",Object.class,expired));
     }
+    @Test void sourceDeletionDuringCallAndExpiredLeaseNeverRecreateDeletedDrafts() throws Exception {
+        UUID source=file(),job=start(source,"source-late");converter.mode="blocked";converter.entered=new CountDownLatch(1);converter.release=new CountDownLatch(1);
+        try(var executor=Executors.newVirtualThreadPerTaskExecutor()) {
+            var future=executor.submit(worker::runOne);assertTrue(converter.entered.await(5,TimeUnit.SECONDS));
+            capture("delete-during-call","DELETE","/source-files/{fileId}",call("DELETE","/api/source-files/"+source,null),204);converter.release.countDown();assertTrue(future.get(5,TimeUnit.SECONDS));
+        } finally {converter.release.countDown();}
+        assertEquals("cancelled",json(call("GET","/api/conversions/"+job,null)).path("status").asString());assertNull(jdbc.queryForObject("select result from conversion_job where id=?",Object.class,job));
+        converter.mode="normal";UUID resume=start(file(),"resume");UUID lease=UUID.randomUUID();var claimed=service.claim(lease);assertEquals(resume.toString(),claimed.path("id").asString());service.attempt(userId,resume,lease,UUID.randomUUID());
+        jdbc.update("update conversion_job set lease_until=clock_timestamp()-interval '1 second' where id=?",resume);assertTrue(worker.runOne());assertEquals(2,jdbc.queryForObject("select attempt from conversion_job where id=?",Integer.class,resume));result(resume);
+        service.finish(userId,resume,lease,null,null,"LATE_FAILURE");assertEquals("succeeded",json(call("GET","/api/conversions/"+resume,null)).path("status").asString());
+    }
+    @Test void timeoutBudgetPartialPagesAndConfirmationValidation() throws Exception {
+        converter.mode="timeout";UUID timeout=start(file(),"timeout");long started=System.nanoTime();assertTrue(worker.runOne());assertTrue(System.nanoTime()-started<TimeUnit.SECONDS.toNanos(5));
+        var state=json(capture("timeout-failed","GET","/conversions/{conversionId}",call("GET","/api/conversions/"+timeout,null),200));assertEquals("failed",state.path("status").asString());assertTrue(jdbc.queryForObject("select attempt from conversion_job where id=?",Integer.class,timeout)<=2);
+        converter.mode="normal";byte[] pdf=UploadValidationTest.pdf(d->{d.getPage(0).setMediaBox(new org.apache.pdfbox.pdmodel.common.PDRectangle(10,10));d.addPage(new org.apache.pdfbox.pdmodel.PDPage(new org.apache.pdfbox.pdmodel.common.PDRectangle(10,10)));});
+        UUID file=UUID.fromString(json(capture("pdf-upload","POST","/source-files",upload(pdf,"application/pdf",bearer),201)).path("fileId").asString());UUID job=start(file,"partial");assertTrue(worker.runOne());var output=result(job);assertEquals("unreadable",output.path("pages").get(1).path("status").asString());
+        var request=confirmPayload(output,"partial-confirm","부분 문서",output.path("markdown").asString());request.put("expectedResultRevision",2);capture("stale-revision","POST","/conversions/{conversionId}/confirm",call("POST","/api/conversions/"+job+"/confirm",request.toString()),409);
+        request.put("expectedResultRevision",1).put("expectedMarkdownSha256","f".repeat(64));capture("wrong-submitted-hash","POST","/conversions/{conversionId}/confirm",call("POST","/api/conversions/"+job+"/confirm",request.toString()),400);
+        capture("foreign-job","GET","/conversions/{conversionId}",call("GET","/api/conversions/"+job,null,otherBearer),404);
+        request.put("expectedMarkdownSha256",output.path("markdownSha256").asString());capture("partial-confirm","POST","/conversions/{conversionId}/confirm",call("POST","/api/conversions/"+job+"/confirm",request.toString()),201);
+        jdbc.update("update source_file set expires_at=clock_timestamp()-interval '1 day' where id=?",file);cleanup.sweep();call("GET","/api/source-files/"+file,null).andExpect(status().isOk());
+    }
+    @Test void uploadTransactionFailureAndUnreferencedStagingAreCollected() throws Exception {
+        long before;try(var files=Files.list(root)){before=files.count();}
+        assertThrows(com.example.capstone.global.exception.ApiException.class,()->service.upload(UUID.randomUUID(),new java.io.ByteArrayInputStream(UploadValidationTest.png()),"image/png"));
+        try(var files=Files.list(root)){assertEquals(before,files.count());}
+        Path orphan=root.resolve(UUID.randomUUID()+".part");Files.writeString(orphan,"synthetic abandoned source");Files.setLastModifiedTime(orphan,java.nio.file.attribute.FileTime.from(java.time.Instant.now().minusSeconds(7200)));cleanup.sweep();assertFalse(Files.exists(orphan));
+    }
+
+    @Test void confirmationLimitsApplyAfterNfcNormalization() throws Exception {
+        UUID job=start(file(),"nfc");assertTrue(worker.runOne());var output=result(job);
+        String title="각".repeat(200),body="각".repeat(50000);
+        var request=confirmPayload(output,"nfc-confirm",java.text.Normalizer.normalize(title,java.text.Normalizer.Form.NFD),java.text.Normalizer.normalize(body,java.text.Normalizer.Form.NFD));request.put("expectedMarkdownSha256",AiResponseValidator.hash(body));
+        var confirmed=json(capture("nfd-boundary","POST","/conversions/{conversionId}/confirm",call("POST","/api/conversions/"+job+"/confirm",request.toString()),201));
+        assertEquals(body,json(call("GET","/api/notes/"+confirmed.path("noteId").asString(),null)).path("body").asString());
+        request.put("markdown","각".repeat(50001)).put("expectedMarkdownSha256",AiResponseValidator.hash("각".repeat(50001)));capture("nfc-overlimit","POST","/conversions/{conversionId}/confirm",call("POST","/api/conversions/"+job+"/confirm",request.toString()),400);
+    }
+
+    @Test void cleanupRechecksRetentionAfterWaitingForConcurrentConfirmation() throws Exception {
+        UUID source=file(),job=start(source,"retention-race");assertTrue(worker.runOne());var output=result(job);var request=confirmPayload(output,"retention-confirm","보존 경합",output.path("markdown").asString());
+        jdbc.update("update source_file set expires_at=clock_timestamp()+interval '1 second' where id=?",source);
+        CountDownLatch confirmed=new CountDownLatch(1),commit=new CountDownLatch(1);
+        try(var executor=Executors.newVirtualThreadPerTaskExecutor()) {
+            var confirmation=executor.submit(()->new org.springframework.transaction.support.TransactionTemplate(transactions).execute(status->{var result=service.confirm(userId,job,request);confirmed.countDown();try{if(!commit.await(5,TimeUnit.SECONDS))throw new IllegalStateException("test timeout");}catch(InterruptedException e){throw new IllegalStateException(e);}return result;}));
+            assertTrue(confirmed.await(5,TimeUnit.SECONDS));Thread.sleep(1100);var gc=executor.submit(cleanup::sweep);assertThrows(TimeoutException.class,()->gc.get(150,TimeUnit.MILLISECONDS));
+            commit.countDown();assertNotNull(confirmation.get(5,TimeUnit.SECONDS));gc.get(5,TimeUnit.SECONDS);
+            assertNull(jdbc.queryForObject("select deleted_at from source_file where id=?",Object.class,source));call("GET","/api/source-files/"+source,null).andExpect(status().isOk());
+        } finally {commit.countDown();}
+    }
+
 }

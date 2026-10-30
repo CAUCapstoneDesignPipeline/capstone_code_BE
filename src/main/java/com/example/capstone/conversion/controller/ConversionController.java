@@ -22,11 +22,11 @@ public class ConversionController {
         if(request.getMultiFileMap().size()!=1 || !request.getMultiFileMap().containsKey("file") || request.getMultiFileMap().get("file").size()!=1 || !request.getParameterMap().isEmpty())throw ConversionErrors.invalid();
         var parts=request.getParts();if(!parts.isEmpty() && (parts.size()!=1 || parts.stream().anyMatch(p->!p.getName().equals("file"))))throw ConversionErrors.invalid();
         var file=request.getFile("file");if(file==null)throw ConversionErrors.invalid();if(file.getSize()>PrivateSourceStorage.MAX_BYTES)throw ConversionErrors.limit();
-        return ResponseEntity.status(201).cacheControl(CacheControl.noStore()).body(service.upload(user(jwt),file.getInputStream(),file.getContentType()));
+        try(var input=file.getInputStream()) { return ResponseEntity.status(201).cacheControl(CacheControl.noStore()).body(service.upload(user(jwt),input,file.getContentType())); }
     }
     @GetMapping("/api/source-files/{fileId}") public ResponseEntity<byte[]> download(@AuthenticationPrincipal Jwt jwt,@PathVariable UUID fileId) {
         var value=service.download(user(jwt),fileId);String suffix=switch(value.media()){case "image/png"->"png";case "image/jpeg"->"jpg";default->"pdf";};
-        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).header(HttpHeaders.CONTENT_DISPOSITION,"attachment; filename=\"source."+suffix+"\"").header("X-Content-Type-Options","nosniff").contentType(MediaType.parseMediaType(value.media())).contentLength(value.bytes().length).body(value.bytes());
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).header(HttpHeaders.CONTENT_DISPOSITION,"attachment; filename=\"source."+suffix+"\"").header("X-Content-Type-Options","nosniff").contentType(MediaType.APPLICATION_OCTET_STREAM).contentLength(value.bytes().length).body(value.bytes());
     }
     @DeleteMapping("/api/source-files/{fileId}") @ResponseStatus(HttpStatus.NO_CONTENT)
     public ResponseEntity<Void> deleteSource(@AuthenticationPrincipal Jwt jwt,@PathVariable UUID fileId) { service.deleteSource(user(jwt),fileId);cleanup.deletePending();return ResponseEntity.noContent().build(); }

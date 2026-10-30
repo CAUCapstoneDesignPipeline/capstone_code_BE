@@ -45,4 +45,23 @@ class UploadValidationTest {
             try(var files=Files.list(storage)) { for(Path path:files.toList()) { assertTrue(path.toString().endsWith(".pid"));long pid=Long.parseLong(Files.readString(path));assertFalse(ProcessHandle.of(pid).map(ProcessHandle::isAlive).orElse(false));Files.delete(path); } }
         }
     }
+    @Test void exactBytePageAndPixelLimitsAndInheritedGeometry() throws Exception {
+        byte[] small=png();int padding=10_485_760-small.length-12;var padded=new ByteArrayOutputStream();padded.write(small,0,small.length-12);
+        var output=new DataOutputStream(padded);output.writeInt(padding);byte[] kind="npAD".getBytes(java.nio.charset.StandardCharsets.US_ASCII),data=new byte[padding];output.write(kind);output.write(data);var crc=new java.util.zip.CRC32();crc.update(kind);crc.update(data);output.writeInt((int)crc.getValue());padded.write(small,small.length-12,12);
+        var store=storage();assertEquals(10_485_760,store.put(new ByteArrayInputStream(padded.toByteArray()),"image/png").bytes());
+        assertEquals(1,store.put(new ByteArrayInputStream(pdf(d->d.getPage(0).setMediaBox(new org.apache.pdfbox.pdmodel.common.PDRectangle(1200,1200)))),"application/pdf").pages());
+        assertEquals(20,store.put(new ByteArrayInputStream(pdf(d->{d.getPage(0).setMediaBox(new org.apache.pdfbox.pdmodel.common.PDRectangle(10,10));for(int i=1;i<20;i++)d.addPage(new PDPage(new org.apache.pdfbox.pdmodel.common.PDRectangle(10,10)));})),"application/pdf").pages());
+        byte[] giant=small.clone();java.nio.ByteBuffer.wrap(giant,16,8).putInt(5001).putInt(5000);crc.reset();crc.update(giant,12,17);java.nio.ByteBuffer.wrap(giant,29,4).putInt((int)crc.getValue());rejected(giant,"image/png",ErrorCode.UPLOAD_LIMIT_EXCEEDED);
+        rejected(pdf(d->d.getPage(0).getCOSObject().removeItem(COSName.MEDIA_BOX)),"application/pdf",ErrorCode.UNSUPPORTED_FILE_TYPE);
+        rejected(pdf(d->{try{d.protect(new org.apache.pdfbox.pdmodel.encryption.StandardProtectionPolicy("owner","user",new org.apache.pdfbox.pdmodel.encryption.AccessPermission()));}catch(Exception e){throw new IllegalStateException(e);}}),"application/pdf",ErrorCode.UNSUPPORTED_FILE_TYPE);
+    }
+    @Test void rejectsOversizedNestedFormInlineImageBeforeRendering() throws Exception {
+        byte[] bytes=pdf(d->{try{
+            var form=new org.apache.pdfbox.pdmodel.graphics.form.PDFormXObject(d);form.setBBox(new org.apache.pdfbox.pdmodel.common.PDRectangle(10,10));
+            try(var out=form.getCOSObject().createOutputStream()){out.write("BI /W 5001 /H 5000 /CS /RGB /BPC 8 ID x EI".getBytes(java.nio.charset.StandardCharsets.US_ASCII));}
+            d.getPage(0).setResources(new PDResources());d.getPage(0).getResources().put(COSName.getPDFName("Nested"),form);
+        }catch(Exception e){throw new IllegalStateException(e);}});
+        rejected(bytes,"application/pdf",ErrorCode.UPLOAD_LIMIT_EXCEEDED);
+    }
+
 }
