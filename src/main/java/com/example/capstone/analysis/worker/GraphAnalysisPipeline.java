@@ -25,10 +25,11 @@ import com.example.capstone.analysis.config.AiPipelineConfiguration;
 @Component
 public class GraphAnalysisPipeline implements AnalysisPipeline {
     private final com.example.capstone.analysis.service.AnalysisAliasService aliases;
+    private final FactsDerivationPipeline derivations;
     private final ObjectMapper mapper;
     private final AnalysisStageExecutor stages;
     private final AiPipelineConfiguration configuration;
-    public GraphAnalysisPipeline(ObjectMapper mapper,AnalysisStageExecutor stages,AiPipelineConfiguration configuration,com.example.capstone.analysis.service.AnalysisAliasService aliases) { this.mapper=mapper;this.stages=stages;this.configuration=configuration;this.aliases=aliases; }
+    public GraphAnalysisPipeline(ObjectMapper mapper,AnalysisStageExecutor stages,AiPipelineConfiguration configuration,com.example.capstone.analysis.service.AnalysisAliasService aliases,FactsDerivationPipeline derivations) { this.mapper=mapper;this.stages=stages;this.configuration=configuration;this.aliases=aliases;this.derivations=derivations; }
     @Override public boolean configured() { return configuration.configured(); }
     @Override public String policyFingerprint() { return configuration.fingerprint(); }
     @Override public Set<String> requiredProfiles() { return configuration.requiredProfiles(); }
@@ -47,7 +48,8 @@ public class GraphAnalysisPipeline implements AnalysisPipeline {
         merge(work,concepts,canonical);
         List<JsonNode> results=paths(work,documents,extracted,concepts,canonical);
         List<JsonNode> graph=graphItems(work,documents,extracted,concepts,canonical);
-        return new PipelineOutput(List.of(),graph,results);
+        var calculation=derivations.run(work);var all=new ArrayList<>(results);all.addAll(calculation.results());
+        return new PipelineOutput(calculation.facts(),graph,all);
     }
     private void merge(Work work,List<Concept> concepts,Canonical canonical) {
         // 문서별 순환 선택으로 병합 검색량만 제한하고 추출 그래프는 전부 보존한다.
