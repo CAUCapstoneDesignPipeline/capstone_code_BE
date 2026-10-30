@@ -23,6 +23,7 @@ public class AnalysisWorkService {
     @Transactional
     public JsonNode submit(UUID user,UUID note) {
         users.lockById(user).orElseThrow(()->new ApiException(ErrorCode.UNAUTHENTICATED,"로그인이 필요합니다."));
+        repository.retireUnresumable(user,note);
         JsonNode active=repository.active(user,note); if(active!=null) return active;
         List<JsonNode> documents=repository.documents(user,note);
         JsonNode primary=documents.stream().filter(n->n.path("noteId").asString().equals(note.toString())).findFirst()
