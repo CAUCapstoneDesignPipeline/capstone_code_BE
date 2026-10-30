@@ -43,7 +43,7 @@ public class GraphAnalysisPipeline implements AnalysisPipeline {
                 concepts.add(new Concept(id,doc,concept));canonical.add(id);
             }
         }
-        for(var row:aliases.aliases(work.userId())) { String id=row.path("id").asString();canonical.add(id);for(var alias:row.path("aliases")) { canonical.add(alias.asString());canonical.union(id,alias.asString()); } }
+        for(var row:aliases.reusable(work.userId(),work.documents().stream().map(doc->UUID.fromString(doc.path("noteId").asString())).toList())) { String id=row.path("id").asString();canonical.add(id);for(var alias:row.path("aliases")) { canonical.add(alias.asString());canonical.union(id,alias.asString()); } }
         merge(work,concepts,canonical);
         List<JsonNode> results=paths(work,documents,extracted,concepts,canonical);
         List<JsonNode> graph=graphItems(work,documents,extracted,concepts,canonical);
