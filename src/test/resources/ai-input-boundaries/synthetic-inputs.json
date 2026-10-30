@@ -1,0 +1,55 @@
+{
+  "fixtureRevision": "be-input-boundaries-2026-10-30.1",
+  "status": "test-input-only-not-api-contract",
+  "source": "synthetic",
+  "cases": [
+    {
+      "id": "supplementary-before-evidence",
+      "synthetic": true,
+      "rawInput": "# 예시 🧠\n재시도는 중복을 만든다.\n",
+      "storedNfcBody": "# 예시 🧠\n재시도는 중복을 만든다.\n",
+      "bodySha256": "3970a36d0b396ceaa116220d6633d0e5a777ebde13426e4854d41bc57a18aba2",
+      "quote": "재시도는 중복을 만든다.",
+      "startUtf16": 8,
+      "endUtf16": 21,
+      "codePointLength": 21,
+      "utf16Length": 22
+    },
+    {
+      "id": "nfc-combining-input",
+      "synthetic": true,
+      "rawInput": "가\nCafé 비용\n",
+      "storedNfcBody": "가\nCafé 비용\n",
+      "bodySha256": "c5998a53aa1c64037bbe3127ede3806f76d35a15c6a438b59d81ec62ba7e68bb",
+      "quote": "Café 비용",
+      "startUtf16": 2,
+      "endUtf16": 9,
+      "codePointLength": 10,
+      "utf16Length": 10
+    },
+    {
+      "id": "repeated-quote",
+      "synthetic": true,
+      "rawInput": "동일 문장\n다른 문장\n동일 문장\n",
+      "storedNfcBody": "동일 문장\n다른 문장\n동일 문장\n",
+      "bodySha256": "d689b6575e1c4a166d51ba1922bb9a157c658debee5d97c74a2191d7f96f4f5a",
+      "quote": "동일 문장",
+      "startUtf16": 12,
+      "endUtf16": 17,
+      "codePointLength": 18,
+      "utf16Length": 18
+    },
+    {
+      "id": "crlf-preserved",
+      "synthetic": true,
+      "rawInput": "첫 줄\r\n둘째 🧪 줄\r\n",
+      "storedNfcBody": "첫 줄\r\n둘째 🧪 줄\r\n",
+      "bodySha256": "0e8f9cc30b367a21ab2de9c24452afb09b71b3b03cadc195003dbe5aac70f64a",
+      "quote": "둘째 🧪 줄",
+      "startUtf16": 5,
+      "endUtf16": 12,
+      "codePointLength": 13,
+      "utf16Length": 14
+    }
+  ]
+}

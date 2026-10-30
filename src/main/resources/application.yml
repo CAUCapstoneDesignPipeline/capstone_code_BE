@@ -1,14 +1,44 @@
 spring:
   application:
     name: capstone-be
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 11MB
+      file-size-threshold: 0
   jpa:
     hibernate:
       ddl-auto: validate
     open-in-view: false
 
 capstone:
+  conversion:
+    enabled: ${CAPSTONE_CONVERSION_ENABLED:false}
+    storage-root: ${CAPSTONE_CONVERSION_STORAGE_ROOT:}
+    validator-jar: ${CAPSTONE_CONVERSION_VALIDATOR_JAR:}
+    validation-seconds: ${CAPSTONE_CONVERSION_VALIDATION_SECONDS:20}
+    call-seconds: ${CAPSTONE_CONVERSION_CALL_SECONDS:120}
+    worker-enabled: ${CAPSTONE_CONVERSION_WORKER_ENABLED:false}
+    budget-microunits: ${CAPSTONE_CONVERSION_BUDGET_MICROUNITS:0}
+    currency: ${CAPSTONE_CONVERSION_CURRENCY:}
   ai:
     enabled: ${CAPSTONE_AI_ENABLED:false}
+    runtime:
+      release-authorized: ${CAPSTONE_AI_RELEASE_AUTHORIZED:false}
+      suspension-file: ${CAPSTONE_AI_SUSPENSION_FILE:}
+    pipeline:
+      policy-file: ${CAPSTONE_AI_POLICY_FILE:}
+      attestation-file: ${CAPSTONE_AI_ATTESTATION_FILE:}
+      attestation-sha256: ${CAPSTONE_AI_ATTESTATION_SHA256:}
+      synthetic-stub: ${CAPSTONE_AI_SYNTHETIC_STUB:false}
+    execution:
+      worker-enabled: ${CAPSTONE_AI_WORKER_ENABLED:true}
+      budget-microunits: ${CAPSTONE_AI_BUDGET_MICROUNITS:0}
+      currency: ${CAPSTONE_AI_CURRENCY:}
+    client:
+      base-url: ${CAPSTONE_AI_BASE_URL:}
+      service-token: ${CAPSTONE_AI_SERVICE_TOKEN:}
+      ca-certificate: ${CAPSTONE_AI_CA_CERTIFICATE:}
   auth:
     app-url: ${CAPSTONE_APP_URL:http://localhost:5173}
     allowed-emails: ${CAPSTONE_ALLOWED_EMAILS:}
@@ -35,3 +65,11 @@ management:
     health:
       show-details: never
       show-components: never
+
+# 제약 위반 로그의 DB 행/원문 출력을 차단합니다. 오류 응답은 공통 처리기가 담당합니다.
+logging:
+  level:
+    org.hibernate.orm.jdbc.error: OFF
+    org.hibernate.engine.jdbc.spi.SqlExceptionHelper: OFF
+
+# 선택적 업로드/변환 설정: 미설정 상태에서도 기존 CRUD를 제공한다.

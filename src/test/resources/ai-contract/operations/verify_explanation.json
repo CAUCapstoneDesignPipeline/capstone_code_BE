@@ -1,0 +1,219 @@
+{
+  "request": {
+    "context": {
+      "analysisJobId": "4dbb78a4-74fa-454a-89d2-25a964d5ed2c",
+      "stageExecutionId": "96334938-4ed7-42b0-b847-cf1f081671f5",
+      "userId": "c49bdcd3-9f13-5186-93c2-28eccf386140",
+      "noteId": "10f77e94-6b1f-5e82-b8cd-f6847b0e5479",
+      "noteVersion": 3,
+      "inputRevision": 4,
+      "graphRevision": 7,
+      "pipelineVersion": "pipeline-fixture-1"
+    },
+    "profileVersion": "explanation-det-2",
+    "documents": [
+      {
+        "noteId": "10f77e94-6b1f-5e82-b8cd-f6847b0e5479",
+        "noteVersion": 3,
+        "inputRevision": 4,
+        "title": "note-1",
+        "body": "# 지식 🧠\n**재시도**는 중복을 만든다.\n",
+        "bodySha256": "f74ba80f796eecfc7f65b9f5ac89f7d1976da171cbe6cdcf2311f0a1bf7371d3",
+        "topic": {
+          "id": "27d8c4db-f3fb-5b56-b20f-188c42f8288d",
+          "name": "네트워크"
+        }
+      },
+      {
+        "noteId": "4a14ccc1-bfd4-554b-9500-08998d709a36",
+        "noteVersion": 3,
+        "inputRevision": 4,
+        "title": "note-2",
+        "body": "# DB\n중복은 오류를 만든다.\n",
+        "bodySha256": "9dc261aa45b51cbd51582df02c0ae2189d9f0cff24482e95669e0f4b6d8f7e6a",
+        "topic": {
+          "id": "83c6e69f-a2f1-5540-8071-610f9fbc37a6",
+          "name": "DB"
+        }
+      }
+    ],
+    "evidence": [
+      {
+        "evidenceId": "6cee49e9-0505-5853-9b30-e9254dc26f48",
+        "noteId": "10f77e94-6b1f-5e82-b8cd-f6847b0e5479",
+        "noteVersion": 3,
+        "bodySha256": "f74ba80f796eecfc7f65b9f5ac89f7d1976da171cbe6cdcf2311f0a1bf7371d3",
+        "startOffset": 8,
+        "endOffset": 25,
+        "quote": "**재시도**는 중복을 만든다."
+      },
+      {
+        "evidenceId": "fead3cae-7388-5d6d-88ea-f68ab0a01a86",
+        "noteId": "4a14ccc1-bfd4-554b-9500-08998d709a36",
+        "noteVersion": 3,
+        "bodySha256": "9dc261aa45b51cbd51582df02c0ae2189d9f0cff24482e95669e0f4b6d8f7e6a",
+        "startOffset": 5,
+        "endOffset": 17,
+        "quote": "중복은 오류를 만든다."
+      }
+    ],
+    "path": {
+      "pathId": "d89fe9d1-bf21-58da-ad0e-ad52816b7f49",
+      "concepts": [
+        {
+          "conceptId": "42ed80a7-9357-5444-8951-ecf67cc142f9",
+          "label": "재시도"
+        },
+        {
+          "conceptId": "2562b589-6615-5349-881c-b52ee1c3ae29",
+          "label": "중복"
+        },
+        {
+          "conceptId": "c1c738ee-7d49-52a9-ba0d-6b05a78918fc",
+          "label": "오류"
+        }
+      ],
+      "sourceConceptId": "42ed80a7-9357-5444-8951-ecf67cc142f9",
+      "bridgeConceptId": "2562b589-6615-5349-881c-b52ee1c3ae29",
+      "targetConceptId": "c1c738ee-7d49-52a9-ba0d-6b05a78918fc",
+      "steps": [
+        {
+          "stepOrder": 1,
+          "relationId": "6819f6d8-0404-5712-939d-52f1bec1ef94",
+          "fromConceptId": "42ed80a7-9357-5444-8951-ecf67cc142f9",
+          "toConceptId": "2562b589-6615-5349-881c-b52ee1c3ae29",
+          "typeCode": "cause",
+          "evidenceIds": [
+            "6cee49e9-0505-5853-9b30-e9254dc26f48"
+          ]
+        },
+        {
+          "stepOrder": 2,
+          "relationId": "d91e6535-c622-564f-a95f-68b548cc749b",
+          "fromConceptId": "2562b589-6615-5349-881c-b52ee1c3ae29",
+          "toConceptId": "c1c738ee-7d49-52a9-ba0d-6b05a78918fc",
+          "typeCode": "cause",
+          "evidenceIds": [
+            "fead3cae-7388-5d6d-88ea-f68ab0a01a86"
+          ]
+        }
+      ],
+      "proposedTypeCode": "indirect_cause"
+    },
+    "policy": {
+      "version": "relations-fixture-1",
+      "relationTypes": [
+        {
+          "code": "cause",
+          "label": "원인",
+          "description": "앞 개념이 뒤 개념을 일으킴"
+        },
+        {
+          "code": "indirect_cause",
+          "label": "간접 원인",
+          "description": "두 원인 경로의 합성"
+        }
+      ],
+      "compositionRules": [
+        {
+          "firstType": "cause",
+          "secondType": "cause",
+          "resultType": "indirect_cause"
+        }
+      ]
+    },
+    "explanation": {
+      "summary": "이 예시의 두 전제가 성립하면 재시도는 중복을 통해 오류로 이어질 수 있다.",
+      "claims": [
+        {
+          "claimRef": "claim-1",
+          "kind": "premise",
+          "text": "재시도는 중복을 만든다.",
+          "evidenceIds": [
+            "6cee49e9-0505-5853-9b30-e9254dc26f48"
+          ]
+        },
+        {
+          "claimRef": "claim-2",
+          "kind": "premise",
+          "text": "중복은 오류를 만든다.",
+          "evidenceIds": [
+            "fead3cae-7388-5d6d-88ea-f68ab0a01a86"
+          ]
+        },
+        {
+          "claimRef": "claim-3",
+          "kind": "conclusion",
+          "text": "예시 합성 규칙 아래 재시도는 오류의 간접 원인이다.",
+          "evidenceIds": [
+            "6cee49e9-0505-5853-9b30-e9254dc26f48",
+            "fead3cae-7388-5d6d-88ea-f68ab0a01a86"
+          ]
+        }
+      ]
+    },
+    "generationProvenance": [
+      {
+        "profileVersion": "extract-fixture-1",
+        "provider": "fixture",
+        "model": "extract-model",
+        "modelRevision": "fixture-revision-1",
+        "promptVersion": "extract-prompt-1",
+        "schemaVersion": "1.0",
+        "preprocessingVersion": "markdown-source-map-1"
+      }
+    ]
+  },
+  "response": {
+    "context": {
+      "analysisJobId": "4dbb78a4-74fa-454a-89d2-25a964d5ed2c",
+      "stageExecutionId": "96334938-4ed7-42b0-b847-cf1f081671f5",
+      "userId": "c49bdcd3-9f13-5186-93c2-28eccf386140",
+      "noteId": "10f77e94-6b1f-5e82-b8cd-f6847b0e5479",
+      "noteVersion": 3,
+      "inputRevision": 4,
+      "graphRevision": 7,
+      "pipelineVersion": "pipeline-fixture-1"
+    },
+    "meta": {
+      "profileVersion": "explanation-det-2",
+      "provider": "local",
+      "model": "rules-explanation-check",
+      "modelRevision": "0b664d58ae63",
+      "promptVersion": "explanation-rules-1",
+      "schemaVersion": "1.0",
+      "preprocessingVersion": "md-plain-1",
+      "durationMs": 0
+    },
+    "overall": "pass",
+    "claimVerdicts": [
+      {
+        "claimRef": "claim-1",
+        "outcome": "pass",
+        "reason": "단계 1의 근거 원문에 두 개념이 나오고 주장이 그 관계를 말합니다.",
+        "evidenceIds": [
+          "6cee49e9-0505-5853-9b30-e9254dc26f48"
+        ]
+      },
+      {
+        "claimRef": "claim-2",
+        "outcome": "pass",
+        "reason": "단계 2의 근거 원문에 두 개념이 나오고 주장이 그 관계를 말합니다.",
+        "evidenceIds": [
+          "fead3cae-7388-5d6d-88ea-f68ab0a01a86"
+        ]
+      },
+      {
+        "claimRef": "claim-3",
+        "outcome": "pass",
+        "reason": "두 전제의 근거를 잇고 합성 규칙(cause + cause → indirect_cause)에 맞습니다.",
+        "evidenceIds": [
+          "6cee49e9-0505-5853-9b30-e9254dc26f48",
+          "fead3cae-7388-5d6d-88ea-f68ab0a01a86"
+        ]
+      }
+    ],
+    "gaps": []
+  },
+  "verificationScope": "actual HTTP response"
+}

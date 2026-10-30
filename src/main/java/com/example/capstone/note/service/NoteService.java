@@ -28,8 +28,9 @@ public class NoteService {
     private final AppUserRepository users;
     private final TopicService topics;
     private final Clock clock;
-    public NoteService(NoteRepository notes,AppUserRepository users,TopicService topics,Clock clock) {
-        this.notes=notes; this.users=users; this.topics=topics; this.clock=clock;
+    private final com.example.capstone.analysis.service.AnalysisInvalidationService invalidation;
+    public NoteService(NoteRepository notes,AppUserRepository users,TopicService topics,Clock clock,com.example.capstone.analysis.service.AnalysisInvalidationService invalidation) {
+        this.notes=notes; this.users=users; this.topics=topics; this.clock=clock;this.invalidation=invalidation;
     }
     @Transactional
     public NoteResponse create(UUID userId,NoteCreateRequest request) {
@@ -52,8 +53,11 @@ public class NoteService {
             throw new ApiException(ErrorCode.NOTE_CONFLICT,"다른 곳에서 이 노트가 먼저 수정되었습니다.",Map.of("current",NoteResponse.from(note)));
         }
         checkTitle(userId,note.getTopicId(),title,id);
+        boolean bodyChanged=!note.getBody().equals(body);
         note.edit(title,body,clock.instant());
-        return NoteResponse.from(save(note));
+        Note saved=save(note);
+        invalidation.noteChanged(userId,id,bodyChanged);
+        return NoteResponse.from(saved);
     }
     @Transactional
     public NoteResponse move(UUID userId,UUID id,UUID destination) {
@@ -73,6 +77,7 @@ public class NoteService {
             }
             throw exception;
         }
+        if(!java.util.Objects.equals(note.getTopicId(),destination)) invalidation.noteChanged(userId,id,true);
         return NoteResponse.from(owned(userId,id,false));
     }
     private ApiException moveDuplicate(String title) {
@@ -85,6 +90,7 @@ public class NoteService {
         if(notes.hasEvidence(userId,id)) {
             throw new ApiException(ErrorCode.NOTE_DELETE_BLOCKED,"근거가 연결된 노트는 아직 삭제할 수 없습니다.");
         }
+        invalidation.noteChanged(userId,id,false);
         notes.delete(note); notes.flush();
     }
     @Transactional(readOnly=true)

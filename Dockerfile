@@ -15,9 +15,11 @@ LABEL org.opencontainers.image.source="https://github.com/CAUCapstoneDesignPipel
 RUN groupadd --gid 10001 capstone && useradd --uid 10001 --gid 10001 --no-create-home capstone
 WORKDIR /app
 COPY --from=build --chown=10001:10001 /workspace/build/libs/*.jar /app/app.jar
+COPY --from=build /workspace/build/validation/upload-validator.jar /app/upload-validator.jar
 COPY --from=build /tmp/health /app/health
 USER 10001:10001
 ENV JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=65 -XX:InitialRAMPercentage=20 -XX:+ExitOnOutOfMemoryError -Duser.timezone=UTC"
+ENV CAPSTONE_CONVERSION_VALIDATOR_JAR="/app/upload-validator.jar"
 EXPOSE 8080
 HEALTHCHECK --interval=10s --timeout=5s --start-period=120s --retries=6 CMD ["java", "-cp", "/app/health", "Healthcheck"]
 ENTRYPOINT ["java", "-jar", "/app/app.jar"]
