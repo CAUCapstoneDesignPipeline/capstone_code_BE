@@ -37,6 +37,12 @@ public final class AiResponseValidator {
             }
         }
     }
+    public void validateRequest(JsonNode request) {
+        Map<String,JsonNode> documents=new HashMap<>();
+        if(request.has("note")) add(documents,request.path("note"));
+        for(String field:new String[]{"documents","candidates","notes"}) for(var doc:request.path(field)) if(doc.has("body")) add(documents,doc);
+        walk(request,documents,request.path("note"),0);
+    }
     private void add(Map<String, JsonNode> documents, JsonNode doc) {
         String body = doc.path("body").asString();
         require(Normalizer.isNormalized(body, Normalizer.Form.NFC));
