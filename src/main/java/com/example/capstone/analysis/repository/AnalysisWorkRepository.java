@@ -14,6 +14,14 @@ import com.example.capstone.analysis.client.AiResponseValidator;
 public class AnalysisWorkRepository {
     private final AnalysisStore db;
     public AnalysisWorkRepository(AnalysisStore db) { this.db=db; }
+    public void retireUnresumable(UUID user,UUID note) {
+        db.write("""
+          update analysis_job j set status='failed',lifecycle_state='failed',finished_at=clock_timestamp(),lease_token=null,lease_until=null,
+           failure_code=case when lifecycle_state is null then 'LEGACY_WORK_NOT_RESUMABLE' else 'TIMEOUT' end
+          where j.note_id=:note and j.status in ('pending','running') and (j.lifecycle_state is null or j.deadline<=clock_timestamp())
+           and exists(select 1 from note n where n.id=j.note_id and n.user_id=:user)
+          """,Map.of("user",user,"note",note));
+    }
     public JsonNode active(UUID user,UUID note) {
         return db.one("select to_jsonb(j)::text from analysis_job j where j.note_id=:note and j.status in ('pending','running') and exists(select 1 from note n where n.id=j.note_id and n.user_id=:user)",Map.of("user",user,"note",note));
     }
