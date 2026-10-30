@@ -15,6 +15,7 @@ public class AnalysisAliasService {
     private final AnalysisGraphRepository repository;
     public AnalysisAliasService(AnalysisGraphRepository repository) { this.repository=repository; }
     @Transactional(readOnly=true) public List<JsonNode> aliases(UUID user) { return repository.aliases(user); }
+    @Transactional(readOnly=true) public List<JsonNode> reusable(UUID user,List<UUID> notes) { return repository.reusableAliases(user,notes); }
     public static Map<String,String> mapping(List<JsonNode> rows) {
         var parent=new HashMap<String,String>();
         for(var row:rows) {

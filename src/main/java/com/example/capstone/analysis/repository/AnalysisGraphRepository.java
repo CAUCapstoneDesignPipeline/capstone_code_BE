@@ -28,6 +28,14 @@ public class AnalysisGraphRepository {
              and (nj.created_at,nj.id)>(j.created_at,j.id)) order by g.id
           """,p);
     }
+    public List<JsonNode> reusableAliases(UUID user,List<UUID> notes) {
+        return db.rows("""
+          select g.value::text from analysis_graph_item g join analysis_job j on j.id=g.job_id and j.user_id=g.user_id
+          where g.user_id=:user and g.kind='concept' and j.status='succeeded' and jsonb_typeof(g.value->'aliases')='array'
+           and not exists(select 1 from analysis_snapshot s where s.job_id=g.job_id and s.user_id=g.user_id
+            and (s.freshness<>'current' or s.original_note_id not in (:notes))) order by g.id
+          """,Map.of("user",user,"notes",notes));
+    }
     public List<JsonNode> aliases(UUID user) {
         return db.rows("""
           select g.value::text from analysis_graph_item g join analysis_job j on j.id=g.job_id and j.user_id=g.user_id
