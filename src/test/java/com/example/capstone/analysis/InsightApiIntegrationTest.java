@@ -98,7 +98,7 @@ class InsightApiIntegrationTest extends ApiIntegrationSupport {
         call("GET","/api/graph?scope=topic",null).andExpect(status().isBadRequest());writeCaptures();
     }
     @Test void nonemptyGraphPreservesOwnedEvidenceAndRelationDetail() throws Exception {
-        UUID a=note("graph-a",null,"가"),b=note("graph-b",null,"나");work.submit(userId,a);var job=work.claim();
+        UUID a=note("graph-a",null,"가"),b=note("graph-b",null,"나"),primary=note("empty-trigger",null,"");work.submit(userId,primary);var job=work.claim();
         JsonNode sa=job.documents().stream().filter(d->d.path("noteId").asString().equals(a.toString())).findFirst().orElseThrow();
         JsonNode sb=job.documents().stream().filter(d->d.path("noteId").asString().equals(b.toString())).findFirst().orElseThrow();
         UUID ca=UUID.randomUUID(),cb=UUID.randomUUID(),relationId=UUID.randomUUID();
@@ -117,7 +117,8 @@ class InsightApiIntegrationTest extends ApiIntegrationSupport {
         JsonNode global=capture("nonempty-graph","GET","/graph",call("GET","/api/graph",null).andExpect(status().isOk()));assertEquals(2,global.path("nodes").size());assertEquals(1,global.path("edges").size());
         capture("relation-detail","GET","/relations/{relationId}",call("GET","/api/relations/"+relationId,null).andExpect(status().isOk()));
         call("GET","/api/relations/"+relationId,null,otherBearer).andExpect(status().isNotFound());
-        call("DELETE","/api/notes/"+a,null).andExpect(status().isConflict());writeCaptures();
+        call("DELETE","/api/notes/"+a,null).andExpect(status().isConflict());
+        call("DELETE","/api/notes/"+primary,null).andExpect(status().isConflict());writeCaptures();
     }
     private ObjectNode item(JsonNode doc,String kind,JsonNode value) {
         var item=mapper.createObjectNode();item.put("id",UUID.randomUUID().toString());item.set("snapshotId",doc.path("snapshotId"));item.put("kind",kind);item.put("ref",value.path("id").asString());item.set("value",value);return item;
