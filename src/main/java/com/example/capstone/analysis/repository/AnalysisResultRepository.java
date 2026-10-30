@@ -18,7 +18,7 @@ public class AnalysisResultRepository {
             var fact=item.path("fact");var span=fact.path("evidence");
             var p=base(work,item);p.put("ref",fact.path("factId").asString());p.put("kind",fact.path("kind").asString());
             p.put("subject",fact.path("subjectKey").asString());p.put("profile",item.path("meta").path("profileVersion").asString());
-            p.put("value",db.json(fact));p.put("provenance",db.json(item.path("meta")));span(p,span);
+            p.put("value",db.json(fact));p.put("provenance",db.json(item.has("provenance")?item.path("provenance"):item.path("meta")));span(p,span);
             db.write("""
               insert into analysis_fact(id,user_id,job_id,snapshot_id,external_ref,kind,subject_key,profile_version,value,provenance,start_offset,end_offset,quote)
               values(:id,:user,:job,:snapshot,:ref,:kind,:subject,:profile,cast(:value as jsonb),cast(:provenance as jsonb),:start,:end,:quote)

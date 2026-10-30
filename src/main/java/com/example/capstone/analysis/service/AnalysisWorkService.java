@@ -61,6 +61,7 @@ public class AnalysisWorkService {
     @Transactional public void fail(Work work,String reason) {
         if(repository.lockValid(work.userId(),work.id(),work.leaseToken())) repository.finish(work.id(),work.leaseToken(),"failed",reason);
     }
+    @Transactional(readOnly=true) public JsonNode cachedFacts(Work work,String key,UUID note) { return repository.cachedFacts(work.userId(),key,note); }
     @Transactional(readOnly=true) public JsonNode checkpoint(Work work,String key,String hash) { return repository.checkpoint(work.id(),key,hash); }
     @Transactional public void reserveAttempt(Work work,String key,String operation,JsonNode request) {
         users.lockById(work.userId()).orElseThrow();
