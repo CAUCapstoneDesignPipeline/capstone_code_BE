@@ -69,6 +69,26 @@ class AiHttpClientTest {
             assertThrows(AiCallException.class, () -> validator.validate(AiOperation.FACTS, request, response), mutation);
         }
     }
+    @Test void derivationsRejectForeignFactsDocumentsAndInvalidDependencies() throws Exception {
+        JsonNode fixture;
+        try (var in=getClass().getResourceAsStream("/ai-contract/derive-normal.json")) { fixture=mapper.readTree(in); }
+        validator.validate(AiOperation.DERIVE,fixture.path("request"),fixture.path("response"));
+        for(String mutation:new String[]{"scope","note","premise","condition","step","dependency","duplicate"}) {
+            ObjectNode response=(ObjectNode)fixture.path("response").deepCopy();
+            ObjectNode d=(ObjectNode)response.path("derivations").get(0);
+            switch(mutation) {
+                case "scope" -> ((ObjectNode)response.path("noveltyScope")).putArray("noteIds").add("00000000-0000-4000-8000-000000000099");
+                case "note" -> d.putArray("noteIds").add("00000000-0000-4000-8000-000000000099");
+                case "premise" -> d.putArray("premiseFactIds").add("foreign-fact");
+                case "condition" -> ((ObjectNode)d.path("conditions").get(0)).put("factId","foreign-fact");
+                case "step" -> ((ObjectNode)d.path("steps").get(0)).putArray("factIds").add("foreign-fact");
+                case "dependency" -> d.put("dependsOn",d.path("derivationId").asString());
+                case "duplicate" -> ((tools.jackson.databind.node.ArrayNode)response.path("derivations")).add(d.deepCopy());
+                default -> fail();
+            }
+            assertThrows(AiCallException.class,()->validator.validate(AiOperation.DERIVE,fixture.path("request"),response),mutation);
+        }
+    }
     @Test void readinessRequiresEveryProfileAndNeverTrustsHttp200Alone() throws Exception {
         try (var server = new ScriptedAiServer(TOKEN, AiHttpClient.REQUEST_LIMIT)) {
             server.enqueue(new ScriptedAiServer.Reply(200, "{\"status\":\"ready\",\"schemaVersion\":\"1.0\",\"profileVersions\":[]}", Map.of()));
