@@ -80,6 +80,12 @@ class AnalysisInvalidationIntegrationTest extends ApiIntegrationSupport {
         assertEquals(2,jdbc.queryForObject("select count(*) from analysis_job where note_id=?",Integer.class,a));
         var fresh=work.claim();work.fail(fresh,"TEST_END");
     }
+    @Test void restartedWorkerRejectsQueuedWorkFromPreviousPolicyBeforeExternalCalls() throws Exception {
+        UUID a=note("old policy",null,"가");work.submit(userId,a,AiResponseValidator.hash("old"));Work claimed=work.claim();
+        assertFalse(work.current(claimed,AiResponseValidator.hash("new")));
+        assertEquals("superseded",jdbc.queryForObject("select lifecycle_state from analysis_job where id=?",String.class,claimed.id()));
+        assertEquals(0,jdbc.queryForObject("select count(*) from analysis_stage where job_id=?",Integer.class,claimed.id()));
+    }
     private ObjectNode result(Work job,List<UUID> notes) {
         ObjectNode r=mapper.createObjectNode();UUID id=UUID.randomUUID();r.put("id",id.toString());r.put("ref",id.toString());r.put("identitySha256",AiResponseValidator.hash(id.toString()));r.put("kind","derivation");r.put("conclusion","합성결론");r.putArray("conditions");r.putArray("trace");r.putObject("detail");r.put("derivationStatus","conclusion");r.put("soundness","sound");r.putArray("dependsOn");
         var novelty=r.putArray("noveltyNoteIds");var evidence=r.putArray("evidence");

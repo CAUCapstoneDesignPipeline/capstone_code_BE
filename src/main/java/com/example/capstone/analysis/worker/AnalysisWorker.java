@@ -33,7 +33,7 @@ public class AnalysisWorker {
                 try { if(!work.heartbeat(claimed)) lost.set(true); } catch(RuntimeException failure) { lost.set(true); }
             },10,10,TimeUnit.SECONDS);
             try {
-                if(!work.current(claimed)) return true;
+                if(!work.current(claimed,pipeline.getObject().policyFingerprint())) return true;
                 var output=pipeline.getObject().run(claimed);
                 if(!lost.get() && activation.configured()) work.complete(claimed,output);
                 else work.fail(claimed,"CANCELLED");

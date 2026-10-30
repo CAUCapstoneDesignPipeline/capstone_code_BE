@@ -26,6 +26,12 @@ public class AnalysisResultRepository {
               """,p);
         }
         for(var item:output.graphItems()) {
+            JsonNode doc=work.documents().stream().filter(d->d.path("snapshotId").asString().equals(item.path("snapshotId").asString())).findFirst().orElseThrow();
+            if(item.path("kind").asString().equals("relation")) for(var e:item.path("value").path("evidence")) {
+                AiResponseValidator.require(e.path("noteId").equals(doc.path("noteId")) && e.path("noteVersion").equals(doc.path("noteVersion")));
+                AiResponseValidator.span(doc.path("body").asString(),e.path("startOffset").asInt(-1),e.path("endOffset").asInt(-1),e.path("quote").asString());
+            }
+
             var p=base(work,item);p.put("kind",item.path("kind").asString());p.put("ref",item.path("ref").asString());p.put("value",db.json(item.path("value")));
             db.write("""
               insert into analysis_graph_item(id,user_id,job_id,snapshot_id,kind,external_ref,value)
