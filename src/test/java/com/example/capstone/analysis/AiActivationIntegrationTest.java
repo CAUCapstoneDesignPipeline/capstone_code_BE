@@ -45,6 +45,7 @@ class AiActivationIntegrationTest extends ApiIntegrationSupport {
     @Autowired AnalysisWorker worker;
     @org.springframework.test.context.bean.override.mockito.MockitoSpyBean com.example.capstone.analysis.config.AiFeatureGate gate;
     @Autowired org.springframework.transaction.PlatformTransactionManager transactions;
+    @org.springframework.test.context.bean.override.mockito.MockitoSpyBean com.example.capstone.analysis.repository.AiRuntimeFenceRepository runtimeFence;
     @BeforeEach void reset() throws Exception { Files.deleteIfExists(stop);server.mode="normal";server.readiness="ready";server.requests.clear();server.release.countDown(); }
     UUID submit(UUID note) throws Exception { return UUID.fromString(json(call("POST","/api/notes/"+note+"/analysis",null).andExpect(status().isAccepted())).path("id").asString()); }
     boolean capability() throws Exception { return json(call("GET","/api/capabilities",null).andExpect(status().isOk())).path("analysisEnabled").asBoolean(); }
@@ -130,6 +131,19 @@ class AiActivationIntegrationTest extends ApiIntegrationSupport {
         assertEquals("MISCONFIGURED",json(refused).path("error").path("details").path("reason").asString());
         var captures=mapper.createArrayNode();capture(captures,"final-fence-stop","POST","/notes/{noteId}/analysis",refused,503);writeCaptures("final-fence",captures);
         assertTrue(jdbc.queryForObject("select epoch from analysis_runtime_fence",Long.class)>before);
+    }
+    @Test void admissionRetriesFailedAfterCompletionFlushBefore503OrReturns500() throws Exception {
+        for(boolean persistentFailure:List.of(false,true)) {
+            UUID note=note("실패 경계 "+persistentFailure,null,"원문");long epoch=jdbc.queryForObject("select epoch from analysis_runtime_fence",Long.class);
+            var calls=new java.util.concurrent.atomic.AtomicInteger();
+            org.mockito.Mockito.doAnswer(invocation->{ if(persistentFailure || calls.getAndIncrement()==0)throw new IllegalStateException("synthetic fence outage");return invocation.callRealMethod(); }).when(runtimeFence).disable();
+            org.mockito.Mockito.doAnswer(invocation->{Files.writeString(stop,"disabled");try{return invocation.callRealMethod();}finally{Files.delete(stop);}}).when(gate).stillAllowed();
+            var response=call("POST","/api/notes/"+note+"/analysis",null);
+            if(persistentFailure) { response.andExpect(status().isInternalServerError());assertEquals(epoch,jdbc.queryForObject("select epoch from analysis_runtime_fence",Long.class)); }
+            else { response.andExpect(status().isServiceUnavailable());assertTrue(jdbc.queryForObject("select epoch from analysis_runtime_fence",Long.class)>epoch); }
+            org.mockito.Mockito.doCallRealMethod().when(runtimeFence).disable();org.mockito.Mockito.doCallRealMethod().when(gate).stillAllowed();
+            assertTrue(capability());assertTrue(jdbc.queryForObject("select epoch from analysis_runtime_fence",Long.class)>epoch);
+        }
     }
     @Test @DirtiesContext void responseProfileMismatchQuarantinesCapabilitiesUntilRestart() throws Exception {
         UUID note=note("앞",null,"A>B");note("뒤",null,"B>C");UUID job=submit(note);server.mode="profile-mismatch";assertTrue(worker.runOne());

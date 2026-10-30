@@ -35,6 +35,11 @@ public class AnalysisService {
     public AnalysisJobResponse request(UUID userId,UUID noteId) {
         notes.requireOwned(userId,noteId);
         activation.requireAvailable();
-        return AnalysisJobResponse.from(work.submit(userId,noteId,activation.policyFingerprint()));
+        try { return AnalysisJobResponse.from(work.submit(userId,noteId,activation.policyFingerprint())); }
+        catch(ApiException failure) {
+            // afterCompletion 콜백 오류를 Spring이 삼켜도 정상 off 응답 전에 동기 확인한다.
+            if(failure.errorCode()==ErrorCode.AI_UNAVAILABLE)activation.flushRevocation();
+            throw failure;
+        }
     }
 }
