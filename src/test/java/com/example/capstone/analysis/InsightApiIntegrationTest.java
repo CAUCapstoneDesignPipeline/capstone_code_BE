@@ -29,7 +29,7 @@ import com.example.capstone.support.ApiIntegrationSupport;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@SpringBootTest
+@SpringBootTest(properties={"capstone.ai.enabled=true","capstone.ai.execution.worker-enabled=false","capstone.ai.execution.poll-ms=3600000"})
 @AutoConfigureMockMvc(print=MockMvcPrint.NONE)
 @ActiveProfiles("test")
 @Testcontainers

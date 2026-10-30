@@ -20,6 +20,8 @@ public final class SyntheticPipelineServer implements AutoCloseable {
     private final java.util.concurrent.ExecutorService executor=Executors.newVirtualThreadPerTaskExecutor();
     public final List<JsonNode> requests=new CopyOnWriteArrayList<>();
     public volatile String mode="normal";
+    public volatile String readiness="ready";
+    public volatile java.util.concurrent.CountDownLatch entered=new java.util.concurrent.CountDownLatch(0),release=new java.util.concurrent.CountDownLatch(0);
     public volatile boolean calculation;
     public volatile String calculationState="sound";
     public final JsonNode derivationFixture=fixture();
@@ -32,10 +34,12 @@ public final class SyntheticPipelineServer implements AutoCloseable {
                     if(!("Bearer "+TOKEN).equals(exchange.getRequestHeaders().getFirst("Authorization"))) { exchange.sendResponseHeaders(401,-1);return; }
                     String path=exchange.getRequestURI().getPath().replaceFirst("^/internal/v1","");JsonNode response;
                     if(path.equals("/health/ready")) {
-                        var ready=mapper.createObjectNode().put("status","ready").put("schemaVersion","1.0");ready.set("profileVersions",mapper.valueToTree(List.of("extract-det-3","embeddings-bge-m3-1","merge-det-1","bridges-det-1","edges-det-1","explain-llm-8","explanation-det-3","links-det-1","facts-llm-1","derive-sound-1")));response=ready;
+                        if(readiness.equals("timeout"))Thread.sleep(4000);
+                        if(readiness.equals("unavailable")) { exchange.sendResponseHeaders(503,-1);return; }
+                        var ready=mapper.createObjectNode().put("status","ready").put("schemaVersion","1.0");ready.set("profileVersions",mapper.valueToTree(List.of("extract-det-3","embeddings-bge-m3-1","merge-det-1","bridges-det-1","edges-det-1","explain-llm-8","explanation-det-3","links-det-1","facts-llm-1","derive-sound-1")));if(readiness.equals("missing"))((ArrayNode)ready.path("profileVersions")).remove(8);response=ready;
                     } else {
                         byte[] bytes=exchange.getRequestBody().readNBytes(2097153);if(bytes.length>2097152) { exchange.sendResponseHeaders(413,-1);return; }
-                        JsonNode request=mapper.readTree(bytes);requests.add(request);response=respond(path,request);
+                        JsonNode request=mapper.readTree(bytes);requests.add(request);if(mode.equals("blocked") && path.equals("/explanations")) { entered.countDown();release.await(10,java.util.concurrent.TimeUnit.SECONDS); }response=respond(path,request);
                     }
                     byte[] encoded=mapper.writeValueAsBytes(response);exchange.getResponseHeaders().set("Content-Type","application/json");
                     String correlation=exchange.getRequestHeaders().getFirst("X-Request-Id");if(correlation!=null) exchange.getResponseHeaders().set("X-Request-Id",correlation);
@@ -47,7 +51,7 @@ public final class SyntheticPipelineServer implements AutoCloseable {
     public URI uri() { return URI.create("http://localhost:"+server.getAddress().getPort()); }
     private ObjectNode base(JsonNode request) {
         var r=mapper.createObjectNode();r.set("context",request.path("context"));var meta=r.putObject("meta");
-        meta.set("profileVersion",request.path("profileVersion"));meta.put("provider","synthetic");meta.put("model",request.path("profileVersion").asString());meta.put("modelRevision","synthetic-1");meta.put("promptVersion",request.path("profileVersion").asString());meta.put("schemaVersion","1.0");meta.put("preprocessingVersion","synthetic-1");meta.put("durationMs",1);return r;
+        meta.set("profileVersion",request.path("profileVersion"));if(mode.equals("profile-mismatch"))meta.put("profileVersion","unsupported-profile");meta.put("provider","synthetic");meta.put("model",request.path("profileVersion").asString());meta.put("modelRevision","synthetic-1");meta.put("promptVersion",request.path("profileVersion").asString());meta.put("schemaVersion","1.0");meta.put("preprocessingVersion","synthetic-1");meta.put("durationMs",1);return r;
     }
     private JsonNode respond(String path,JsonNode q) {
         ObjectNode r=base(q);
