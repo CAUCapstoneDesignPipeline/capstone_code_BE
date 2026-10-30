@@ -115,6 +115,10 @@ public final class SyntheticPipelineServer implements AutoCloseable {
                     if(state.equals("unchecked") || state.equals("missing"))row.putNull("soundness");
                     else { var sound=row.putObject("soundness").put("verdict",state.equals("rejected")?"unsound":"sound").put("reason","합성 구조 검증");sound.putArray("unfaithfulFactIds"); }
                     if(state.equals("missing"))row.putArray("missing").add("합성 전제 누락");
+                    if(mode.equals("condition-only-doc")) {
+                        var permitted=new java.util.HashSet<String>();for(var f:q.path("facts"))if(f.path("evidence").path("noteId").equals(q.path("context").path("noteId")))permitted.add(f.path("factId").asString());
+                        var premises=mapper.createArrayNode();for(var id:row.path("premiseFactIds"))if(permitted.contains(id.asString()))premises.add(id);row.set("premiseFactIds",premises);row.putArray("noteIds").add(q.path("context").path("noteId"));
+                    }
                 }
             }
             case "/explanations" -> {

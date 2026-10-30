@@ -69,7 +69,7 @@ public class FactsDerivationPipeline {
             result.put("identitySha256",AiResponseValidator.hash(configuration.fingerprint()+":"+AiResponseValidator.canonicalJson(semantic)));result.set("conclusion",derivation.path("conclusion"));
             var conditions=result.putArray("conditions");for(var condition:derivation.path("conditions")) conditions.add(condition.path("text"));
             var trace=result.putArray("trace");for(var step:derivation.path("steps"))trace.add(step.path("text"));
-            var detail=result.putObject("detail");detail.set("derivation",derivation);detail.set("meta",response.path("meta"));detail.set("factCache",cache);detail.set("unusedFacts",response.path("unusedFacts"));detail.put("unsearchedOutsideScope",true);detail.put("documentLimit",20);detail.put("factLimit",400);detail.putNull("measuredCost");
+            var detail=result.putObject("detail");detail.set("derivation",derivation);detail.set("independentPremiseNoteIds",derivation.path("noteIds"));detail.set("meta",response.path("meta"));detail.set("factCache",cache);detail.set("unusedFacts",response.path("unusedFacts"));detail.put("unsearchedOutsideScope",true);detail.put("documentLimit",20);detail.put("factLimit",400);detail.putNull("measuredCost");
             result.set("derivationStatus",derivation.path("status"));result.put("soundness",derivation.path("soundness").isNull()?"unchecked":derivation.path("soundness").path("verdict").asString());result.set("noveltyNoteIds",response.path("noveltyScope").path("noteIds"));
             var dependencies=result.putArray("dependsOn");if(!derivation.path("dependsOn").isNull())dependencies.add(resultIds.get(derivation.path("dependsOn").asString()));
             var evidence=result.putArray("evidence");
