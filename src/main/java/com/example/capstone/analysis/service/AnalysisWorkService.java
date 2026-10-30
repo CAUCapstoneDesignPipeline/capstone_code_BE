@@ -45,13 +45,16 @@ public class AnalysisWorkService {
         UUID token=UUID.randomUUID(); JsonNode job=repository.claim(token); if(job==null) return null;
         UUID id=UUID.fromString(job.path("id").asString()),user=UUID.fromString(job.path("user_id").asString());
         return new Work(id,user,UUID.fromString(job.path("note_id").asString()),token,job.path("graph_revision").asLong(),
-                Instant.parse(job.path("deadline").asString()),repository.snapshots(user,id));
+                Instant.parse(job.path("deadline").asString()),repository.snapshots(user,id),job.path("extractor").asString());
     }
     @Transactional public boolean heartbeat(Work work) { return repository.heartbeat(work.id(),work.leaseToken()); }
     @Transactional
-    public boolean current(Work work) {
+    public boolean current(Work work) { return current(work,null); }
+    @Transactional
+    public boolean current(Work work,String policyFingerprint) {
         users.lockById(work.userId()).orElseThrow();
         if(!repository.lockValid(work.userId(),work.id(),work.leaseToken())) return false;
+        if(policyFingerprint!=null && !("policy:"+policyFingerprint).equals(work.inputPolicy())) { invalidation.policyChanged(work.userId());return false; }
         if(!repository.inputsCurrent(work.userId(),work.id())) { repository.finish(work.id(),work.leaseToken(),"superseded","STALE_INPUT");return false; }
         return true;
     }

@@ -10,6 +10,6 @@ public interface AnalysisPipeline {
     PipelineOutput run(Work work);
     default String policyFingerprint() { return null; }
     record Work(UUID id, UUID userId, UUID noteId, UUID leaseToken, long graphRevision,
-            Instant deadline, List<JsonNode> documents) { }
+            Instant deadline, List<JsonNode> documents,String inputPolicy) { }
     record PipelineOutput(List<JsonNode> facts,List<JsonNode> graphItems,List<JsonNode> results) { }
 }
