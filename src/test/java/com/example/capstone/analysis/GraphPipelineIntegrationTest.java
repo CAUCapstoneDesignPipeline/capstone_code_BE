@@ -82,6 +82,31 @@ class GraphPipelineIntegrationTest extends ApiIntegrationSupport {
         assertEquals(20,jdbc.queryForObject("select count(*) from analysis_snapshot where job_id=? and freshness='current'",Integer.class,latest));
         var graph=json(call("GET","/api/notes/"+first+"/graph",null).andExpect(status().isOk()));assertEquals(2,graph.path("concepts").size());
     }
+    @Test void publicApiAcceptanceCapturesSuccessConflictOwnershipAndInvalidation() throws Exception {
+        UUID primary=note("앞",null,"A>B");note("뒤",null,"B>C");execute(primary);
+        var cases=mapper.createArrayNode();var list=capture(cases,"recommendations","GET","/candidates",call("GET","/api/candidates",null),200);
+        String id=list.path("results").get(0).path("id").asString();capture(cases,"detail","GET","/candidates/{candidateId}",call("GET","/api/candidates/"+id,null),200);
+        String accept="{\"expectedRevision\":1,\"action\":\"accept\",\"reason\":null,\"learning\":\"new_understanding\",\"editedConclusion\":null,\"idempotencyKey\":\"acceptance-key\"}";
+        capture(cases,"accept","POST","/candidates/{candidateId}/review",call("POST","/api/candidates/"+id+"/review",accept),201);
+        capture(cases,"replay","POST","/candidates/{candidateId}/review",call("POST","/api/candidates/"+id+"/review",accept),201);
+        capture(cases,"conflict","POST","/candidates/{candidateId}/review",call("POST","/api/candidates/"+id+"/review",accept.replace("acceptance-key","other-key")),409);
+        capture(cases,"invalid","POST","/candidates/{candidateId}/review",call("POST","/api/candidates/"+id+"/review","{}"),400);
+        capture(cases,"foreign","GET","/candidates/{candidateId}",call("GET","/api/candidates/"+id,null,otherBearer),404);
+        capture(cases,"unauthorized","GET","/graph",call("GET","/api/graph",null,"invalid"),401);
+        capture(cases,"graph","GET","/graph",call("GET","/api/graph",null),200);
+        capture(cases,"reviews","GET","/reviews",call("GET","/api/reviews",null),200);
+        call("PUT","/api/notes/"+primary,"{\"title\":\"앞\",\"body\":\"A>B 변경\",\"version\":0}").andExpect(status().isOk());
+        var stale=capture(cases,"stale-detail","GET","/candidates/{candidateId}",call("GET","/api/candidates/"+id,null),200);assertEquals("stale",stale.path("freshness").asString());
+        var envelope=mapper.createObjectNode().put("schemaVersion",1).put("syntheticOnly",true);envelope.putObject("producer").put("commit","working-tree").put("suite",getClass().getSimpleName());envelope.set("cases",cases);
+        Path target=Path.of(".local/verification/results/public-analysis-acceptance.json");Files.createDirectories(target.getParent());Files.writeString(target,envelope.toPrettyString());
+        var usage=mapper.createObjectNode().put("syntheticOnly",true).put("source","PostgreSQL analysis_stage");usage.putNull("measuredCost");usage.put("costMeasurement","not_exposed_by_ai_contract");
+        usage.put("attempts",jdbc.queryForObject("select coalesce(sum(attempts),0) from analysis_stage where user_id=?",Long.class,userId));usage.put("durationMs",jdbc.queryForObject("select coalesce(sum(duration_ms),0) from analysis_stage where user_id=?",Long.class,userId));
+        usage.put("cacheHits",jdbc.queryForObject("select count(*) from analysis_fact where user_id=? and provenance->>'cacheHit'='true'",Long.class,userId));usage.put("providerCalls",0);
+        Files.writeString(Path.of(".local/verification/results/analysis-usage-acceptance.json"),usage.toPrettyString());
+    }
+    private tools.jackson.databind.JsonNode capture(tools.jackson.databind.node.ArrayNode cases,String id,String method,String template,org.springframework.test.web.servlet.ResultActions result,int expected) throws Exception {
+        assertEquals(expected,result.andReturn().getResponse().getStatus());var body=json(result);var item=cases.addObject().put("caseId",id).put("origin","mockmvc").put("method",method).put("pathTemplate",template).put("status",expected);item.set("body",body);return body;
+    }
     @Test void wrongCompositionFailsBeforeBridgeAndPersistsNoResults() throws Exception {
         UUID first=note("앞",null,"A>B");note("뒤",null,"B>C");server.mode="bad-composition";UUID job=submit(first);assertTrue(worker.runOne());
         assertEquals("failed",jdbc.queryForObject("select status from analysis_job where id=?",String.class,job));assertEquals(0,jdbc.queryForObject("select count(*) from analysis_result where job_id=?",Integer.class,job));
