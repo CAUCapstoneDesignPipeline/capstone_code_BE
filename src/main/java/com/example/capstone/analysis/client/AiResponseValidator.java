@@ -23,7 +23,9 @@ public final class AiResponseValidator {
         // note-links includes the source note and candidate note snapshots.
         for (var doc : request.path("candidates")) if (doc.has("body")) add(documents, doc);
         for (var doc : request.path("notes")) if (doc.has("body")) add(documents, doc);
+        walk(request, documents, request.path("note"), 0);
         walk(response, documents, request.path("note"), 0);
+        AiReferenceValidator.validate(operation, request, response);
         if (operation == AiOperation.EMBEDDINGS) {
             require(response.path("dimensions").equals(request.path("expectedDimensions")));
             require(response.path("items").size() == request.path("items").size());
