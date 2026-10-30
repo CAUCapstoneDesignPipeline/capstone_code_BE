@@ -28,10 +28,18 @@ class AnalysisPersistenceIntegrationTest extends ApiIntegrationSupport {
           insert into analysis_result(id,user_id,job_id,external_ref,identity_sha256,kind,conclusion,conditions,trace,detail,
            derivation_status,soundness,novelty_note_ids) values(?,?,?,'r1',?,'derivation','결론','[]','[]','{}','conclusion','sound','[]')
           """,result,userId,job,AiResponseValidator.hash("identity"));
-        for(UUID snapshot:new UUID[]{sa,sb}) jdbc.update("insert into analysis_result_evidence(id,user_id,result_id,snapshot_id,claim_ref,start_offset,end_offset,quote) values(?,?,?,?,'claim',0,1,'합성')",UUID.randomUUID(),userId,result,snapshot);
+        for(UUID snapshot:new UUID[]{sa,sb}) jdbc.update("insert into analysis_result_evidence(id,user_id,result_id,snapshot_id,job_id,claim_ref,start_offset,end_offset,quote) values(?,?,?,?,?,'claim',0,1,'합성')",UUID.randomUUID(),userId,result,snapshot,job);
         assertEquals(2,jdbc.queryForObject("select count(*) from analysis_result_evidence where result_id=?",Integer.class,result));
-        assertThrows(org.springframework.dao.DataIntegrityViolationException.class,()->jdbc.update("insert into analysis_result_evidence(id,user_id,result_id,snapshot_id,claim_ref,start_offset,end_offset,quote) values(?,?,?,?,'foreign',0,1,'합성')",UUID.randomUUID(),otherId,result,sa));
-        assertThrows(org.springframework.dao.DataIntegrityViolationException.class,()->jdbc.update("insert into analysis_dependency(user_id,result_id,depends_on_id) values(?,?,?)",userId,result,result));
+        assertThrows(org.springframework.dao.DataIntegrityViolationException.class,()->jdbc.update("insert into analysis_result_evidence(id,user_id,result_id,snapshot_id,job_id,claim_ref,start_offset,end_offset,quote) values(?,?,?,?,?,'foreign',0,1,'합성')",UUID.randomUUID(),otherId,result,sa,job));
+        assertThrows(org.springframework.dao.DataIntegrityViolationException.class,()->jdbc.update("insert into analysis_dependency(user_id,result_id,depends_on_id,job_id) values(?,?,?,?)",userId,result,result,job));
+        UUID secondJob=UUID.randomUUID();
+        jdbc.update("insert into analysis_job(id,note_id,note_version,status,extractor,user_id,lifecycle_state) values(?,?,0,'succeeded','fixture',?,'succeeded')",secondJob,b,userId);
+        UUID foreignSnapshot=snapshot(secondJob,b,"나");
+        assertThrows(org.springframework.dao.DataIntegrityViolationException.class,()->jdbc.update("insert into analysis_result_evidence(id,user_id,result_id,snapshot_id,job_id,claim_ref,start_offset,end_offset,quote) values(?,?,?,?,?,'cross_job',0,1,'합성')",UUID.randomUUID(),userId,result,foreignSnapshot,job));
+        assertThrows(org.springframework.dao.DataIntegrityViolationException.class,()->jdbc.update("insert into analysis_fact(id,user_id,job_id,snapshot_id,external_ref,kind,subject_key,profile_version,value,provenance,start_offset,end_offset,quote) values(?,?,?,?,'foreign','needs_op','subject','fixture','{}','{}',0,1,'합성')",UUID.randomUUID(),userId,job,foreignSnapshot));
+        UUID fact=UUID.randomUUID();
+        jdbc.update("insert into analysis_fact(id,user_id,job_id,snapshot_id,external_ref,kind,subject_key,profile_version,value,provenance,start_offset,end_offset,quote) values(?,?,?,?,'samejobfact','needs_op','subject','fixture','{}','{}',0,1,'나')",fact,userId,job,sb);
+        assertThrows(org.springframework.dao.DataIntegrityViolationException.class,()->jdbc.update("insert into analysis_result_evidence(id,user_id,result_id,snapshot_id,job_id,fact_id,claim_ref,start_offset,end_offset,quote) values(?,?,?,?,?,?,'cross_snapshot',0,1,'합성')",UUID.randomUUID(),userId,result,sa,job,fact));
         UUID event=UUID.randomUUID();
         jdbc.update("insert into analysis_review_event(id,user_id,result_id,revision,action,idempotency_key,request_sha256) values(?,?,?,1,'accept','key',?)",event,userId,result,AiResponseValidator.hash("request"));
         assertThrows(org.springframework.dao.DataAccessException.class,()->jdbc.update("update analysis_review_event set action='reject' where id=?",event));
