@@ -15,6 +15,7 @@ public class AnalysisWorkRepository {
     private final AnalysisStore db;
     public AnalysisWorkRepository(AnalysisStore db) { this.db=db; }
     public void retireUnresumable(UUID user,UUID note) {
+        cancelObsolete(user);
         db.write("""
           update analysis_job j set status='failed',lifecycle_state='failed',finished_at=clock_timestamp(),lease_token=null,lease_until=null,
            failure_code=case when lifecycle_state is null then 'LEGACY_WORK_NOT_RESUMABLE' else 'TIMEOUT' end
@@ -50,8 +51,8 @@ public class AnalysisWorkRepository {
     }
     public void create(UUID id,UUID user,UUID note,int version,long input,long graph,Instant deadline,String extractor) {
         db.write("""
-          insert into analysis_job(id,user_id,note_id,note_version,status,extractor,lifecycle_state,input_revision,graph_revision,deadline,contract_revision)
-          values(:id,:user,:note,:version,'pending',:extractor,'queued',:input,:graph,:deadline,'ai-integration-2026-10-30-adopted.1')
+          insert into analysis_job(id,user_id,note_id,note_version,status,extractor,lifecycle_state,input_revision,graph_revision,deadline,contract_revision,runtime_epoch)
+          values(:id,:user,:note,:version,'pending',:extractor,'queued',:input,:graph,:deadline,'ai-integration-2026-10-30-adopted.1',(select epoch from analysis_runtime_fence where singleton))
           """,Map.of("id",id,"user",user,"note",note,"version",version,"input",input,"graph",graph,"deadline",deadline,"extractor",extractor));
     }
     public void snapshot(UUID job,UUID user,JsonNode doc) {
@@ -66,7 +67,23 @@ public class AnalysisWorkRepository {
           """,p);
     }
     public JsonNode job(UUID user,UUID job) { return db.one("select to_jsonb(j)::text from analysis_job j where id=:job and user_id=:user",Map.of("user",user,"job",job)); }
+    public boolean runtimeCurrent(UUID job) {
+        JsonNode row=db.one("select to_jsonb(j.runtime_epoch=f.epoch)::text from analysis_job j cross join analysis_runtime_fence f where j.id=:job and f.singleton",Map.of("job",job));return row!=null && row.asBoolean();
+    }
+    // 최종 게시 직전에 공유 잠금을 얻는다. 비활성화 응답은 진행 중인 게시 트랜잭션 뒤에 선형화된다.
+    public boolean lockRuntimeCurrent(UUID job) {
+        lockRuntime();
+        return runtimeCurrent(job);
+    }
+    public void lockRuntime() { db.one("select to_jsonb(epoch)::text from analysis_runtime_fence where singleton for share",Map.of()); }
+    public void cancelJob(UUID job) {
+        db.write("update analysis_job set status='failed',lifecycle_state='cancelled',failure_code='CANCELLED',lease_token=null,lease_until=null,finished_at=clock_timestamp() where id=:job and lifecycle_state in ('queued','running')",Map.of("job",job));
+    }
+    private void cancelObsolete(UUID user) {
+        db.write("update analysis_job set status='failed',lifecycle_state='cancelled',failure_code='CANCELLED',lease_token=null,lease_until=null,finished_at=clock_timestamp() where user_id=:user and lifecycle_state in ('queued','running') and runtime_epoch<>(select epoch from analysis_runtime_fence where singleton)",Map.of("user",user));
+    }
     public void expire() {
+        db.write("update analysis_job set status='failed',lifecycle_state='cancelled',failure_code='CANCELLED',lease_token=null,lease_until=null,finished_at=clock_timestamp() where lifecycle_state in ('queued','running') and runtime_epoch<>(select epoch from analysis_runtime_fence where singleton)",Map.of());
         db.write("""
           update analysis_job set status='failed',lifecycle_state='failed',failure_code='TIMEOUT',finished_at=clock_timestamp(),lease_token=null,lease_until=null
           where lifecycle_state in ('queued','running') and (deadline<=clock_timestamp() or (attempt>=3 and lease_until<clock_timestamp()))
@@ -92,13 +109,13 @@ public class AnalysisWorkRepository {
     public boolean heartbeat(UUID job,UUID token) {
         return db.write("""
           update analysis_job set lease_until=least(deadline,clock_timestamp()+interval '60 seconds')
-          where id=:job and lease_token=:token and lifecycle_state='running' and lease_until>clock_timestamp() and deadline>clock_timestamp()
+          where id=:job and runtime_epoch=(select epoch from analysis_runtime_fence where singleton) and lease_token=:token and lifecycle_state='running' and lease_until>clock_timestamp() and deadline>clock_timestamp()
           """,Map.of("job",job,"token",token))==1;
     }
     public boolean lockValid(UUID user,UUID job,UUID token) {
         JsonNode found=db.one("""
           select to_jsonb(j.id)::text from analysis_job j where j.id=:job and j.user_id=:user and j.lease_token=:token
-           and j.lifecycle_state='running' and j.lease_until>clock_timestamp() and j.deadline>clock_timestamp() for update
+           and j.runtime_epoch=(select epoch from analysis_runtime_fence where singleton) and j.lifecycle_state='running' and j.lease_until>clock_timestamp() and j.deadline>clock_timestamp() for update
           """,Map.of("job",job,"user",user,"token",token));
         return found!=null;
     }
@@ -114,7 +131,7 @@ public class AnalysisWorkRepository {
         var p=new LinkedHashMap<String,Object>();p.put("job",job);p.put("token",token);p.put("state",state);p.put("failure",failure);
         return db.write("""
           update analysis_job set status=case when :state='succeeded' then 'succeeded' else 'failed' end,lifecycle_state=:state,
-           failure_code=:failure,finished_at=clock_timestamp(),lease_token=null,lease_until=null where id=:job and lease_token=:token and lifecycle_state='running' and lease_until>clock_timestamp() and deadline>clock_timestamp()
+           failure_code=:failure,finished_at=clock_timestamp(),lease_token=null,lease_until=null where id=:job and runtime_epoch=(select epoch from analysis_runtime_fence where singleton) and lease_token=:token and lifecycle_state='running' and lease_until>clock_timestamp() and deadline>clock_timestamp()
           """,p)==1;
     }
     public List<UUID> activeUsers() { return db.rows("select distinct to_jsonb(user_id)::text from analysis_job where user_id is not null and lifecycle_state in ('queued','running') order by 1",Map.of()).stream().map(n->UUID.fromString(n.asString())).toList(); }
