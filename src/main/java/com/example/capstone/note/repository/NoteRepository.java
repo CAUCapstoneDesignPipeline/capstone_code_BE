@@ -19,6 +19,11 @@ public interface NoteRepository extends JpaRepository<Note,UUID> {
     @Query(value="""
             select exists(select 1 from evidence_span e join note n on n.id = e.note_id
             where n.id = :id and n.user_id = :userId)
+             or exists(select 1 from analysis_snapshot s where s.user_id=:userId and s.original_note_id=:id and (
+               exists(select 1 from analysis_result_evidence e where e.snapshot_id=s.id and e.user_id=s.user_id)
+               or exists(select 1 from analysis_fact f where f.snapshot_id=s.id and f.user_id=s.user_id)
+               or exists(select 1 from analysis_graph_item g where g.snapshot_id=s.id and g.user_id=s.user_id and g.kind='evidence')))
+             or exists(select 1 from analysis_job j join analysis_result r on r.job_id=j.id and r.user_id=j.user_id where j.note_id=:id and j.user_id=:userId)
             """,nativeQuery=true)
     boolean hasEvidence(UUID userId,UUID id);
     @Query("""

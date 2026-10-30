@@ -18,11 +18,17 @@ import com.example.capstone.global.exception.ErrorCode;
 public class AnalysisWorkService {
     private final AnalysisWorkRepository repository;
     private final AppUserRepository users;
+    private final AnalysisInvalidationService invalidation;
     private final com.example.capstone.analysis.repository.AnalysisResultRepository results;
-    public AnalysisWorkService(AnalysisWorkRepository repository,AppUserRepository users,com.example.capstone.analysis.repository.AnalysisResultRepository results) { this.repository=repository;this.users=users;this.results=results; }
+    public AnalysisWorkService(AnalysisWorkRepository repository,AppUserRepository users,com.example.capstone.analysis.repository.AnalysisResultRepository results,AnalysisInvalidationService invalidation) { this.repository=repository;this.users=users;this.results=results;this.invalidation=invalidation; }
     @Transactional
-    public JsonNode submit(UUID user,UUID note) {
+    public JsonNode submit(UUID user,UUID note) { return submit(user,note,null); }
+    @Transactional
+    public JsonNode submit(UUID user,UUID note,String policyDigest) {
         users.lockById(user).orElseThrow(()->new ApiException(ErrorCode.UNAUTHENTICATED,"로그인이 필요합니다."));
+        String extractor=policyDigest==null?"ai-integration-2026-10-30-adopted.1":"policy:"+policyDigest;
+        String previous=repository.latestPolicy(user);
+        if(policyDigest!=null && previous!=null && !previous.equals(extractor)) invalidation.policyChanged(user);
         repository.retireUnresumable(user,note);
         JsonNode active=repository.active(user,note); if(active!=null) return active;
         List<JsonNode> documents=repository.documents(user,note);
@@ -31,7 +37,7 @@ public class AnalysisWorkService {
         String body=primary.path("body").asString();
         if(body.codePointCount(0,body.length())>50000) throw new ApiException(ErrorCode.VALIDATION_FAILED,"분석할 노트는 50,000자 이하여야 합니다.");
         UUID job=UUID.randomUUID();
-        repository.create(job,user,note,primary.path("noteVersion").asInt(),primary.path("inputRevision").asLong(),repository.graphRevision(user),Instant.now().plusSeconds(900));
+        repository.create(job,user,note,primary.path("noteVersion").asInt(),primary.path("inputRevision").asLong(),repository.graphRevision(user),Instant.now().plusSeconds(900),extractor);
         documents.forEach(doc->repository.snapshot(job,user,doc)); return repository.job(user,job);
     }
     @Transactional

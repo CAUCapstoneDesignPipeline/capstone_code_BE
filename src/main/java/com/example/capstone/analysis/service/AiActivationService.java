@@ -30,6 +30,7 @@ public class AiActivationService {
                 && execution.budgetMicrounits()>0 && execution.currency()!=null && execution.currency().matches("[A-Z]{3}")
                 && execution.requiredProfiles()!=null && !execution.requiredProfiles().isEmpty();
     }
+    public String policyFingerprint() { return pipeline.getObject().policyFingerprint(); }
     public boolean workerEnabled() { return configured() && execution.workerEnabled(); }
     public void requireAvailable() {
         if(!properties.enabled()) throw unavailable("NOT_DEPLOYED");

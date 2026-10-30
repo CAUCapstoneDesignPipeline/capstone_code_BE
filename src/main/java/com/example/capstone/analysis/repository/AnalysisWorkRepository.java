@@ -34,14 +34,17 @@ public class AnalysisWorkRepository {
             order by (n.id=:note) desc,n.updated_at desc,n.id limit 20
             """,Map.of("user",user,"note",note));
     }
+    public String latestPolicy(UUID user) {
+        JsonNode value=db.one("select to_jsonb(extractor)::text from analysis_job where user_id=:user order by created_at desc,id desc limit 1",Map.of("user",user));return value==null?null:value.asString();
+    }
     public long graphRevision(UUID user) {
         return db.one("select to_jsonb(graph_revision)::text from app_user where id=:user",Map.of("user",user)).asLong();
     }
-    public void create(UUID id,UUID user,UUID note,int version,long input,long graph,Instant deadline) {
+    public void create(UUID id,UUID user,UUID note,int version,long input,long graph,Instant deadline,String extractor) {
         db.write("""
           insert into analysis_job(id,user_id,note_id,note_version,status,extractor,lifecycle_state,input_revision,graph_revision,deadline,contract_revision)
-          values(:id,:user,:note,:version,'pending','ai-integration-2026-10-30-adopted.1','queued',:input,:graph,:deadline,'ai-integration-2026-10-30-adopted.1')
-          """,Map.of("id",id,"user",user,"note",note,"version",version,"input",input,"graph",graph,"deadline",deadline));
+          values(:id,:user,:note,:version,'pending',:extractor,'queued',:input,:graph,:deadline,'ai-integration-2026-10-30-adopted.1')
+          """,Map.of("id",id,"user",user,"note",note,"version",version,"input",input,"graph",graph,"deadline",deadline,"extractor",extractor));
     }
     public void snapshot(UUID job,UUID user,JsonNode doc) {
         var p=new LinkedHashMap<String,Object>();

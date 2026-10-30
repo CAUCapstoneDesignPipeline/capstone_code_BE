@@ -35,6 +35,6 @@ public class AnalysisService {
     public AnalysisJobResponse request(UUID userId,UUID noteId) {
         notes.requireOwned(userId,noteId);
         activation.requireAvailable();
-        return AnalysisJobResponse.from(work.submit(userId,noteId));
+        return AnalysisJobResponse.from(work.submit(userId,noteId,activation.policyFingerprint()));
     }
 }

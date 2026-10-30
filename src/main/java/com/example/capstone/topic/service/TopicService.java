@@ -27,8 +27,9 @@ public class TopicService {
     private final NoteRepository notes;
     private final AppUserRepository users;
     private final Clock clock;
-    public TopicService(TopicRepository topics,NoteRepository notes,AppUserRepository users,Clock clock) {
-        this.topics=topics; this.notes=notes; this.users=users; this.clock=clock;
+    private final com.example.capstone.analysis.service.AnalysisInvalidationService invalidation;
+    public TopicService(TopicRepository topics,NoteRepository notes,AppUserRepository users,Clock clock,com.example.capstone.analysis.service.AnalysisInvalidationService invalidation) {
+        this.topics=topics; this.notes=notes; this.users=users; this.clock=clock;this.invalidation=invalidation;
     }
     @Transactional(readOnly=true)
     public TopicListResponse list(UUID userId) {
@@ -49,7 +50,9 @@ public class TopicService {
         lock(userId);
         Topic topic=owned(userId,id);
         checkName(userId,name,id);
+        boolean changed=!topic.getName().equals(name);
         topic.rename(name); save(topic);
+        if(changed) invalidation.topicChanged(userId,id);
         return response(topic,notes.countByUserIdAndTopicId(userId,id));
     }
     @Transactional
@@ -75,6 +78,7 @@ public class TopicService {
             throw new ApiException(ErrorCode.NOTE_TITLE_TAKEN,"미분류에 같은 제목의 노트가 있어 주제를 삭제할 수 없습니다.",Map.of("titles",conflicts));
         }
         long count=notes.countByUserIdAndTopicId(userId,id);
+        invalidation.topicChanged(userId,id);
         int moved=notes.unassignTopic(userId,id,clock.instant());
         if(moved!=count || topics.remove(userId,id)!=1) { throw new IllegalStateException("Topic deletion changed unexpectedly"); }
     }
