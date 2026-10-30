@@ -47,7 +47,8 @@ public class AnalysisWorker {
                 if(!lost.get() && activation.configured()) work.complete(claimed,output);
                 else work.fail(claimed,"CANCELLED");
             } catch(AnalysisWorkService.LeaseLostException stale) {
-                // A replacement owner/input fence owns the result. Never overwrite it.
+                // 비활성 epoch만 취소한다. 다른 lease/input 소유자의 결과는 건드리지 않는다.
+                work.retireDisabled(claimed);
             } catch(AiCallException failure) { work.fail(claimed,failure.reason().name()); }
             catch(RuntimeException failure) { work.fail(claimed,"INTERNAL"); }
             finally { heartbeat.cancel(false); }

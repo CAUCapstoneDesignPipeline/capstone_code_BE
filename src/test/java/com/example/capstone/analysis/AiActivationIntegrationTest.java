@@ -43,6 +43,7 @@ class AiActivationIntegrationTest extends ApiIntegrationSupport {
     @AfterAll static void cleanup() throws Exception { server.close();Files.deleteIfExists(stop);Files.delete(policy);Files.delete(root); }
     @Autowired AnalysisWorkService work;
     @Autowired AnalysisWorker worker;
+    @Autowired org.springframework.transaction.PlatformTransactionManager transactions;
     @BeforeEach void reset() throws Exception { Files.deleteIfExists(stop);server.mode="normal";server.readiness="ready";server.requests.clear();server.release.countDown(); }
     UUID submit(UUID note) throws Exception { return UUID.fromString(json(call("POST","/api/notes/"+note+"/analysis",null).andExpect(status().isAccepted())).path("id").asString()); }
     boolean capability() throws Exception { return json(call("GET","/api/capabilities",null).andExpect(status().isOk())).path("analysisEnabled").asBoolean(); }
@@ -82,10 +83,31 @@ class AiActivationIntegrationTest extends ApiIntegrationSupport {
     @Test void stopDuringHttpCannotPublishResponseThatArrivesAfterCancellation() throws Exception {
         UUID note=note("앞",null,"A>B");note("뒤",null,"B>C");UUID job=submit(note);server.mode="blocked";server.entered=new CountDownLatch(1);server.release=new CountDownLatch(1);
         try(var executor=Executors.newVirtualThreadPerTaskExecutor()) {
-            var future=executor.submit(worker::runOne);assertTrue(server.entered.await(5,TimeUnit.SECONDS));Files.writeString(stop,"disabled");worker.tick();server.release.countDown();assertTrue(future.get(5,TimeUnit.SECONDS));
+            var future=executor.submit(worker::runOne);assertTrue(server.entered.await(5,TimeUnit.SECONDS));Files.writeString(stop,"disabled");assertFalse(capability());Files.delete(stop);assertTrue(capability());server.release.countDown();assertTrue(future.get(5,TimeUnit.SECONDS));
         } finally { server.release.countDown();Files.deleteIfExists(stop); }
         assertEquals("cancelled",jdbc.queryForObject("select lifecycle_state from analysis_job where id=?",String.class,job));
         assertEquals(0,jdbc.queryForObject("select count(*) from analysis_result where job_id=?",Integer.class,job));assertEquals(0,jdbc.queryForObject("select count(*) from analysis_graph_item where job_id=?",Integer.class,job));
+    }
+    @Test void disableWaitsForConcurrentPublicationCommitAndInvalidatesQueuedEpoch() throws Exception {
+        UUID note=note("완료 경계",null,"원문");UUID job=submit(note);var claimed=work.claim();
+        UUID queuedNote=note("기존 대기",null,"원문");UUID queued=submit(queuedNote);
+        CountDownLatch published=new CountDownLatch(1),commit=new CountDownLatch(1);
+        try(var executor=Executors.newVirtualThreadPerTaskExecutor()) {
+            var publication=executor.submit(()->new org.springframework.transaction.support.TransactionTemplate(transactions).execute(status->{
+                work.complete(claimed,new PipelineOutput(List.of(),List.of(),List.of()));published.countDown();
+                try { if(!commit.await(5,TimeUnit.SECONDS))throw new IllegalStateException("test commit timeout"); }
+                catch(InterruptedException interrupted) { Thread.currentThread().interrupt();throw new IllegalStateException(interrupted); }
+                return true;
+            }));
+            assertTrue(published.await(5,TimeUnit.SECONDS));Files.writeString(stop,"disabled");
+            var disabled=executor.submit(this::capability);
+            assertThrows(java.util.concurrent.TimeoutException.class,()->disabled.get(200,TimeUnit.MILLISECONDS));
+            commit.countDown();assertTrue(publication.get(5,TimeUnit.SECONDS));assertFalse(disabled.get(5,TimeUnit.SECONDS));
+            assertEquals("succeeded",jdbc.queryForObject("select status from analysis_job where id=?",String.class,job));
+            Files.delete(stop);assertTrue(capability());assertNull(work.claim());
+            assertEquals("cancelled",jdbc.queryForObject("select lifecycle_state from analysis_job where id=?",String.class,queued));
+            assertNotEquals(queued,submit(queuedNote));work.fail(work.claim(),"CANCELLED");
+        } finally { commit.countDown();Files.deleteIfExists(stop); }
     }
     @Test @DirtiesContext void responseProfileMismatchQuarantinesCapabilitiesUntilRestart() throws Exception {
         UUID note=note("앞",null,"A>B");note("뒤",null,"B>C");UUID job=submit(note);server.mode="profile-mismatch";assertTrue(worker.runOne());
