@@ -15,11 +15,11 @@ public class AnalysisStore {
     private final EntityManager entityManager;
     private final ObjectMapper mapper;
     public AnalysisStore(EntityManager entityManager, ObjectMapper mapper) { this.entityManager=entityManager; this.mapper=mapper; }
-    public int write(String sql, Map<String,?> parameters) { return query(sql,parameters).executeUpdate(); }
-    public List<JsonNode> rows(String sql, Map<String,?> parameters) {
+    int write(String sql, Map<String,?> parameters) { return query(sql,parameters).executeUpdate(); }
+    List<JsonNode> rows(String sql, Map<String,?> parameters) {
         return query(sql,parameters).getResultList().stream().map(value -> mapper.readTree(value.toString())).toList();
     }
-    public JsonNode one(String sql, Map<String,?> parameters) {
+    JsonNode one(String sql, Map<String,?> parameters) {
         List<JsonNode> rows=rows(sql,parameters); return rows.isEmpty()?null:rows.getFirst();
     }
     private Query query(String sql, Map<String,?> parameters) {

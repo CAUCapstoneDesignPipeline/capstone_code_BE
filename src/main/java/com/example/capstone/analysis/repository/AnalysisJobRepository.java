@@ -10,7 +10,7 @@ import com.example.capstone.analysis.domain.AnalysisJob;
 /** Reads existing V1 history without exposing persistence mutation methods. */
 public interface AnalysisJobRepository extends Repository<AnalysisJob, UUID> {
     @Query(value = """
-            select j.id, j.note_id, j.note_version, j.status, j.created_at, j.started_at, j.finished_at
+            select j.*
             from analysis_job j join note n on n.id = j.note_id
             where j.note_id = :noteId and n.user_id = :userId
             order by j.created_at desc, j.id desc limit 1

@@ -4,6 +4,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
-@EnableConfigurationProperties({AiProperties.class, AiClientProperties.class})
+@org.springframework.scheduling.annotation.EnableScheduling
+@EnableConfigurationProperties({AiProperties.class, AiClientProperties.class, AiExecutionProperties.class})
 public class AiConfig {
 }

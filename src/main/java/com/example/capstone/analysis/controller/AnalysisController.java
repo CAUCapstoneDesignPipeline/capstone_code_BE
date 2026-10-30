@@ -39,7 +39,7 @@ public class AnalysisController {
         this.analysis = analysis;
     }
 
-    @Operation(summary = "AI-off: 실제 최근 분석 작업 (계약 검토 대기)",
+    @Operation(summary = "최근 분석 작업 조회",
             description = "소유한 노트의 실제 최근 작업 또는 job:null. 내부 error_message는 공개하지 않습니다.")
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "최근 실제 작업 또는 job:null, Cache-Control:no-store",
@@ -57,8 +57,8 @@ public class AnalysisController {
                 .body(analysis.get(UUID.fromString(jwt.getSubject()), parseNoteId(noteId)));
     }
 
-    @Operation(summary = "AI-off: 분석 요청 차단 (계약 검토 대기)",
-            description = "인증·UUID·소유 확인 후 503 AI_UNAVAILABLE. 작업을 생성하거나 변경하지 않습니다.")
+    @Operation(summary = "명시적 분석 요청",
+            description = "인증·UUID·소유 확인 후 활성 모드에서 기존 또는 새 작업을 202로 반환합니다. 기본 AI-off는 503이며 작업을 생성하지 않습니다.")
     @ApiResponses({
         @ApiResponse(responseCode = "400", description = "VALIDATION_FAILED: 정규 UUID를 입력하세요.",
                 content = @Content(mediaType = "application/json", schema = @Schema(implementation = ErrorResponse.class), examples = @ExampleObject(name = "VALIDATION_FAILED", value = INVALID))),
@@ -69,10 +69,9 @@ public class AnalysisController {
         @ApiResponse(responseCode = "503", description = "AI_UNAVAILABLE/NOT_DEPLOYED: 작업 생성·Retry-After 없음. 자동 retry·폴링을 시작하지 마세요.",
                 content = @Content(mediaType = "application/json", schema = @Schema(implementation = ErrorResponse.class), examples = @ExampleObject(name = "AI_UNAVAILABLE", value = UNAVAILABLE)))
     })
-    @ResponseStatus(HttpStatus.SERVICE_UNAVAILABLE)
     @PostMapping("/api/notes/{noteId}/analysis")
-    public void request(@AuthenticationPrincipal Jwt jwt, @PathVariable String noteId) {
-        analysis.request(UUID.fromString(jwt.getSubject()), parseNoteId(noteId));
+    public ResponseEntity<com.example.capstone.analysis.dto.response.AnalysisJobResponse> request(@AuthenticationPrincipal Jwt jwt, @PathVariable String noteId) {
+        return ResponseEntity.accepted().cacheControl(CacheControl.noStore()).body(analysis.request(UUID.fromString(jwt.getSubject()), parseNoteId(noteId)));
     }
 
     private static UUID parseNoteId(String value) {
