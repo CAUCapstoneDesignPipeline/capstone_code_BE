@@ -20,6 +20,10 @@ public final class SyntheticPipelineServer implements AutoCloseable {
     private final java.util.concurrent.ExecutorService executor=Executors.newVirtualThreadPerTaskExecutor();
     public final List<JsonNode> requests=new CopyOnWriteArrayList<>();
     public volatile String mode="normal";
+    public volatile boolean calculation;
+    public volatile String calculationState="sound";
+    public final JsonNode derivationFixture=fixture();
+    private JsonNode fixture() { try(var input=getClass().getResourceAsStream("/ai-contract/operations/derive.json")) { return mapper.readTree(input); } catch(Exception e) { throw new IllegalStateException(e); } }
     public SyntheticPipelineServer() {
         try {
             server=HttpServer.create(new InetSocketAddress("127.0.0.1",0),0);server.setExecutor(executor);
@@ -77,7 +81,42 @@ public final class SyntheticPipelineServer implements AutoCloseable {
             case "/verifications/edges" -> {
                 ArrayNode verdicts=r.putArray("verdicts");for(var edge:q.path("edges")) verdicts.addObject().put("edgeId",edge.path("edgeId").asString()).put("outcome",mode.equals("contradiction")?"contradicted":"entailed").put("confidence",1).put("reason","합성 근거 검증");
             }
-            case "/facts" -> { r.putArray("facts");r.putArray("dropped"); }
+            case "/facts" -> {
+                ArrayNode facts=r.putArray("facts");r.putArray("dropped");if(!calculation)break;
+                JsonNode doc=q.path("note");String body=doc.path("body").asString();
+                for(var sourceDoc:derivationFixture.path("request").path("documents")) if(body.startsWith(sourceDoc.path("body").asString())) {
+                    for(var original:derivationFixture.path("request").path("facts")) if(original.path("evidence").path("noteId").equals(sourceDoc.path("noteId"))) {
+                        var fact=(ObjectNode)original.deepCopy();ObjectNode span=(ObjectNode)fact.path("evidence");for(String key:List.of("noteId","noteVersion","bodySha256"))span.set(key,doc.path(key));facts.add(fact);
+                    }
+                }
+                if(body.startsWith("기존 결론")) {
+                    var f=facts.addObject().put("factId","stated#1").put("kind","stated_result").put("subject","다익스트라").put("subjectKey","dijkstra").put("role","priority_queue").put("expr","O((V+E)*log(V))").put("case","worst").put("negated",false).put("origin","extracted");
+                    for(String field:List.of("op","condition","other","otherKey"))f.putNull(field);
+                    var e=f.putObject("evidence").put("startOffset",0).put("endOffset",body.length()).put("quote",body);for(String field:List.of("noteId","noteVersion","bodySha256"))e.set(field,doc.path(field));
+                }
+                if(mode.equals("known-change") && body.contains("dijkstra")) for(var f:facts)((ObjectNode)f).put("subjectKey","changed_subject");
+                if(mode.equals("overflow") && !facts.isEmpty()) { JsonNode template=facts.get(0).deepCopy();facts.removeAll();for(int i=0;i<300;i++) { ObjectNode fact=(ObjectNode)template.deepCopy();fact.put("factId","synthetic#"+i);facts.add(fact); } }
+            }
+            case "/derivations" -> {
+                boolean hasAlgorithm=q.path("facts").valueStream().anyMatch(f->f.path("kind").asString().equals("needs_op"));
+                boolean hasStructure=q.path("facts").valueStream().anyMatch(f->f.path("kind").asString().equals("implements"));
+                if(!hasAlgorithm || !hasStructure) { r.putArray("derivations");r.putArray("unusedFacts");var notes=r.putObject("noveltyScope").putArray("noteIds");for(var doc:q.path("documents"))notes.add(doc.path("noteId"));break; }
+                var replacement=new java.util.HashMap<String,String>();
+                for(var original:derivationFixture.path("request").path("facts")) for(var current:q.path("facts"))
+                    if(current.path("kind").equals(original.path("kind")) && current.path("op").equals(original.path("op")) && current.path("evidence").path("quote").equals(original.path("evidence").path("quote"))) {
+                        replacement.putIfAbsent(original.path("factId").asString(),current.path("factId").asString());replacement.putIfAbsent(original.path("evidence").path("noteId").asString(),current.path("evidence").path("noteId").asString());
+                    }
+                ObjectNode output=(ObjectNode)replace(derivationFixture.path("response"),replacement);r.set("derivations",output.path("derivations"));r.set("unusedFacts",output.path("unusedFacts"));
+                var notes=r.putObject("noveltyScope").putArray("noteIds");for(var doc:q.path("documents"))notes.add(doc.path("noteId"));
+                for(var d:r.path("derivations")) {
+                    var row=(ObjectNode)d;String state=calculationState;
+                    if(state.equals("missing") && row.path("rule").asString().equals("R1"))state="sound";
+                    row.put("status",state.equals("missing")?"held":state.equals("known")?"known":state.equals("rejected")?"rejected":"conclusion");
+                    if(state.equals("unchecked") || state.equals("missing"))row.putNull("soundness");
+                    else { var sound=row.putObject("soundness").put("verdict",state.equals("rejected")?"unsound":"sound").put("reason","합성 구조 검증");sound.putArray("unfaithfulFactIds"); }
+                    if(state.equals("missing"))row.putArray("missing").add("합성 전제 누락");
+                }
+            }
             case "/explanations" -> {
                 var explanation=r.putObject("explanation").put("summary","두 원문의 합성 설명");var claims=explanation.putArray("claims");
                 int index=0;ArrayNode refs=mapper.createArrayNode();for(var step:q.path("path").path("steps")) { var evidence=step.path("evidenceIds");refs.add(evidence.get(0));var claim=claims.addObject().put("claimRef","premise-"+(++index)).put("kind","premise").put("text","원문 전제 "+index);claim.set("evidenceIds",evidence); }
@@ -91,6 +130,11 @@ public final class SyntheticPipelineServer implements AutoCloseable {
             default -> throw new IllegalArgumentException("Unsupported synthetic operation "+path);
         }
         return r;
+    }
+    private JsonNode replace(JsonNode node,java.util.Map<String,String> replacements) {
+        if(node.isString()) return mapper.valueToTree(replacements.getOrDefault(node.asString(),node.asString()));
+        if(node.isObject()) { ObjectNode copy=mapper.createObjectNode();for(var field:node.properties())copy.set(field.getKey(),replace(field.getValue(),replacements));return copy; }
+        if(node.isArray()) { ArrayNode copy=mapper.createArrayNode();for(var value:node)copy.add(replace(value,replacements));return copy; }return node.deepCopy();
     }
     private void concept(ArrayNode values,String ref,String label,int offset) { var c=values.addObject().put("ref",ref).put("label",label).put("confidence",1);c.putArray("mentions").addObject().put("startOffset",offset).put("endOffset",offset+1).put("quote",label); }
     private ObjectNode span(JsonNode doc,int start,int end,boolean note) { var s=mapper.createObjectNode().put("startOffset",start).put("endOffset",end).put("quote",doc.path("body").asString().substring(start,end));if(note)s.set("noteId",doc.path("noteId"));return s; }

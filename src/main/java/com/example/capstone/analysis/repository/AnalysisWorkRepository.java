@@ -31,7 +31,14 @@ public class AnalysisWorkRepository {
             'topic',jsonb_build_object('id',n.topic_id,'name',coalesce(t.name,'미분류')))::text
             from note n left join topic t on t.id=n.topic_id and t.user_id=n.user_id
             where n.user_id=:user and (n.id=:note or char_length(n.body)<=50000)
-            order by (n.id=:note) desc,n.updated_at desc,n.id limit 20
+            order by (n.id=:note) desc,
+             exists(select 1 from analysis_fact f join analysis_snapshot s on s.id=f.snapshot_id and s.user_id=f.user_id
+              where f.user_id=:user and s.original_note_id=n.id and s.freshness='current' and s.note_version=n.version and s.input_revision=n.input_revision
+               and exists(select 1 from analysis_fact primary_fact join analysis_snapshot primary_snapshot on primary_snapshot.id=primary_fact.snapshot_id and primary_snapshot.user_id=primary_fact.user_id
+                where primary_fact.user_id=:user and primary_snapshot.original_note_id=:note and primary_snapshot.freshness='current' and primary_fact.subject_key=f.subject_key)) desc,
+             exists(select 1 from analysis_fact f join analysis_snapshot s on s.id=f.snapshot_id and s.user_id=f.user_id
+              where f.user_id=:user and s.original_note_id=n.id and s.freshness='current' and s.note_version=n.version and s.input_revision=n.input_revision and f.kind='stated_result') desc,
+             n.updated_at desc,n.id limit 20
             """,Map.of("user",user,"note",note));
     }
     public String latestPolicy(UUID user) {
@@ -106,6 +113,15 @@ public class AnalysisWorkRepository {
           update analysis_job set status=case when :state='succeeded' then 'succeeded' else 'failed' end,lifecycle_state=:state,
            failure_code=:failure,finished_at=clock_timestamp(),lease_token=null,lease_until=null where id=:job and lease_token=:token and lifecycle_state='running' and lease_until>clock_timestamp() and deadline>clock_timestamp()
           """,p)==1;
+    }
+    public JsonNode cachedFacts(UUID user,String key,UUID note) {
+        return db.one("""
+          select st.response::text from analysis_stage st join analysis_job j on j.id=st.job_id and j.user_id=st.user_id
+           join analysis_snapshot s on s.job_id=st.job_id and s.user_id=st.user_id and s.original_note_id=:note
+          where st.user_id=:user and st.operation='FACTS' and st.stage_key=:key and j.status='succeeded'
+           and s.freshness='current' and not jsonb_exists(st.response,'_pending')
+          order by st.created_at desc,st.id desc limit 1
+          """,Map.of("user",user,"key",key,"note",note));
     }
     public JsonNode checkpoint(UUID job,String key,String hash) {
         return db.one("select response::text from analysis_stage where job_id=:job and stage_key=:key and request_sha256=:hash and not jsonb_exists(response,'_pending')",Map.of("job",job,"key",key,"hash",hash));

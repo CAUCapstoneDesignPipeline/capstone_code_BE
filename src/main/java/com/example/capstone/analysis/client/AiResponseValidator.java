@@ -89,6 +89,15 @@ public final class AiResponseValidator {
         if(left.isArray() && right.isArray()) { if(left.size()!=right.size())return false;for(int i=0;i<left.size();i++)if(!sameJson(left.get(i),right.get(i)))return false;return true; }
         return left.equals(right);
     }
+    public static String canonicalJson(JsonNode value) { return sortedJson(value).toString(); }
+    private static JsonNode sortedJson(JsonNode value) {
+        if(value.isObject()) {
+            var copy=(tools.jackson.databind.node.ObjectNode)value.deepCopy();copy.removeAll();
+            value.properties().stream().sorted(java.util.Map.Entry.comparingByKey()).forEach(field->copy.set(field.getKey(),sortedJson(field.getValue())));return copy;
+        }
+        if(value.isArray()) { var copy=(tools.jackson.databind.node.ArrayNode)value.deepCopy();for(int i=0;i<copy.size();i++)copy.set(i,sortedJson(copy.get(i)));return copy; }
+        return value;
+    }
     public static String hash(String text) {
         try { return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(text.getBytes(StandardCharsets.UTF_8))); }
         catch (java.security.NoSuchAlgorithmException impossible) { throw new IllegalStateException("SHA-256 unavailable"); }
