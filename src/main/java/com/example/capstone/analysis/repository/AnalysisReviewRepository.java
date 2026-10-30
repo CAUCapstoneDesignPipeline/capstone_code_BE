@@ -23,6 +23,7 @@ public class AnalysisReviewRepository {
     public List<JsonNode> list(UUID user,boolean recommendations,int limit) {
         return db.rows(INSIGHT+"""
           where r.user_id=:user and (:history=true or (r.derivation_status='conclusion' and r.soundness='sound' and r.freshness='current'
+           and not exists(select 1 from analysis_result newer where newer.user_id=r.user_id and newer.identity_sha256=r.identity_sha256 and (newer.created_at,newer.id)>(r.created_at,r.id))
            and r.review_status in ('unreviewed','accepted') and coalesce(r.detail->>'hypothesis','false')='false'
            and (select count(distinct s.original_note_id) from analysis_result_evidence e join analysis_snapshot s on s.id=e.snapshot_id and s.user_id=e.user_id
              where e.result_id=r.id and e.user_id=r.user_id and s.freshness='current')>=2))
