@@ -22,11 +22,16 @@ import com.example.capstone.support.ApiIntegrationSupport;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@SpringBootTest
+@SpringBootTest(properties={"capstone.ai.enabled=true","capstone.ai.pipeline.synthetic-stub=true","capstone.ai.execution.worker-enabled=false","capstone.ai.execution.poll-ms=3600000"})
 @AutoConfigureMockMvc(print=MockMvcPrint.NONE)
 @ActiveProfiles("test")
 @Testcontainers
 class AnalysisInvalidationIntegrationTest extends ApiIntegrationSupport {
+    static final java.nio.file.Path policy=policy();
+    static java.nio.file.Path policy() { try { var p=java.nio.file.Files.createTempFile("invalidation-policy-",".json");java.nio.file.Files.writeString(p,com.example.capstone.analysis.support.SyntheticPipelineServer.POLICY);return p; } catch(Exception e) { throw new IllegalStateException(e); } }
+    @org.springframework.test.context.DynamicPropertySource static void config(org.springframework.test.context.DynamicPropertyRegistry p) { p.add("capstone.ai.pipeline.policy-file",policy::toString); }
+    @org.junit.jupiter.api.AfterAll static void cleanupPolicy() throws Exception { java.nio.file.Files.delete(policy); }
+
     @Container @ServiceConnection static final PostgreSQLContainer postgres=new PostgreSQLContainer("postgres:16.15");
     @Autowired AnalysisWorkService work;
     @Test void bodyChangeInvalidatesDependenciesAndRestoredTextNeverRestoresVerificationOrReview() throws Exception {

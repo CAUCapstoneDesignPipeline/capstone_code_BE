@@ -20,11 +20,12 @@ public class CapabilitiesController {
     }
 
     @Operation(summary = "AI 기능 사용 가능 여부",
-            description = "기본 AI-off는 세 값 모두 false입니다. 작업 접수는 별도로 profile readiness를 검사합니다.")
+            description = "기본 AI-off는 세 값 모두 false입니다. 필수 설정과 3초 이내의 profile readiness 검사에 실패하면 false입니다.")
     @SecurityRequirements
     @GetMapping("/api/capabilities")
     public ResponseEntity<CapabilitiesResponse> get() {
+        boolean available=properties.available();
         return ResponseEntity.ok().cacheControl(CacheControl.noStore())
-                .body(new CapabilitiesResponse(properties.configured(), properties.configured(), properties.configured()));
+                .body(new CapabilitiesResponse(available, available, available));
     }
 }
