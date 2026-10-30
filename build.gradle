@@ -16,8 +16,12 @@ repositories {
     mavenCentral()
 }
 
+configurations { uploadValidation }
+
 dependencies {
     implementation platform(org.springframework.boot.gradle.plugin.SpringBootPlugin.BOM_COORDINATES)
+    implementation 'org.apache.pdfbox:pdfbox:3.0.8'
+    uploadValidation 'org.apache.pdfbox:pdfbox:3.0.8'
     implementation 'org.springframework.boot:spring-boot-starter-webmvc'
     implementation 'org.springframework.boot:spring-boot-starter-validation'
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
@@ -47,3 +51,17 @@ tasks.register('aiCompatibilitySmoke', JavaExec) {
     classpath = sourceSets.test.runtimeClasspath
     mainClass = 'com.example.capstone.analysis.AiCompatibilitySmoke'
 }
+
+// 별도 경량 validator jar. 앱 bootJar wildcard와 충돌하지 않는 경로를 사용한다.
+tasks.register('uploadValidatorJar', Jar) {
+    dependsOn classes
+    archiveFileName = 'upload-validator.jar'
+    destinationDirectory = layout.buildDirectory.dir('validation')
+    manifest { attributes 'Main-Class': 'com.example.capstone.conversion.validation.UploadValidatorMain' }
+    from(sourceSets.main.output) { include 'com/example/capstone/conversion/validation/**' }
+    from { configurations.uploadValidation.collect { it.isDirectory() ? it : zipTree(it) } }
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    exclude 'META-INF/*.SF', 'META-INF/*.RSA', 'META-INF/*.DSA'
+}
+tasks.named('bootJar') { dependsOn uploadValidatorJar }
+tasks.named('test') { dependsOn uploadValidatorJar; systemProperty 'capstone.test.validator-jar', layout.buildDirectory.file('validation/upload-validator.jar').get().asFile.absolutePath }
