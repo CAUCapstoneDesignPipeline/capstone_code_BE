@@ -63,6 +63,14 @@ class AnalysisWorkerIntegrationTest extends ApiIntegrationSupport {
         assertEquals("succeeded",json(call("GET","/api/notes/"+note+"/analysis",null)).path("job").path("lifecycleState").asString());
         assertEquals(0,jdbc.queryForObject("select count(*) from analysis_snapshot where job_id=? and user_id<>?",Integer.class,job,userId));
     }
+    @Test void legacyPendingHistoryDoesNotPermanentlyBlockExplicitNewAnalysis() throws Exception {
+        UUID note=note("legacy",null,"본문"),legacy=UUID.randomUUID();
+        jdbc.update("insert into analysis_job(id,note_id,note_version,extractor,status) values(?,?,0,'legacy','pending')",legacy,note);
+        UUID fresh=submit(note);assertNotEquals(legacy,fresh);
+        assertEquals("failed",jdbc.queryForObject("select status from analysis_job where id=?",String.class,legacy));
+        assertEquals("legacy",jdbc.queryForObject("select extractor from analysis_job where id=?",String.class,legacy));
+        assertTrue(worker.runOne());assertEquals("succeeded",jdbc.queryForObject("select status from analysis_job where id=?",String.class,fresh));
+    }
     @Test void concurrentAdmissionsAndClaimsDoNotDuplicateActiveWork() throws Exception {
         UUID note=note("concurrent",null,"본문");ready();ready();
         CountDownLatch start=new CountDownLatch(1);
