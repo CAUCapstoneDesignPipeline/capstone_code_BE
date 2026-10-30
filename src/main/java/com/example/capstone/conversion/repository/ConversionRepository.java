@@ -39,7 +39,18 @@ public class ConversionRepository {
         write("update conversion_job set status='cancelled',conversion_revision=conversion_revision+1,error_code='CANCELLED',lease_token=null,lease_until=null,finished_at=clock_timestamp(),result=null,result_revision=null where user_id=:user and file_id=:file and status<>'cancelled' and not exists(select 1 from conversion_confirmation c where c.job_id=conversion_job.id)",Map.of("user",user,"file",file));
         write("update conversion_confirmation set mapping_status='invalidated',mappings=(select coalesce(jsonb_agg(item || '{\"status\":\"invalidated\"}'::jsonb),'[]'::jsonb) from jsonb_array_elements(mappings) item) where user_id=:user and file_id=:file",Map.of("user",user,"file",file));
     }
-    public List<JsonNode> dueFiles() { return rows("select to_jsonb(f)::text from source_file f where deleted_at is null and ((expires_at<=clock_timestamp() and not exists(select 1 from conversion_confirmation c where c.file_id=f.id and c.note_id is not null)) or exists(select 1 from conversion_confirmation c where c.file_id=f.id and c.note_id is null) and not exists(select 1 from conversion_confirmation c where c.file_id=f.id and c.note_id is not null)) order by created_at,id limit 100",Map.of()); }
+    public List<JsonNode> dueFiles() { return rows("""
+        select to_jsonb(f)::text from source_file f where
+         (f.deleted_at is null and f.expires_at<=clock_timestamp() and not exists(select 1 from conversion_confirmation c where c.file_id=f.id and c.note_id is not null))
+         or exists(select 1 from conversion_confirmation c join conversion_job j on j.id=c.job_id and j.user_id=c.user_id
+          where c.file_id=f.id and c.note_id is null and (j.result is not null or c.mappings<>'[]'::jsonb or
+           (f.deleted_at is null and not exists(select 1 from conversion_confirmation retained where retained.file_id=f.id and retained.note_id is not null))))
+        order by f.created_at,f.id limit 100
+        """,Map.of()); }
+    public void purgeDeletedConfirmationContent(UUID user,UUID file) {
+        write("update conversion_job j set result=null,result_revision=null,status='cancelled',error_code='SOURCE_GONE',conversion_revision=conversion_revision+1,lease_token=null,lease_until=null where j.user_id=:user and j.file_id=:file and j.result is not null and exists(select 1 from conversion_confirmation c where c.user_id=j.user_id and c.job_id=j.id and c.note_id is null)",Map.of("user",user,"file",file));
+        write("update conversion_confirmation set mappings='[]'::jsonb,mapping_status='invalidated' where user_id=:user and file_id=:file and note_id is null and mappings<>'[]'::jsonb",Map.of("user",user,"file",file));
+    }
     public List<JsonNode> pendingDeletes() { return rows("select to_jsonb(f)::text from source_file f where deleted_at is not null and physical_deleted_at is null order by deleted_at,id limit 100",Map.of()); }
     public void deleted(UUID id) { write("update source_file set physical_deleted_at=clock_timestamp() where id=:id and deleted_at is not null",Map.of("id",id)); }
     public boolean referenced(UUID key) { return one("select to_jsonb(exists(select 1 from source_file where object_key=:key))::text",Map.of("key",key)).asBoolean(); }

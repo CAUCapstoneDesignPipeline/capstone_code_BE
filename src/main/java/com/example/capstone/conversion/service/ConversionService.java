@@ -41,8 +41,9 @@ public class ConversionService {
     @Transactional public void deleteSource(UUID user,UUID file) { lock(user);var row=db.file(user,file,true);if(row==null)throw missing();db.tombstone(user,file); }
     @Transactional public void expireSourceIfEligible(UUID user,UUID file) {
         lock(user);var row=db.file(user,file,true);
-        if(row!=null && row.path("deleted_at").isNull() && !db.retained(user,file)
-                && (!Instant.parse(row.path("expires_at").asString()).isAfter(Instant.now()) || db.deletedConfirmedNote(user,file)))db.tombstone(user,file);
+        if(row==null)return;
+        db.purgeDeletedConfirmationContent(user,file);
+        if(!db.retained(user,file) && (!Instant.parse(row.path("expires_at").asString()).isAfter(Instant.now()) || db.deletedConfirmedNote(user,file)))db.tombstone(user,file);
     }
     @Transactional public JsonNode start(UUID user,JsonNode request) {
         wire.fields(request,"fileId","idempotencyKey");UUID file=wire.uuid(request.path("fileId"));String key=wire.text(request.path("idempotencyKey"),1,80);

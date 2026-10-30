@@ -161,4 +161,14 @@ class ConversionIntegrationTest extends ApiIntegrationSupport {
         } finally {commit.countDown();}
     }
 
+    @Test void deletingConfirmedNotesPurgesTheirContentButRetainsOtherLiveSourceReferences() throws Exception {
+        UUID source=file(),first=start(source,"first-retained");assertTrue(worker.runOne());var a=result(first);var firstRequest=confirmPayload(a,"first-confirm","첫 확정",a.path("markdown").asString());var firstNote=service.confirm(userId,first,firstRequest);
+        UUID second=start(source,"second-retained");assertTrue(worker.runOne());var b=result(second);var secondRequest=confirmPayload(b,"second-confirm","둘째 확정",b.path("markdown").asString());var secondNote=service.confirm(userId,second,secondRequest);
+        call("DELETE","/api/notes/"+firstNote.path("noteId").asString(),null).andExpect(status().isNoContent());cleanup.sweep();
+        assertNull(jdbc.queryForObject("select result from conversion_job where id=?",Object.class,first));assertEquals("[]",jdbc.queryForObject("select mappings::text from conversion_confirmation where job_id=?",String.class,first));call("GET","/api/source-files/"+source,null).andExpect(status().isOk());assertNotNull(jdbc.queryForObject("select result from conversion_job where id=?",Object.class,second));
+        call("DELETE","/api/source-files/"+source,null).andExpect(status().isNoContent());call("DELETE","/api/notes/"+secondNote.path("noteId").asString(),null).andExpect(status().isNoContent());cleanup.sweep();
+        assertNull(jdbc.queryForObject("select result from conversion_job where id=?",Object.class,second));assertEquals("[]",jdbc.queryForObject("select mappings::text from conversion_confirmation where job_id=?",String.class,second));
+        call("POST","/api/conversions/"+second+"/confirm",secondRequest.toString()).andExpect(status().isNotFound());assertEquals(0,jdbc.queryForObject("select count(*) from note where user_id=?",Integer.class,userId));
+    }
+
 }
