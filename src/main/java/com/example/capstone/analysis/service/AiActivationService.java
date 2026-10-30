@@ -35,6 +35,7 @@ public class AiActivationService {
         if(previousState.getAndSet(configured)!=configured)stateRevision.incrementAndGet();
         return configured;
     }
+    public void flushRevocation() { gate.flushRevocation(); }
     public long stateRevision() { return stateRevision.get(); }
     public boolean available() {
         if(!configured()) return false;
