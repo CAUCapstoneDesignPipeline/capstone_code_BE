@@ -1,0 +1,82 @@
+{
+  "request": {
+    "context": {
+      "analysisJobId": "00000000-0000-4000-8000-000000000010",
+      "stageExecutionId": "00000000-0000-4000-8000-000000000011",
+      "userId": "00000000-0000-4000-8000-000000000012",
+      "noteId": "00000000-0000-4000-8000-000000000001",
+      "noteVersion": 1,
+      "inputRevision": 1,
+      "graphRevision": 1,
+      "pipelineVersion": "ai-integration-2026-10-30-adopted.1"
+    },
+    "profileVersion": "facts-llm-1",
+    "note": {
+      "noteId": "00000000-0000-4000-8000-000000000001",
+      "noteVersion": 1,
+      "inputRevision": 1,
+      "title": "합성 노트 1",
+      "body": "알고리즘 A 🧠는 큐의 enqueue 연산을 사용한다.",
+      "bodySha256": "cb8f6f010f554c0624daf34759048a1acdb5feb7741337ccd307a4b78721afa0",
+      "topic": {
+        "id": null,
+        "name": "미분류"
+      }
+    },
+    "knownSubjects": [
+      "structure_b"
+    ]
+  },
+  "response": {
+    "context": {
+      "analysisJobId": "00000000-0000-4000-8000-000000000010",
+      "stageExecutionId": "00000000-0000-4000-8000-000000000011",
+      "userId": "00000000-0000-4000-8000-000000000012",
+      "noteId": "00000000-0000-4000-8000-000000000001",
+      "noteVersion": 1,
+      "inputRevision": 1,
+      "graphRevision": 1,
+      "pipelineVersion": "ai-integration-2026-10-30-adopted.1"
+    },
+    "meta": {
+      "profileVersion": "facts-llm-1",
+      "provider": "synthetic",
+      "model": "fixture",
+      "modelRevision": "fixture-1",
+      "promptVersion": null,
+      "schemaVersion": "1.0",
+      "preprocessingVersion": "nfc-utf16-fixture-1",
+      "durationMs": 0
+    },
+    "facts": [
+      {
+        "factId": "fact-1",
+        "kind": "needs_op",
+        "subject": "알고리즘 A",
+        "subjectKey": "algorithm_a",
+        "role": "queue",
+        "op": "enqueue",
+        "expr": null,
+        "case": null,
+        "negated": false,
+        "condition": null,
+        "other": null,
+        "otherKey": null,
+        "origin": "manual",
+        "evidence": {
+          "noteId": "00000000-0000-4000-8000-000000000001",
+          "noteVersion": 1,
+          "bodySha256": "cb8f6f010f554c0624daf34759048a1acdb5feb7741337ccd307a4b78721afa0",
+          "startOffset": 0,
+          "endOffset": 31,
+          "quote": "알고리즘 A 🧠는 큐의 enqueue 연산을 사용한다."
+        }
+      }
+    ],
+    "dropped": []
+  },
+  "expected": {
+    "schemaValid": true,
+    "recommendationEligible": false
+  }
+}
