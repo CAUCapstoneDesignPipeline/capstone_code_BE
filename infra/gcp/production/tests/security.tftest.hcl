@@ -10,6 +10,21 @@ run "mvp_security_boundaries" {
   command = plan
   assert {
     condition = (
+      google_compute_instance.app.machine_type == "e2-standard-2" &&
+      google_compute_instance.ai.machine_type == "e2-highmem-2" &&
+      google_sql_database_instance.main.settings[0].tier == "db-custom-1-3840" &&
+      google_sql_database_instance.main.database_version == "POSTGRES_16" &&
+      google_sql_database_instance.main.settings[0].edition == "ENTERPRISE" &&
+      google_sql_database_instance.main.region == "asia-northeast3" &&
+      google_sql_database_instance.main.settings[0].availability_type == "ZONAL" &&
+      google_sql_database_instance.main.settings[0].disk_size == 50 &&
+      google_compute_instance.app.boot_disk[0].initialize_params[0].size == 50 &&
+      google_compute_instance.ai.boot_disk[0].initialize_params[0].size == 100
+    )
+    error_message = "The 50-day budget must retain app 2/8, AI 2/16, SQL 1/3.75 and existing disks. Re-cost larger plans."
+  }
+  assert {
+    condition = (
       google_sql_database_instance.main.settings[0].ip_configuration[0].ipv4_enabled == false &&
       google_sql_database_instance.main.settings[0].connector_enforcement == "REQUIRED" &&
       google_sql_database_instance.main.settings[0].ip_configuration[0].ssl_mode == "ENCRYPTED_ONLY"
@@ -20,9 +35,13 @@ run "mvp_security_boundaries" {
     condition = (
       google_sql_database_instance.main.deletion_protection &&
       google_sql_database_instance.main.settings[0].deletion_protection_enabled &&
+      google_sql_database_instance.main.settings[0].backup_configuration[0].enabled &&
+      google_sql_database_instance.main.settings[0].backup_configuration[0].backup_retention_settings[0].retained_backups == 7 &&
+      google_sql_database_instance.main.settings[0].backup_configuration[0].backup_retention_settings[0].retention_unit == "COUNT" &&
       google_sql_database_instance.main.settings[0].backup_configuration[0].point_in_time_recovery_enabled &&
       google_sql_database_instance.main.settings[0].backup_configuration[0].transaction_log_retention_days == 7 &&
-      google_compute_instance.app.deletion_protection
+      google_compute_instance.app.deletion_protection &&
+      google_compute_instance.ai.deletion_protection
     )
     error_message = "Data/VM deletion guards and seven-day PITR must remain enabled."
   }
@@ -178,4 +197,28 @@ run "budget_requires_recipient" {
     }
   }
   expect_failures = [google_billing_budget.project[0]]
+}
+
+run "reject_ai_memory_reduction" {
+  command = plan
+  variables { ai_machine_type = "e2-standard-2" }
+  expect_failures = [var.ai_machine_type]
+}
+
+run "reject_shared_sql_tier" {
+  command = plan
+  variables { db_tier = "db-f1-micro" }
+  expect_failures = [var.db_tier]
+}
+
+run "reject_sql_disk_reduction" {
+  command = plan
+  variables { db_disk_size_gb = 49 }
+  expect_failures = [var.db_disk_size_gb]
+}
+
+run "reject_non_seoul_zone" {
+  command = plan
+  variables { zone = "us-central1-a" }
+  expect_failures = [var.zone]
 }
