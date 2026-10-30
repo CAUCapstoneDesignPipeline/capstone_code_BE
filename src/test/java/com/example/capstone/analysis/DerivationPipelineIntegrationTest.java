@@ -87,6 +87,19 @@ class DerivationPipelineIntegrationTest extends ApiIntegrationSupport {
         assertEquals(1,jdbc.queryForObject("select count(*) from analysis_fact where job_id=? and kind='stated_result'",Integer.class,job));
         assertEquals(0,jdbc.queryForObject("select count(*) from analysis_snapshot where job_id=? and user_id<>?",Integer.class,job,userId));
     }
+    @Test void serializedDerivationBudgetFailsExplicitlyWithoutClaimingCompleteNovelty() throws Exception {
+        UUID primary=note("알고리즘",null,body(0));note("구현",null,body(1));for(int i=0;i<18;i++)note("큰 문서 "+i,null,"가".repeat(50000));
+        UUID job=submit(primary);worker.runOne();assertEquals("failed",jdbc.queryForObject("select status from analysis_job where id=?",String.class,job));
+        assertEquals("INPUT_LIMIT",jdbc.queryForObject("select failure_code from analysis_job where id=?",String.class,job));
+        assertFalse(server.requests.stream().anyMatch(r->r.has("facts")));assertEquals(0,jdbc.queryForObject("select count(*) from analysis_result where job_id=?",Integer.class,job));
+        assertEquals(0,jdbc.queryForObject("select count(*) from analysis_fact where job_id=?",Integer.class,job));
+    }
+    @Test void conditionOrTraceInSecondDocumentDoesNotCountAsIndependentPremise() throws Exception {
+        UUID primary=note("알고리즘",null,body(0));note("구현",null,body(1));server.mode="condition-only-doc";UUID job=execute(primary);
+        assertEquals(2,jdbc.queryForObject("select count(distinct s.original_note_id) from analysis_result_evidence e join analysis_snapshot s on s.id=e.snapshot_id where e.job_id=?",Integer.class,job));
+        assertEquals(1,jdbc.queryForObject("select count(distinct s.original_note_id) from analysis_result_evidence e join analysis_snapshot s on s.id=e.snapshot_id where e.job_id=? and e.claim_ref='premise'",Integer.class,job));
+        assertEquals(0,json(call("GET","/api/candidates",null)).path("results").size());assertEquals(2,json(call("GET","/api/candidates?view=history",null)).path("results").size());
+    }
     @Test void moreThan400FactsFailsExplicitlyAndDoesNotPublishPartialSuccess() throws Exception {
         UUID primary=note("알고리즘",null,body(0));note("구현",null,body(1));server.mode="overflow";UUID job=submit(primary);worker.runOne();
         assertEquals("failed",jdbc.queryForObject("select status from analysis_job where id=?",String.class,job));
