@@ -33,6 +33,13 @@ public class MigrationAcceptance {
                 sql.execute("INSERT INTO note(user_id,title,body,version) VALUES ('00000000-0000-0000-0000-000000000001','Fixture A','NFC fixture A',2),('00000000-0000-0000-0000-000000000002','Fixture B','NFC fixture B',3)");
                 sql.execute("INSERT INTO user_identity(user_id,provider,provider_subject,email_verified) SELECT id,'google','synthetic-'||id,true FROM app_user");
                 sql.execute("INSERT INTO refresh_token(user_id,family_id,token_hash,expires_at) SELECT id,gen_random_uuid(),repeat(substr(id::text,36,1),64),now()+interval '1 day' FROM app_user");
+                // Legacy AI tables can contain history even while product capabilities are off.
+                sql.execute("INSERT INTO analysis_job(note_id,note_version,status,extractor) SELECT id,version,'succeeded','synthetic-legacy' FROM note");
+                sql.execute("INSERT INTO concept(id,user_id,label) VALUES ('10000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000001','Alpha'),('10000000-0000-0000-0000-000000000002','00000000-0000-0000-0000-000000000001','Bridge'),('10000000-0000-0000-0000-000000000003','00000000-0000-0000-0000-000000000001','Target')");
+                sql.execute("INSERT INTO candidate(id,user_id,source_concept_id,bridge_concept_id,target_concept_id,kind,status,summary) VALUES ('20000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000003','candidate','accepted','Synthetic legacy accepted result')");
+                sql.execute("INSERT INTO candidate_claim(candidate_id,kind,sort_order,body) VALUES ('20000000-0000-0000-0000-000000000001','conclusion',0,'Synthetic legacy conclusion')");
+                sql.execute("INSERT INTO verification_result(candidate_id,layer,outcome,detail) VALUES ('20000000-0000-0000-0000-000000000001',1,'pass','{}')");
+                sql.execute("INSERT INTO review(candidate_id,action,original) VALUES ('20000000-0000-0000-0000-000000000001','approve','{\"summary\":\"Synthetic legacy accepted result\"}')");
                 sql.execute("CREATE SEQUENCE fixture_sequence START 10; ALTER SEQUENCE fixture_sequence OWNER TO capstone_app; SELECT nextval('fixture_sequence')");
             }
             String services = "";
