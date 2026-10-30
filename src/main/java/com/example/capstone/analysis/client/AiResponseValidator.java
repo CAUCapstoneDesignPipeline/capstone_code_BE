@@ -15,7 +15,7 @@ public final class AiResponseValidator {
     public AiResponseValidator(AiSchemaValidator schemas) { this.schemas = schemas; }
     public void validate(AiOperation operation, JsonNode request, JsonNode response) {
         schemas.validate(operation.responseSchema(), response);
-        require(response.path("context").equals(request.path("context")));
+        require(sameJson(response.path("context"),request.path("context")));
         require(response.path("meta").path("profileVersion").equals(request.path("profileVersion")));
         Map<String, JsonNode> documents = new HashMap<>();
         if (request.has("note")) add(documents, request.get("note"));
@@ -42,6 +42,7 @@ public final class AiResponseValidator {
         if(request.has("note")) add(documents,request.path("note"));
         for(String field:new String[]{"documents","candidates","notes"}) for(var doc:request.path(field)) if(doc.has("body")) add(documents,doc);
         walk(request,documents,request.path("note"),0);
+        AiReferenceValidator.request(request);
     }
     private void add(Map<String, JsonNode> documents, JsonNode doc) {
         String body = doc.path("body").asString();
@@ -58,7 +59,7 @@ public final class AiResponseValidator {
                 doc = documents.get(node.path("noteId").asString());
                 require(doc != null);
                 for (String key : new String[]{"noteVersion", "inputRevision", "bodySha256"}) {
-                    if (node.has(key)) require(node.get(key).equals(doc.get(key)));
+                    if (node.has(key)) require(sameJson(node.get(key),doc.get(key)));
                 }
             }
             if (node.has("startOffset") || node.has("endOffset")) {
@@ -76,6 +77,17 @@ public final class AiResponseValidator {
         require(!(end < body.length() && Character.isLowSurrogate(body.charAt(end))
                 && Character.isHighSurrogate(body.charAt(end - 1))));
         require(body.substring(start, end).equals(quote));
+    }
+    public static boolean sameJson(JsonNode left,JsonNode right) {
+        if(left==null || right==null) return left==right;
+        if(left.isIntegralNumber() && right.isIntegralNumber()) return left.bigIntegerValue().equals(right.bigIntegerValue());
+        if(left.isObject() && right.isObject()) {
+            if(left.size()!=right.size()) return false;
+            for(var field:left.properties()) if(!right.has(field.getKey()) || !sameJson(field.getValue(),right.get(field.getKey()))) return false;
+            return true;
+        }
+        if(left.isArray() && right.isArray()) { if(left.size()!=right.size())return false;for(int i=0;i<left.size();i++)if(!sameJson(left.get(i),right.get(i)))return false;return true; }
+        return left.equals(right);
     }
     public static String hash(String text) {
         try { return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(text.getBytes(StandardCharsets.UTF_8))); }

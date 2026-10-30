@@ -14,19 +14,26 @@ public class AnalysisGraphRepository {
     public List<JsonNode> items(UUID user,String scope,UUID note,UUID topic,boolean unassigned,String kind) {
         var p=parameters(user,scope,note,topic,unassigned);p.put("kind",kind);
         return db.rows("""
-          select (g.value || case when g.kind='relation' then jsonb_build_object('status',case when s.freshness='current' then 'active' else 'evidence_lost' end,
-           'evidence',coalesce((select jsonb_agg(e || jsonb_build_object('status',case when s.freshness='current' then 'valid' else 'lost' end)) from jsonb_array_elements(g.value->'evidence') e),'[]'::jsonb)) else '{}'::jsonb end)::text
+          select (g.value || case when g.kind='relation' then jsonb_build_object('status',case when s.freshness='current' and not exists(select 1 from analysis_snapshot stale where stale.job_id=g.job_id and stale.user_id=g.user_id and stale.freshness<>'current') then 'active' else 'evidence_lost' end,
+           'evidence',coalesce((select jsonb_agg(e || jsonb_build_object('status',case when s.freshness='current' and not exists(select 1 from analysis_snapshot stale where stale.job_id=g.job_id and stale.user_id=g.user_id and stale.freshness<>'current') then 'valid' else 'lost' end)) from jsonb_array_elements(g.value->'evidence') e),'[]'::jsonb)) else '{}'::jsonb end)::text
           from analysis_graph_item g join analysis_snapshot s on s.id=g.snapshot_id and s.user_id=g.user_id and s.job_id=g.job_id
           join analysis_job j on j.id=g.job_id and j.user_id=g.user_id
           left join note current_note on current_note.id=s.note_id and current_note.user_id=s.user_id
           where g.user_id=:user and g.kind=:kind and j.status='succeeded'
-           and (:kind<>'concept' or s.freshness='current')
+           and (:kind<>'concept' or (s.freshness='current' and not exists(select 1 from analysis_snapshot stale where stale.job_id=g.job_id and stale.user_id=g.user_id and stale.freshness<>'current')))
            and (:scope='all' or (:scope='note' and s.original_note_id=cast(:note as uuid))
              or (:scope='topic' and (current_note.topic_id=cast(:topic as uuid) or (:unassigned=true and current_note.topic_id is null))))
            and not exists(select 1 from analysis_snapshot newer join analysis_job nj on nj.id=newer.job_id and nj.user_id=newer.user_id
             where newer.user_id=s.user_id and newer.original_note_id=s.original_note_id and nj.status='succeeded'
              and (nj.created_at,nj.id)>(j.created_at,j.id)) order by g.id
           """,p);
+    }
+    public List<JsonNode> aliases(UUID user) {
+        return db.rows("""
+          select g.value::text from analysis_graph_item g join analysis_job j on j.id=g.job_id and j.user_id=g.user_id
+          where g.user_id=:user and g.kind='concept' and j.status='succeeded' and jsonb_typeof(g.value->'aliases')='array'
+           and not exists(select 1 from analysis_snapshot s where s.job_id=g.job_id and s.user_id=g.user_id and s.freshness<>'current') order by g.id
+          """,Map.of("user",user));
     }
     public List<JsonNode> legacyConcepts(UUID user,String scope,UUID note,UUID topic,boolean unassigned) {
         return db.rows("""

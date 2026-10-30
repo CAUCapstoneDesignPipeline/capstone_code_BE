@@ -37,8 +37,22 @@ final class AiReferenceValidator {
             case LINKS -> links(request,response);
             case EMBEDDINGS -> ids(request.path("items"),"itemId");
         }
-        // All input reasoning objects must refer to evidence supplied in this stage.
+        // 생성과 검증의 모델·프롬프트가 모두 같은 경우 독립 검증으로 승격하지 않는다.
+        for(var generation:request.path("generationProvenance")) require(!generation.path("model").equals(response.path("meta").path("model"))
+                || !generation.path("promptVersion").equals(response.path("meta").path("promptVersion")));
+        // 이 단계에 제공된 근거만 참조할 수 있다.
         if(!evidence.isEmpty()) walkEvidenceReferences(request,evidence);
+    }
+    static void request(JsonNode request) {
+        Map<String,JsonNode> evidence=new HashMap<>(),documents=new HashMap<>();
+        for(var e:request.path("evidence")) require(evidence.put(e.path("evidenceId").asString(),e)==null);
+        for(var doc:request.path("documents")) documents.put(doc.path("noteId").asString(),doc);
+        for(var pair:request.path("pairs")) for(String side:new String[]{"left","right"}) {
+            JsonNode occurrence=pair.path(side),span=evidence.get(occurrence.path("evidenceId").asString());require(span!=null);
+            JsonNode document=documents.get(span.path("noteId").asString());require(document!=null);
+            require(occurrence.path("topicId").equals(document.path("topic").path("id")) && span.path("quote").asString().contains(occurrence.path("surface").asString()));
+        }
+        if(!evidence.isEmpty()) walkEvidenceReferences(request,evidence.keySet());
     }
     private static void claims(JsonNode explanation,Set<String> evidence) {
         ids(explanation.path("claims"),"claimRef");
@@ -108,6 +122,10 @@ final class AiReferenceValidator {
                 }
                 require(contributing.size()==2 && orders.equals(Set.of(1,2)));
                 if(!path.path("proposedTypeCode").isNull()) member(types,path.path("proposedTypeCode"));
+                String first=null,second=null,expected=null;
+                for(var step:path.path("steps")) if(step.path("stepOrder").asInt()==1) first=step.path("typeCode").asString();else second=step.path("typeCode").asString();
+                for(var rule:request.path("policy").path("compositionRules")) if(rule.path("firstType").asString().equals(first) && rule.path("secondType").asString().equals(second)) expected=rule.path("resultType").asString();
+                require(expected==null?path.path("proposedTypeCode").isNull():expected.equals(path.path("proposedTypeCode").asString()));
             }
         }
     }

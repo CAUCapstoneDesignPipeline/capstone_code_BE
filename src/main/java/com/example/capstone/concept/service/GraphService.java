@@ -26,8 +26,9 @@ public class GraphService {
     private final NoteService notes;
     private final TopicService topics;
     private final ObjectMapper mapper;
-    public GraphService(AnalysisGraphRepository repository,AnalysisService analysis,NoteService notes,TopicService topics,ObjectMapper mapper) {
-        this.repository=repository;this.analysis=analysis;this.notes=notes;this.topics=topics;this.mapper=mapper;
+    private final com.example.capstone.analysis.config.AiPipelineConfiguration configuration;
+    public GraphService(AnalysisGraphRepository repository,AnalysisService analysis,NoteService notes,TopicService topics,ObjectMapper mapper,com.example.capstone.analysis.config.AiPipelineConfiguration configuration) {
+        this.repository=repository;this.analysis=analysis;this.notes=notes;this.topics=topics;this.mapper=mapper;this.configuration=configuration;
     }
     public ObjectNode note(UUID user,UUID note) {
         notes.requireOwned(user,note);var result=mapper.createObjectNode();result.put("noteId",note.toString());result.set("analysis",mapper.valueToTree(analysis.get(user,note).job()));
@@ -54,12 +55,25 @@ public class GraphService {
         }
         throw new ApiException(ErrorCode.NOT_FOUND,"관계를 찾을 수 없습니다.");
     }
-    public List<JsonNode> types() { return repository.types(); }
+    public List<JsonNode> types() { var types=new LinkedHashMap<String,JsonNode>();for(var type:repository.types()) types.put(type.path("code").asString(),type);if(configuration.configured()) for(var type:configuration.policy().path("relationTypes")) types.putIfAbsent(type.path("code").asString(),type);return List.copyOf(types.values()); }
     private List<JsonNode> concepts(UUID u,String scope,UUID note,UUID topic,boolean unassigned) {
-        var values=new ArrayList<>(repository.legacyConcepts(u,scope,note,topic,unassigned));values.addAll(repository.items(u,scope,note,topic,unassigned,"concept"));return unique(values);
+        var values=new ArrayList<>(repository.legacyConcepts(u,scope,note,topic,unassigned));values.addAll(repository.items(u,scope,note,topic,unassigned,"concept"));return unique(canonicalize(u,values));
     }
     private List<JsonNode> relations(UUID u,String scope,UUID note,UUID topic,boolean unassigned) {
-        var values=new ArrayList<>(repository.legacyRelations(u,scope,note,topic,unassigned));values.addAll(repository.items(u,scope,note,topic,unassigned,"relation"));return unique(values);
+        var values=new ArrayList<>(repository.legacyRelations(u,scope,note,topic,unassigned));values.addAll(repository.items(u,scope,note,topic,unassigned,"relation"));return unique(canonicalize(u,values));
+    }
+    private List<JsonNode> canonicalize(UUID user,List<JsonNode> values) {
+        Map<String,String> aliases=com.example.capstone.analysis.service.AnalysisAliasService.mapping(repository.aliases(user));
+        var result=new ArrayList<JsonNode>();
+        for(var value:values) {
+            ObjectNode copy=(ObjectNode)value.deepCopy();copy.remove("aliases");
+            if(copy.has("source")) {
+                for(String endpoint:List.of("source","target")) { ObjectNode node=(ObjectNode)copy.path(endpoint);String id=node.path("id").asString();node.put("id",aliases.getOrDefault(id,id)); }
+                if(copy.path("source").path("id").equals(copy.path("target").path("id"))) continue;
+            } else { String id=copy.path("id").asString();copy.put("id",aliases.getOrDefault(id,id)); }
+            result.add(copy);
+        }
+        return result;
     }
     private List<JsonNode> unique(List<JsonNode> items) {
         var unique=new LinkedHashMap<String,JsonNode>();

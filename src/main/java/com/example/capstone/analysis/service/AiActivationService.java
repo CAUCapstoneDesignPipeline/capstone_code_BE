@@ -23,10 +23,10 @@ public class AiActivationService {
     public AiActivationService(AiProperties properties,AiExecutionProperties execution,AiHttpClient client,
             ObjectProvider<AnalysisPipeline> pipeline,Environment environment) {
         this.properties=properties;this.execution=execution;this.client=client;this.pipeline=pipeline;
-        this.local=Arrays.stream(environment.getActiveProfiles()).anyMatch(p -> p.equals("test") || p.equals("local"));
+        this.local=!environment.matchesProfiles("prod") && Arrays.stream(environment.getActiveProfiles()).anyMatch(p -> p.equals("test") || p.equals("local"));
     }
     public boolean configured() {
-        return properties.enabled() && local && client.configured() && pipeline.getIfAvailable()!=null
+        return properties.enabled() && local && client.configured() && pipeline.getIfAvailable()!=null && pipeline.getObject().configured()
                 && execution.budgetMicrounits()>0 && execution.currency()!=null && execution.currency().matches("[A-Z]{3}")
                 && execution.requiredProfiles()!=null && !execution.requiredProfiles().isEmpty();
     }
@@ -35,7 +35,7 @@ public class AiActivationService {
     public void requireAvailable() {
         if(!properties.enabled()) throw unavailable("NOT_DEPLOYED");
         if(!configured()) throw unavailable("MISCONFIGURED");
-        try { client.ready(execution.requiredProfiles()); } catch(AiCallException failure) { throw unavailable(failure.reason().name()); }
+        try { client.ready(pipeline.getObject().requiredProfiles().isEmpty()?execution.requiredProfiles():pipeline.getObject().requiredProfiles()); } catch(AiCallException failure) { throw unavailable(failure.reason().name()); }
     }
     private ApiException unavailable(String reason) { return new ApiException(ErrorCode.AI_UNAVAILABLE,"AI 분석은 아직 사용할 수 없습니다.",Map.of("reason",reason)); }
 }
