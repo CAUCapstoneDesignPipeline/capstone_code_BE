@@ -110,3 +110,13 @@ resource "terraform_data" "federation_gate" {
     }
   }
 }
+
+variable "github_app_publish_only" {
+  description = "Enable only manual main-branch BE and FE image publishers. Production deploy and AI identities are excluded."
+  type        = bool
+  default     = false
+  validation {
+    condition     = !(var.github_app_publish_only && var.github_federation_enabled)
+    error_message = "Select either app image publication or full federation."
+  }
+}
