@@ -1,0 +1,66 @@
+{
+  "name": "Deploy reviewed GCP app release",
+  "on": {
+    "workflow_dispatch": {
+      "inputs": {
+        "operation": {
+          "description": "deploy or rollback",
+          "required": true,
+          "type": "choice",
+          "options": [
+            "deploy",
+            "rollback"
+          ]
+        },
+        "source_sha": {
+          "description": "Reviewed BE source commit",
+          "required": true,
+          "type": "string"
+        },
+        "image_digest": {
+          "description": "Reviewed immutable BE digest",
+          "required": true,
+          "type": "string"
+        },
+        "manifest_path": {
+          "description": "Reviewed deploy/gcp/releases/<id>.json at GCP_RELEASE_MANIFEST_SHA",
+          "required": true,
+          "type": "string"
+        },
+        "expected_release": {
+          "description": "Expected current release or none",
+          "required": true,
+          "type": "string"
+        },
+        "operation_id": {
+          "description": "Stable operation ID; same ID requires identical payload",
+          "required": true,
+          "type": "string"
+        }
+      }
+    }
+  },
+  "permissions": {
+    "contents": "read"
+  },
+  "jobs": {
+    "deploy": {
+      "if": "github.repository == 'CAUCapstoneDesignPipeline/capstone_code_BE' && github.ref == 'refs/heads/main' && vars.GCP_DEPLOY_ENABLED == 'true'",
+      "uses": "CAUCapstoneDesignPipeline/capstone_code_BE/.github/workflows/gcp-deploy-reusable.yml@3031191bf058101e56eba0b2278d02a1b1231dc1",
+      "with": {
+        "operation": "${{ inputs.operation }}",
+        "source_sha": "${{ inputs.source_sha }}",
+        "image_digest": "${{ inputs.image_digest }}",
+        "manifest_path": "${{ inputs.manifest_path }}",
+        "expected_release": "${{ inputs.expected_release }}",
+        "operation_id": "${{ inputs.operation_id }}",
+        "component": "be",
+        "deploy_tool_sha": "3031191bf058101e56eba0b2278d02a1b1231dc1"
+      },
+      "permissions": {
+        "contents": "read",
+        "id-token": "write"
+      }
+    }
+  }
+}
