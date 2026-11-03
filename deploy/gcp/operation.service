@@ -1,0 +1,11 @@
+[Unit]
+Description=CAPSTONE durable GCP operation %i
+After=docker.service network-online.target capstone-gcp-boundary.service
+Requires=docker.service capstone-gcp-boundary.service
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /opt/capstone-gcp/host.py --operation %i
+TimeoutStartSec=1800
+UMask=0077
+StandardOutput=null
+StandardError=journal

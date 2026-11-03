@@ -12,13 +12,22 @@ import sys
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'host'))
 from manifest import AI_OFF_SMOKE
+from smoke_cleanup import LABEL, record, cleanup
 
 IMAGE=os.environ.get('TEST_IMAGE','capstone-ci:test')
 PREFIX='capstone-image-test-'+uuid.uuid4().hex[:12]
 created=[]
 network=False
+success=None
+LEDGER=Path(__file__).resolve().parents[2]/".local/verification/runs"/(PREFIX+".json")
 
 def docker(*args,env=None,input=None):
+    if args[:2]==('network','create'):
+        record(LEDGER,PREFIX,created,True,'creation-intent')
+        args=(*args[:-1],'--label',LABEL+'='+PREFIX,args[-1])
+    elif args[0]=='run':
+        record(LEDGER,PREFIX,created,network,'creation-intent')
+        args=('run','--label',LABEL+'='+PREFIX,*args[1:])
     result=subprocess.run(['docker',*args],capture_output=True,text=True,env=env,input=input,timeout=180)
     if result.returncode: raise RuntimeError('Image test Docker operation failed (output suppressed)')
     return result.stdout.strip()
@@ -36,14 +45,15 @@ try:
     metadata=json.loads(docker('image','inspect',IMAGE))[0]
     assert metadata['Architecture']=='amd64' and metadata['Os']=='linux'
     assert metadata['Config']['User'] not in ['', 'root','0','0:0']
-    docker('network','create',PREFIX);network=True
+    network=True
+    docker('network','create',PREFIX)
     if True:
         db=PREFIX+'-db';created.append(db)
         password=secrets.token_urlsafe(36)
         env=dict(os.environ,POSTGRES_PASSWORD=password)
         docker('run','-d','--name',db,'--network',PREFIX,'--network-alias','db','-e','POSTGRES_PASSWORD','-e','POSTGRES_DB=capstone','--tmpfs','/var/lib/postgresql/data:rw,nosuid,size=256m','postgres:16.15@sha256:ca0bd484cb98bf4b24eb1010e73fb3fcbd6714d240fbc1a10eea5b7dbecb641d',env=env)
         for _ in range(60):
-            p=subprocess.run(['docker','exec',db,'pg_isready','-U','postgres'],capture_output=True)
+            p=subprocess.run(['docker','exec',db,'pg_isready','-h','127.0.0.1','-U','postgres'],capture_output=True,timeout=10)
             if p.returncode==0: break
             time.sleep(1)
         else: raise RuntimeError('Disposable DB startup timeout')
@@ -69,7 +79,7 @@ try:
         status,body,_=request(port,smoke['path'])
         assert status==200 and json.loads(body)==smoke['expected']
         docker('exec',name,'java','-cp','/app/health','Healthcheck')
-        print(json.dumps({'amd64':True,'nonRoot':True,'flywayJpaDbHealth':True,'appRoleNonSuperuser':True,'memoryLimit1100MiB':True,'unauthenticatedNotes401':True,'productionDevTokenDisabled':True,'imageHealthcheck':True,'aiOffVerified':True}))
+        success={'amd64':True,'nonRoot':True,'flywayJpaDbHealth':True,'appRoleNonSuperuser':True,'memoryLimit1100MiB':True,'unauthenticatedNotes401':True,'productionDevTokenDisabled':True,'imageHealthcheck':True,'aiOffVerified':True}
     else:
         name=PREFIX+'-web';created.append(name)
         docker('run','-d','--name',name,'--network',PREFIX,'--platform','linux/amd64','--read-only','--tmpfs','/tmp:rw,nosuid,size=32m','--cap-drop','ALL','--security-opt','no-new-privileges:true','-p','127.0.0.1::8080',IMAGE)
@@ -86,7 +96,9 @@ try:
             assert request(port,path)[0]==404,path
         status,body,_=request(port,'/api/notes')
         assert status==502 and b'api-only' not in body
-        print(json.dumps({'amd64':True,'nonRoot':True,'apiOnlyDefault':True,'spaRouting':True,'adminPathsBlocked':True,'apiDoesNotFallbackToHtml200':True}))
+        success={'amd64':True,'nonRoot':True,'apiOnlyDefault':True,'spaRouting':True,'adminPathsBlocked':True,'apiDoesNotFallbackToHtml200':True}
 finally:
-    for name in reversed(created):subprocess.run(['docker','rm','-f','-v',name],capture_output=True)
-    if network:subprocess.run(['docker','network','rm',PREFIX],capture_output=True)
+    cleanup(LEDGER,PREFIX,created,network)
+if success is not None:
+    success['cleanupVerified']=True
+    print(json.dumps(success))

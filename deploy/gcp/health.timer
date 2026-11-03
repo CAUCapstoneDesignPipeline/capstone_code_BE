@@ -1,0 +1,8 @@
+[Unit]
+Description=Observe CAPSTONE app every five minutes
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+Persistent=true
+[Install]
+WantedBy=timers.target

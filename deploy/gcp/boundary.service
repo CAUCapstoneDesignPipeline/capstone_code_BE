@@ -1,0 +1,11 @@
+[Unit]
+Description=CAPSTONE container metadata isolation
+After=docker.service
+Requires=docker.service
+PartOf=docker.service
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/bash /opt/capstone-gcp/metadata-boundary.sh
+[Install]
+WantedBy=multi-user.target
