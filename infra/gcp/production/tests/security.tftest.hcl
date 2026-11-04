@@ -251,3 +251,33 @@ run "reject_ambiguous_federation" {
   }
   expect_failures = [var.github_app_publish_only]
 }
+
+run "app_deploy_excludes_publishers_and_ai" {
+  command = plan
+  variables { github_app_deploy_only = true }
+  assert {
+    condition = (
+      !google_iam_workload_identity_pool_provider.github.disabled &&
+      strcontains(google_iam_workload_identity_pool_provider.github.attribute_condition, local.deploy_workflow) &&
+      !strcontains(google_iam_workload_identity_pool_provider.github.attribute_condition, local.ai_repo_id) &&
+      !strcontains(google_iam_workload_identity_pool_provider.github.attribute_condition, "image-publish")
+    )
+    error_message = "App deploy must require the reviewed reusable workflow and exclude AI and all publishers."
+  }
+}
+run "reject_app_deploy_without_pin" {
+  command = plan
+  variables {
+    github_app_deploy_only  = true
+    app_deploy_workflow_sha = "refs/heads/main"
+  }
+  expect_failures = [var.github_app_deploy_only]
+}
+run "reject_overlapping_app_modes" {
+  command = plan
+  variables {
+    github_app_deploy_only  = true
+    github_app_publish_only = true
+  }
+  expect_failures = [var.github_app_deploy_only]
+}

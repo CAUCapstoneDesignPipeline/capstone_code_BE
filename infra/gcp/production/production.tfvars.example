@@ -23,3 +23,4 @@ github_federation_enabled = false
 # Enable each preparation stage only after its saved plan is reviewed.
 github_app_publish_only = false
 prepare_public_dns      = false
+github_app_deploy_only  = false
