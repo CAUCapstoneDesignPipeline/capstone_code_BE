@@ -4,12 +4,12 @@ import json
 import subprocess
 import sys
 from contract import ID, match, require
-from host import ROOT, trusted
+from host import local_state, trusted
 
 try:
     require(len(sys.argv)==2 and match(ID,sys.argv[1]),'Invalid operation')
     operation=sys.argv[1]
-    path=ROOT/'operations'/(operation+'.json')
+    path=local_state()/'operations'/(operation+'.json')
     status=trusted(path)['phase'] if path.exists() else 'queued'
     unit=subprocess.run(['systemctl','show','--property=ActiveState','--value','capstone-gcp-operation@'+operation+'.service'],capture_output=True,text=True,timeout=10)
     if unit.stdout.strip()=='failed' and status not in ['done','rolled-back']:

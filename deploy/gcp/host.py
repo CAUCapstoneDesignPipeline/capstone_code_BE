@@ -60,30 +60,48 @@ def trusted(path):
     return json.loads(path.read_text())
 
 
+def release_scope(config):
+    require(config['releaseBucket'] == 'capsnote-169516793433-releases', 'Wrong release bucket')
+    instance = config['sqlConnection']
+    if config['databasePurpose'] == 'isolated-rehearsal':
+        prefix = 'capsnote:asia-northeast3:'
+        require(isinstance(instance, str) and re.fullmatch(prefix + r'capsnote-rehearsal-[a-z0-9-]{1,40}', instance),
+                'Synthetic releases require a dedicated private rehearsal instance')
+        return 'rehearsals/' + instance[len(prefix):] + '/'
+    require(config['databasePurpose'] == 'restored-cutover' and config['restoreVerified'] is True
+            and instance == 'capsnote:asia-northeast3:capsnote-prod-pg16', 'Verified production restore required')
+    return ''
+
+
+def local_state():
+    return ROOT / release_scope(trusted(CONFIG / 'host.json'))
+
+
 class Host:
     def __init__(self):
         require(os.geteuid() == 0, 'Root host required')
         self.config = trusted(CONFIG / 'host.json')
-        self.cloud = Cloud(self.config['releaseBucket'])
+        self.scope = release_scope(self.config)
+        self.cloud = Cloud(self.config['releaseBucket'], prefix=self.scope)
 
     def configuration(self, manifest):
         self.config = trusted(CONFIG / 'configurations' / (manifest['configRevision'] + '.json'))
         require(checksum(self.config) == manifest['configRevision'], 'Configuration hash mismatch')
-        require(self.config['releaseBucket'] == 'capsnote-169516793433-releases', 'Wrong release bucket')
+        require(release_scope(self.config) == self.scope, 'Manifest changes host database scope')
         require(re.fullmatch(r'capsnote:asia-northeast3:[a-z0-9-]+', self.config['sqlConnection']), 'Wrong SQL instance')
         require(self.config['database'] == 'capstone' and self.config['databaseUser'] == 'capstone_app', 'Wrong DB role')
         require(self.config['databasePurpose'] in ['isolated-rehearsal', 'restored-cutover'], 'Database purpose must be approved')
         require(self.config['databasePurpose'] != 'restored-cutover' or self.config['restoreVerified'] is True, 'Never run Flyway before source restoration')
 
     def journal(self, operation):
-        path = ROOT / 'operations' / (operation + '.json')
+        path = ROOT / self.scope / 'operations' / (operation + '.json')
         return trusted(path) if path.exists() else None
 
     def pending(self):
-        return [trusted(p) for p in (ROOT / 'operations').glob('*.json') if trusted(p)['phase'] not in ['done', 'rolled-back']]
+        return [trusted(p) for p in (ROOT / self.scope / 'operations').glob('*.json') if trusted(p)['phase'] not in ['done', 'rolled-back']]
 
     def save(self, value):
-        atomic(ROOT / 'operations' / (value['operationId'] + '.json'), canonical(value))
+        atomic(ROOT / self.scope / 'operations' / (value['operationId'] + '.json'), canonical(value))
 
     def compose(self, manifest, *args):
         self.configuration(manifest)
@@ -264,7 +282,7 @@ def main():
                         raise
         else:
             require(match(ID, args.operation), 'Invalid operation ID')
-            request = trusted(ROOT / 'requests' / (args.operation + '.json'))
+            request = trusted(ROOT / host.scope / 'requests' / (args.operation + '.json'))
             engine.run(host, request)
     print('Operation finished; details remain on the host.')
 
