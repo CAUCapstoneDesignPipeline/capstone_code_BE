@@ -1,5 +1,8 @@
 import base64
 import json
+import os
+import subprocess
+import tempfile
 from pathlib import Path
 import unittest
 from unittest.mock import patch
@@ -64,3 +67,18 @@ class RehearsalBoundaryTest(unittest.TestCase):
                     raise RuntimeError('disconnect')
             self.assertFalse(path.exists())
             self.assertEqual([x for c in calls for x in c if x.startswith('--key=')],['--key=own'])
+
+    def test_boundary_accepts_absent_bridge_but_rejects_unverifiable_or_ipv6(self):
+        script=Path(__file__).resolve().parents[1]/'metadata-boundary.sh'
+        with tempfile.TemporaryDirectory() as tmp:
+            for name,body in [('iptables','exit 0'),('docker', """
+case "$2" in
+  ls) test "$BRIDGE" != unavailable || exit 1; echo "$BRIDGE" ;;
+  inspect) echo "$IPV6" ;;
+  *) exit 2 ;;
+esac""")]:
+                path=Path(tmp)/name;path.write_text('#!/bin/sh\n'+body+'\n');path.chmod(0o700)
+            for bridge,ipv6,ok in [('bridge','false',True),('capstone-gcp_runtime','false',True),
+                                    ('capstone-gcp_runtime','true',False),('unavailable','false',False)]:
+                env=dict(os.environ,PATH=tmp+':'+os.environ['PATH'],BRIDGE=bridge,IPV6=ipv6)
+                self.assertEqual(subprocess.run(['bash',str(script)],env=env).returncode==0,ok)
