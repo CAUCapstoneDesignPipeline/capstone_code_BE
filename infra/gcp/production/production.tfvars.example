@@ -19,3 +19,7 @@ github_federation_enabled = false
 #   currency_code   = "USD"                 # verify actual account currency
 #   monthly_amount  = 500                   # proposal only; requires review
 # }
+
+# Enable each preparation stage only after its saved plan is reviewed.
+github_app_publish_only = false
+prepare_public_dns      = false

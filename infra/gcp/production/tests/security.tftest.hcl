@@ -222,3 +222,32 @@ run "reject_non_seoul_zone" {
   variables { zone = "us-central1-a" }
   expect_failures = [var.zone]
 }
+
+run "publisher_and_dns_preparation" {
+  command = plan
+  variables {
+    github_app_publish_only = true
+    prepare_public_dns      = true
+  }
+  assert {
+    condition = (
+      !google_iam_workload_identity_pool.github.disabled &&
+      !google_iam_workload_identity_pool_provider.github.disabled &&
+      strcontains(google_iam_workload_identity_pool_provider.github.attribute_condition, "assertion.environment == 'image-publish'") &&
+      !strcontains(google_iam_workload_identity_pool_provider.github.attribute_condition, "production") &&
+      !strcontains(google_iam_workload_identity_pool_provider.github.attribute_condition, local.ai_repo_id) &&
+      one(google_dns_managed_zone.public).dns_name == "capsnote.art." &&
+      one(google_dns_managed_zone.public).visibility == "public"
+    )
+    error_message = "Preparation must admit app publishers only and use the intended public zone."
+  }
+}
+
+run "reject_ambiguous_federation" {
+  command = plan
+  variables {
+    github_app_publish_only   = true
+    github_federation_enabled = true
+  }
+  expect_failures = [var.github_app_publish_only]
+}
