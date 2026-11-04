@@ -8,7 +8,8 @@ from contract import ReleaseError, canonical, require
 
 
 class Cloud:
-    def __init__(self, bucket, token=None, opener=None):
+    def __init__(self, bucket, token=None, opener=None, prefix=''):
+        self.prefix = prefix
         self.bucket = bucket
         self.token = token or self.metadata_token
         self.open = opener or urllib.request.urlopen
@@ -33,7 +34,7 @@ class Cloud:
             raise ReleaseError('Cloud response unavailable; reconcile before retry') from None
 
     def object_url(self, name):
-        return 'https://storage.googleapis.com/storage/v1/b/' + self.bucket + '/o/' + urllib.parse.quote(name, safe='')
+        return 'https://storage.googleapis.com/storage/v1/b/' + self.bucket + '/o/' + urllib.parse.quote(self.prefix + name, safe='')
 
     def read(self, name):
         meta = self.request(self.object_url(name))
@@ -46,7 +47,7 @@ class Cloud:
         return data, generation
 
     def put(self, name, value, generation):
-        query = urllib.parse.urlencode({'uploadType': 'media', 'name': name, 'ifGenerationMatch': str(generation)})
+        query = urllib.parse.urlencode({'uploadType': 'media', 'name': self.prefix + name, 'ifGenerationMatch': str(generation)})
         result = self.request('https://storage.googleapis.com/upload/storage/v1/b/' + self.bucket + '/o?' + query,
                               data=canonical(value).encode(), method='POST')
         require('_httpStatus' not in result, 'Object generation conflict')
@@ -62,5 +63,5 @@ class Cloud:
 
     def secret(self, resource):
         result = self.request('https://secretmanager.googleapis.com/v1/' + resource + ':access')
-        require(result.get('name') == resource, 'Secret resource mismatch')
+        require(result.get('name') in (resource, resource.replace('projects/capsnote/', 'projects/169516793433/', 1)), 'Secret resource mismatch')
         return base64.b64decode(result['payload']['data'], validate=True).decode()

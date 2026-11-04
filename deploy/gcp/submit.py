@@ -5,18 +5,19 @@ import os
 import subprocess
 import sys
 from contract import canonical, checksum, require, validate_request
-from host import ROOT, atomic, trusted
+from host import local_state, atomic, trusted
 
 
 def submit(request):
     require(os.geteuid() == 0, 'Root required')
     validate_request(request)
     operation = request['operationId']
-    path = ROOT / 'requests' / (operation + '.json')
+    root = local_state()
+    path = root / 'requests' / (operation + '.json')
     # Serialize submission separately from execution; never overwrite accepted input.
     import fcntl
-    ROOT.mkdir(mode=0o700, parents=True, exist_ok=True)
-    with (ROOT / 'submit.lock').open('a') as lock:
+    root.mkdir(mode=0o700, parents=True, exist_ok=True)
+    with (root / 'submit.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         if path.exists():
             require(checksum(trusted(path)) == checksum(request), 'Operation payload conflict')
