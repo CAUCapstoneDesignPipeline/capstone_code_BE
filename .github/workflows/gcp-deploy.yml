@@ -46,7 +46,7 @@
   "jobs": {
     "deploy": {
       "if": "github.repository == 'CAUCapstoneDesignPipeline/capstone_code_BE' && github.ref == 'refs/heads/main' && vars.GCP_DEPLOY_ENABLED == 'true'",
-      "uses": "CAUCapstoneDesignPipeline/capstone_code_BE/.github/workflows/gcp-deploy-reusable.yml@3031191bf058101e56eba0b2278d02a1b1231dc1",
+      "uses": "CAUCapstoneDesignPipeline/capstone_code_BE/.github/workflows/gcp-deploy-reusable.yml@ec871c65c1b4bf3005157867a54b891d46772376",
       "with": {
         "operation": "${{ inputs.operation }}",
         "source_sha": "${{ inputs.source_sha }}",
@@ -55,7 +55,7 @@
         "expected_release": "${{ inputs.expected_release }}",
         "operation_id": "${{ inputs.operation_id }}",
         "component": "be",
-        "deploy_tool_sha": "3031191bf058101e56eba0b2278d02a1b1231dc1"
+        "deploy_tool_sha": "ec871c65c1b4bf3005157867a54b891d46772376"
       },
       "permissions": {
         "contents": "read",
