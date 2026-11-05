@@ -211,6 +211,7 @@ class Host:
         atomic(Path('/etc/nginx/conf.d/capstone-gcp.conf'), source.read_text(), 0o644)
         command(['nginx', '-t'])
         command(['systemctl', 'reload', 'nginx'])
+        self.wait_tls_status(503 if enabled else 200)
 
     def activate(self, m):
         self.compose(m, 'stop', '-t', '30', 'be', 'web')
@@ -239,13 +240,31 @@ class Host:
         with urllib.request.urlopen('http://127.0.0.1:18081/', timeout=5) as response:
             require(b'<div id="root"></div>' in response.read(), 'Web readiness failed')
 
-    def smoke_public(self, m):
-        # Loopback TLS/SNI prevents old DNS from making a new-host smoke falsely pass.
+    @staticmethod
+    def wait_tls_status(expected, seconds=10):
+        # Nginx signals its master asynchronously; old workers can still accept
+        # a connection after systemctl reload returns. Check the real vhost.
         context = ssl.create_default_context()
-        with socket.create_connection(('127.0.0.1', 443), timeout=5) as connection:
-            with context.wrap_socket(connection, server_hostname='capsnote.art') as tls:
-                tls.sendall(b'GET /api/v1/health HTTP/1.1\r\nHost: capsnote.art\r\nConnection: close\r\n\r\n')
-                require(b' 200 ' in tls.recv(1024).split(b'\r\n')[0], 'Public local TLS smoke failed')
+        deadline = time.monotonic() + seconds
+        while True:
+            try:
+                with socket.create_connection(('127.0.0.1', 443), timeout=2) as connection:
+                    with context.wrap_socket(connection, server_hostname='capsnote.art') as tls:
+                        tls.sendall(b'GET /api/v1/health HTTP/1.1\r\nHost: capsnote.art\r\nConnection: close\r\n\r\n')
+                        with tls.makefile('rb') as response:
+                            status = response.readline(1024).split()
+                        if len(status) >= 2 and status[1] == str(expected).encode():
+                            return
+            except ssl.SSLCertVerificationError:
+                raise
+            except OSError:
+                pass
+            if time.monotonic() >= deadline:
+                raise ReleaseError('Nginx did not serve the requested mode')
+            time.sleep(0.1)
+
+    def smoke_public(self, m):
+        self.wait_tls_status(200)
 
 
 def main():
