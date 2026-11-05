@@ -21,6 +21,8 @@ def run(platform, request):
     require(not current or current['releaseId'] != target['releaseId'], 'Already current under a different operation')
     platform.prepare_database(current or target)
     before = platform.history(current or target)
+    if current is None:
+        platform.check_initial_release(target, before)
     if request['operation'] == 'rollback':
         require(target == state['previous'], 'Rollback must use previous manifest')
         require(version(before) in target['flyway']['rollbackCompatibleWith'], 'Incompatible rollback')
