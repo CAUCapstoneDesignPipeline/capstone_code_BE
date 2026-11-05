@@ -12,27 +12,34 @@ import com.example.capstone.global.exception.ErrorCode;
 import com.example.capstone.note.service.NoteService;
 
 @Service
-@Transactional(readOnly = true)
 public class AnalysisService {
     private final NoteService notes;
     private final AnalysisJobRepository jobs;
+    private final AnalysisWorkService work;
+    private final AiActivationService activation;
 
-    public AnalysisService(NoteService notes, AnalysisJobRepository jobs) {
+    public AnalysisService(NoteService notes, AnalysisJobRepository jobs,AnalysisWorkService work,AiActivationService activation) {
         this.notes = notes;
         this.jobs = jobs;
+        this.work=work;this.activation=activation;
     }
 
+    @Transactional(readOnly=true)
     public NoteAnalysisResponse get(UUID userId, UUID noteId) {
         notes.requireOwned(userId, noteId);
         return new NoteAnalysisResponse(jobs.latest(userId, noteId)
-                .map(job -> new AnalysisJobResponse(job.getId(), job.getNoteId(), job.getNoteVersion(),
-                        job.getStatus(), job.getCreatedAt(), job.getStartedAt(), job.getFinishedAt()))
+                .map(AnalysisJobResponse::from)
                 .orElse(null));
     }
 
-    public void request(UUID userId, UUID noteId) {
-        notes.requireOwned(userId, noteId);
-        throw new ApiException(ErrorCode.AI_UNAVAILABLE, "AI 분석은 아직 사용할 수 없습니다.",
-                Map.of("reason", "NOT_DEPLOYED"));
+    public AnalysisJobResponse request(UUID userId,UUID noteId) {
+        notes.requireOwned(userId,noteId);
+        activation.requireAvailable();
+        try { return AnalysisJobResponse.from(work.submit(userId,noteId,activation.policyFingerprint())); }
+        catch(ApiException failure) {
+            // afterCompletion 콜백 오류를 Spring이 삼켜도 정상 off 응답 전에 동기 확인한다.
+            if(failure.errorCode()==ErrorCode.AI_UNAVAILABLE)activation.flushRevocation();
+            throw failure;
+        }
     }
 }

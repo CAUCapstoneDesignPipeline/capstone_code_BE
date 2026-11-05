@@ -1,0 +1,178 @@
+{
+  "request": {
+    "context": {
+      "analysisJobId": "00000000-0000-4000-8000-000000000010",
+      "stageExecutionId": "00000000-0000-4000-8000-000000000011",
+      "userId": "00000000-0000-4000-8000-000000000012",
+      "noteId": "00000000-0000-4000-8000-000000000001",
+      "noteVersion": 1,
+      "inputRevision": 1,
+      "graphRevision": 1,
+      "pipelineVersion": "ai-integration-2026-10-30-adopted.1"
+    },
+    "profileVersion": "derive-sound-1",
+    "documents": [
+      {
+        "noteId": "00000000-0000-4000-8000-000000000001",
+        "noteVersion": 1,
+        "inputRevision": 1,
+        "title": "합성 노트 1",
+        "body": "알고리즘 A 🧠는 큐의 enqueue 연산을 사용한다.",
+        "bodySha256": "cb8f6f010f554c0624daf34759048a1acdb5feb7741337ccd307a4b78721afa0",
+        "topic": {
+          "id": null,
+          "name": "미분류"
+        }
+      },
+      {
+        "noteId": "00000000-0000-4000-8000-000000000002",
+        "noteVersion": 1,
+        "inputRevision": 1,
+        "title": "합성 노트 2",
+        "body": "구조 B는 큐를 구현하고 enqueue 연산을 제공한다.",
+        "bodySha256": "2836dc59c31bc49bcc98f3554430a683a6a3f0040bc0a9d180ce593f27f461df",
+        "topic": {
+          "id": null,
+          "name": "미분류"
+        }
+      }
+    ],
+    "facts": [
+      {
+        "factId": "fact-1",
+        "kind": "needs_op",
+        "subject": "알고리즘 A",
+        "subjectKey": "algorithm_a",
+        "role": "queue",
+        "op": "enqueue",
+        "expr": null,
+        "case": null,
+        "negated": false,
+        "condition": null,
+        "other": null,
+        "otherKey": null,
+        "origin": "manual",
+        "evidence": {
+          "noteId": "00000000-0000-4000-8000-000000000001",
+          "noteVersion": 1,
+          "bodySha256": "cb8f6f010f554c0624daf34759048a1acdb5feb7741337ccd307a4b78721afa0",
+          "startOffset": 0,
+          "endOffset": 31,
+          "quote": "알고리즘 A 🧠는 큐의 enqueue 연산을 사용한다."
+        }
+      },
+      {
+        "factId": "fact-2",
+        "kind": "implements",
+        "subject": "구조 B",
+        "subjectKey": "structure_b",
+        "role": "queue",
+        "op": null,
+        "expr": null,
+        "case": null,
+        "negated": false,
+        "condition": null,
+        "other": null,
+        "otherKey": null,
+        "origin": "manual",
+        "evidence": {
+          "noteId": "00000000-0000-4000-8000-000000000002",
+          "noteVersion": 1,
+          "bodySha256": "2836dc59c31bc49bcc98f3554430a683a6a3f0040bc0a9d180ce593f27f461df",
+          "startOffset": 0,
+          "endOffset": 31,
+          "quote": "구조 B는 큐를 구현하고 enqueue 연산을 제공한다."
+        }
+      }
+    ],
+    "generationProvenance": null
+  },
+  "response": {
+    "context": {
+      "analysisJobId": "00000000-0000-4000-8000-000000000010",
+      "stageExecutionId": "00000000-0000-4000-8000-000000000011",
+      "userId": "00000000-0000-4000-8000-000000000012",
+      "noteId": "00000000-0000-4000-8000-000000000001",
+      "noteVersion": 1,
+      "inputRevision": 1,
+      "graphRevision": 1,
+      "pipelineVersion": "ai-integration-2026-10-30-adopted.1"
+    },
+    "meta": {
+      "profileVersion": "derive-sound-1",
+      "provider": "synthetic",
+      "model": "fixture",
+      "modelRevision": "fixture-1",
+      "promptVersion": null,
+      "schemaVersion": "1.0",
+      "preprocessingVersion": "nfc-utf16-fixture-1",
+      "durationMs": 0
+    },
+    "derivations": [
+      {
+        "derivationId": "r1-fixture",
+        "rule": "R1",
+        "ruleVersion": "fixture-1",
+        "status": "conclusion",
+        "reasons": [],
+        "algorithm": {
+          "key": "algorithm_a",
+          "label": "알고리즘 A"
+        },
+        "structure": {
+          "key": "structure_b",
+          "label": "구조 B"
+        },
+        "role": "queue",
+        "conclusion": "합성 R1 응답: A에 B를 적용할 수 있다.",
+        "result": null,
+        "case": null,
+        "conditions": [
+          {
+            "text": "필요 연산 제공 여부를 모두 검사한다.",
+            "factId": "fact-2"
+          }
+        ],
+        "steps": [
+          {
+            "text": "서로 다른 두 문서의 필수 전제를 대조한다.",
+            "factIds": [
+              "fact-1",
+              "fact-2"
+            ],
+            "expr": null
+          }
+        ],
+        "premiseFactIds": [
+          "fact-1",
+          "fact-2"
+        ],
+        "noteIds": [
+          "00000000-0000-4000-8000-000000000001",
+          "00000000-0000-4000-8000-000000000002"
+        ],
+        "missing": [],
+        "dependsOn": null,
+        "duplicateOfFactIds": [],
+        "automation": "manual",
+        "explanation": "서버 파서 검증용 응답이며 규칙 엔진의 계산 증거가 아니다.",
+        "soundness": {
+          "verdict": "sound",
+          "reason": "합성 판정; 모델 호출 없음",
+          "unfaithfulFactIds": []
+        }
+      }
+    ],
+    "unusedFacts": [],
+    "noveltyScope": {
+      "noteIds": [
+        "00000000-0000-4000-8000-000000000001",
+        "00000000-0000-4000-8000-000000000002"
+      ]
+    }
+  },
+  "expected": {
+    "schemaValid": true,
+    "recommendationEligible": true
+  }
+}
