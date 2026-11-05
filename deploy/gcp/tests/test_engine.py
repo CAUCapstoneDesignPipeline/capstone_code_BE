@@ -53,6 +53,7 @@ class Fake:
     def journal(self,op):return copy.deepcopy(self.journals.get(op))
     def pending(self):return [j for j in self.journals.values() if j['phase'] not in ['done','rolled-back']]
     def save(self,j):self.journals[j['operationId']]=copy.deepcopy(j);self.events.append(j['phase'])
+    def check_initial_release(self,m,history):pass
     def prepare_database(self,m):pass
     def history(self,m):return copy.deepcopy(self.rows)
     def preflight(self,m,history,resume=False):

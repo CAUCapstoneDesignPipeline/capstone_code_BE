@@ -1,0 +1,10 @@
+{
+  "releaseBucket": "capsnote-169516793433-releases",
+  "sqlConnection": "capsnote:asia-northeast3:capsnote-prod-pg16",
+  "database": "capstone_live",
+  "databaseUser": "capstone_live_app",
+  "databasePurpose": "cold-start",
+  "restoreVerified": false,
+  "googleClientId": "REQUIRES-REVIEWED-PUBLIC-CLIENT-ID",
+  "jwtSecretVersion": 2
+}
