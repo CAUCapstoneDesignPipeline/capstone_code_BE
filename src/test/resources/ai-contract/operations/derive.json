@@ -1,0 +1,498 @@
+{
+  "request": {
+    "context": {
+      "analysisJobId": "55997db3-ae90-4b64-b9f4-6434dbe2ebbc",
+      "stageExecutionId": "b972ea1d-134b-4a20-a924-e7bab8dcb7fe",
+      "userId": "c49bdcd3-9f13-5186-93c2-28eccf386140",
+      "noteId": "a867587d-8bc9-53f4-a32a-f9322e7056a1",
+      "noteVersion": 1,
+      "inputRevision": 1,
+      "graphRevision": 1,
+      "pipelineVersion": "test-1"
+    },
+    "profileVersion": "derive-rules-1",
+    "documents": [
+      {
+        "noteId": "a867587d-8bc9-53f4-a32a-f9322e7056a1",
+        "noteVersion": 1,
+        "inputRevision": 1,
+        "title": "Synthetic dijkstra",
+        "body": "# Synthetic dijkstra 🧠\n간선 가중치가 음수가 아니어야 한다\n모든 정점을 큐에 한 번씩 넣는다 → 삽입은 V번\n큐에서 최솟값을 꺼내는 건 정점마다 한 번이라 최솟값 추출도 V번\n간선마다 많아야 한 번이니 키 감소는 최대 E번\n큐 크기는 최대 V 이다\n큐 연산을 빼면, 인접 리스트를 한 번씩 훑고 dist 를 초기화하는 데 O(V+E) 가 든다\n",
+        "bodySha256": "b0f84e28d5ad065514fca910a4fb038f1d5110dcbece887a44ec1e0567abc4f9",
+        "topic": {
+          "id": null,
+          "name": "미분류"
+        }
+      },
+      {
+        "noteId": "fd061f37-665f-57c5-8a2e-6730a85e20d7",
+        "noteVersion": 1,
+        "inputRevision": 1,
+        "title": "Synthetic indexed-heap",
+        "body": "# Synthetic indexed-heap 🧠\n원소끼리 키를 비교할 수 있어야 한다\n그래서 우선순위 큐로 쓸 수 있다\n| insert | O(log n) |\n| extract-min | O(log n) |\n| decrease-key | O(log n) |\n",
+        "bodySha256": "827d679a7e1e044d1c5e17e0900b53608b8383b4819e226b33c384c048164ede",
+        "topic": {
+          "id": null,
+          "name": "미분류"
+        }
+      }
+    ],
+    "facts": [
+      {
+        "factId": "dijkstra#1",
+        "kind": "requires",
+        "subject": "다익스트라",
+        "subjectKey": "dijkstra",
+        "role": null,
+        "op": null,
+        "expr": null,
+        "case": null,
+        "negated": false,
+        "condition": "간선 가중치가 음수가 아님",
+        "other": null,
+        "otherKey": null,
+        "origin": "manual",
+        "evidence": {
+          "noteId": "a867587d-8bc9-53f4-a32a-f9322e7056a1",
+          "noteVersion": 1,
+          "bodySha256": "b0f84e28d5ad065514fca910a4fb038f1d5110dcbece887a44ec1e0567abc4f9",
+          "startOffset": 24,
+          "endOffset": 43,
+          "quote": "간선 가중치가 음수가 아니어야 한다"
+        }
+      },
+      {
+        "factId": "dijkstra#2",
+        "kind": "needs_op",
+        "subject": "다익스트라",
+        "subjectKey": "dijkstra",
+        "role": "priority_queue",
+        "op": "insert",
+        "expr": "V",
+        "case": null,
+        "negated": false,
+        "condition": null,
+        "other": null,
+        "otherKey": null,
+        "origin": "manual",
+        "evidence": {
+          "noteId": "a867587d-8bc9-53f4-a32a-f9322e7056a1",
+          "noteVersion": 1,
+          "bodySha256": "b0f84e28d5ad065514fca910a4fb038f1d5110dcbece887a44ec1e0567abc4f9",
+          "startOffset": 44,
+          "endOffset": 71,
+          "quote": "모든 정점을 큐에 한 번씩 넣는다 → 삽입은 V번"
+        }
+      },
+      {
+        "factId": "dijkstra#3",
+        "kind": "needs_op",
+        "subject": "다익스트라",
+        "subjectKey": "dijkstra",
+        "role": "priority_queue",
+        "op": "extract_min",
+        "expr": "V",
+        "case": null,
+        "negated": false,
+        "condition": null,
+        "other": null,
+        "otherKey": null,
+        "origin": "manual",
+        "evidence": {
+          "noteId": "a867587d-8bc9-53f4-a32a-f9322e7056a1",
+          "noteVersion": 1,
+          "bodySha256": "b0f84e28d5ad065514fca910a4fb038f1d5110dcbece887a44ec1e0567abc4f9",
+          "startOffset": 72,
+          "endOffset": 108,
+          "quote": "큐에서 최솟값을 꺼내는 건 정점마다 한 번이라 최솟값 추출도 V번"
+        }
+      },
+      {
+        "factId": "dijkstra#4",
+        "kind": "needs_op",
+        "subject": "다익스트라",
+        "subjectKey": "dijkstra",
+        "role": "priority_queue",
+        "op": "decrease_key",
+        "expr": "E",
+        "case": null,
+        "negated": false,
+        "condition": null,
+        "other": null,
+        "otherKey": null,
+        "origin": "manual",
+        "evidence": {
+          "noteId": "a867587d-8bc9-53f4-a32a-f9322e7056a1",
+          "noteVersion": 1,
+          "bodySha256": "b0f84e28d5ad065514fca910a4fb038f1d5110dcbece887a44ec1e0567abc4f9",
+          "startOffset": 109,
+          "endOffset": 135,
+          "quote": "간선마다 많아야 한 번이니 키 감소는 최대 E번"
+        }
+      },
+      {
+        "factId": "dijkstra#5",
+        "kind": "size_bound",
+        "subject": "다익스트라",
+        "subjectKey": "dijkstra",
+        "role": "priority_queue",
+        "op": null,
+        "expr": "V",
+        "case": null,
+        "negated": false,
+        "condition": null,
+        "other": null,
+        "otherKey": null,
+        "origin": "manual",
+        "evidence": {
+          "noteId": "a867587d-8bc9-53f4-a32a-f9322e7056a1",
+          "noteVersion": 1,
+          "bodySha256": "b0f84e28d5ad065514fca910a4fb038f1d5110dcbece887a44ec1e0567abc4f9",
+          "startOffset": 136,
+          "endOffset": 149,
+          "quote": "큐 크기는 최대 V 이다"
+        }
+      },
+      {
+        "factId": "dijkstra#6",
+        "kind": "extra_cost",
+        "subject": "다익스트라",
+        "subjectKey": "dijkstra",
+        "role": "priority_queue",
+        "op": null,
+        "expr": "V+E",
+        "case": null,
+        "negated": false,
+        "condition": null,
+        "other": null,
+        "otherKey": null,
+        "origin": "manual",
+        "evidence": {
+          "noteId": "a867587d-8bc9-53f4-a32a-f9322e7056a1",
+          "noteVersion": 1,
+          "bodySha256": "b0f84e28d5ad065514fca910a4fb038f1d5110dcbece887a44ec1e0567abc4f9",
+          "startOffset": 150,
+          "endOffset": 202,
+          "quote": "큐 연산을 빼면, 인접 리스트를 한 번씩 훑고 dist 를 초기화하는 데 O(V+E) 가 든다"
+        }
+      },
+      {
+        "factId": "indexed-heap#1",
+        "kind": "requires",
+        "subject": "인덱스 있는 이진 최소 힙",
+        "subjectKey": "indexed_binary_min_heap",
+        "role": null,
+        "op": null,
+        "expr": null,
+        "case": null,
+        "negated": false,
+        "condition": "원소끼리 키를 비교할 수 있음",
+        "other": null,
+        "otherKey": null,
+        "origin": "manual",
+        "evidence": {
+          "noteId": "fd061f37-665f-57c5-8a2e-6730a85e20d7",
+          "noteVersion": 1,
+          "bodySha256": "827d679a7e1e044d1c5e17e0900b53608b8383b4819e226b33c384c048164ede",
+          "startOffset": 28,
+          "endOffset": 48,
+          "quote": "원소끼리 키를 비교할 수 있어야 한다"
+        }
+      },
+      {
+        "factId": "indexed-heap#2",
+        "kind": "implements",
+        "subject": "인덱스 있는 이진 최소 힙",
+        "subjectKey": "indexed_binary_min_heap",
+        "role": "priority_queue",
+        "op": null,
+        "expr": null,
+        "case": null,
+        "negated": false,
+        "condition": null,
+        "other": null,
+        "otherKey": null,
+        "origin": "manual",
+        "evidence": {
+          "noteId": "fd061f37-665f-57c5-8a2e-6730a85e20d7",
+          "noteVersion": 1,
+          "bodySha256": "827d679a7e1e044d1c5e17e0900b53608b8383b4819e226b33c384c048164ede",
+          "startOffset": 49,
+          "endOffset": 67,
+          "quote": "그래서 우선순위 큐로 쓸 수 있다"
+        }
+      },
+      {
+        "factId": "indexed-heap#3",
+        "kind": "op_cost",
+        "subject": "인덱스 있는 이진 최소 힙",
+        "subjectKey": "indexed_binary_min_heap",
+        "role": null,
+        "op": "insert",
+        "expr": "log n",
+        "case": "worst",
+        "negated": false,
+        "condition": null,
+        "other": null,
+        "otherKey": null,
+        "origin": "manual",
+        "evidence": {
+          "noteId": "fd061f37-665f-57c5-8a2e-6730a85e20d7",
+          "noteVersion": 1,
+          "bodySha256": "827d679a7e1e044d1c5e17e0900b53608b8383b4819e226b33c384c048164ede",
+          "startOffset": 68,
+          "endOffset": 89,
+          "quote": "| insert | O(log n) |"
+        }
+      },
+      {
+        "factId": "indexed-heap#4",
+        "kind": "op_cost",
+        "subject": "인덱스 있는 이진 최소 힙",
+        "subjectKey": "indexed_binary_min_heap",
+        "role": null,
+        "op": "extract_min",
+        "expr": "log n",
+        "case": "worst",
+        "negated": false,
+        "condition": null,
+        "other": null,
+        "otherKey": null,
+        "origin": "manual",
+        "evidence": {
+          "noteId": "fd061f37-665f-57c5-8a2e-6730a85e20d7",
+          "noteVersion": 1,
+          "bodySha256": "827d679a7e1e044d1c5e17e0900b53608b8383b4819e226b33c384c048164ede",
+          "startOffset": 90,
+          "endOffset": 116,
+          "quote": "| extract-min | O(log n) |"
+        }
+      },
+      {
+        "factId": "indexed-heap#5",
+        "kind": "op_cost",
+        "subject": "인덱스 있는 이진 최소 힙",
+        "subjectKey": "indexed_binary_min_heap",
+        "role": null,
+        "op": "decrease_key",
+        "expr": "log n",
+        "case": "worst",
+        "negated": false,
+        "condition": null,
+        "other": null,
+        "otherKey": null,
+        "origin": "manual",
+        "evidence": {
+          "noteId": "fd061f37-665f-57c5-8a2e-6730a85e20d7",
+          "noteVersion": 1,
+          "bodySha256": "827d679a7e1e044d1c5e17e0900b53608b8383b4819e226b33c384c048164ede",
+          "startOffset": 117,
+          "endOffset": 144,
+          "quote": "| decrease-key | O(log n) |"
+        }
+      }
+    ]
+  },
+  "response": {
+    "context": {
+      "analysisJobId": "55997db3-ae90-4b64-b9f4-6434dbe2ebbc",
+      "stageExecutionId": "b972ea1d-134b-4a20-a924-e7bab8dcb7fe",
+      "userId": "c49bdcd3-9f13-5186-93c2-28eccf386140",
+      "noteId": "a867587d-8bc9-53f4-a32a-f9322e7056a1",
+      "noteVersion": 1,
+      "inputRevision": 1,
+      "graphRevision": 1,
+      "pipelineVersion": "test-1"
+    },
+    "meta": {
+      "profileVersion": "derive-rules-1",
+      "provider": "local",
+      "model": "rules-r1-r2",
+      "modelRevision": "10484aefcc42",
+      "promptVersion": "derive-rules-1",
+      "schemaVersion": "1.0",
+      "preprocessingVersion": "md-plain-1",
+      "durationMs": 2
+    },
+    "derivations": [
+      {
+        "derivationId": "d-3beb166511b77d1b",
+        "rule": "R1",
+        "ruleVersion": "r1-implementation-1",
+        "status": "conclusion",
+        "reasons": [
+          "두 노트의 전제로 규칙 R1 을 통과했어요"
+        ],
+        "algorithm": {
+          "key": "dijkstra",
+          "label": "다익스트라"
+        },
+        "structure": {
+          "key": "indexed_binary_min_heap",
+          "label": "인덱스 있는 이진 최소 힙"
+        },
+        "role": "priority_queue",
+        "conclusion": "인덱스 있는 이진 최소 힙으로 다익스트라의 우선순위 큐를 구현할 수 있어요",
+        "result": null,
+        "case": null,
+        "conditions": [
+          {
+            "text": "다익스트라: 간선 가중치가 음수가 아님",
+            "factId": "dijkstra#1"
+          },
+          {
+            "text": "인덱스 있는 이진 최소 힙: 원소끼리 키를 비교할 수 있음",
+            "factId": "indexed-heap#1"
+          }
+        ],
+        "steps": [
+          {
+            "text": "다익스트라는 우선순위 큐에서 삽입, 최솟값 꺼내기, 키 줄이기 연산을 써요 (노트 「Synthetic dijkstra」)",
+            "factIds": [
+              "dijkstra#2",
+              "dijkstra#3",
+              "dijkstra#4"
+            ],
+            "expr": null
+          },
+          {
+            "text": "인덱스 있는 이진 최소 힙은 삽입, 최솟값 꺼내기, 키 줄이기 연산을 모두 제공해요 (노트 「Synthetic indexed-heap」)",
+            "factIds": [
+              "indexed-heap#3",
+              "indexed-heap#4",
+              "indexed-heap#5"
+            ],
+            "expr": null
+          },
+          {
+            "text": "그래서 인덱스 있는 이진 최소 힙으로 다익스트라의 우선순위 큐를 구현할 수 있어요. 가장 빠르거나 가장 좋은 구현이라는 뜻은 아니에요.",
+            "factIds": [],
+            "expr": null
+          }
+        ],
+        "premiseFactIds": [
+          "dijkstra#2",
+          "dijkstra#3",
+          "dijkstra#4",
+          "indexed-heap#2",
+          "indexed-heap#3",
+          "indexed-heap#4",
+          "indexed-heap#5"
+        ],
+        "noteIds": [
+          "a867587d-8bc9-53f4-a32a-f9322e7056a1",
+          "fd061f37-665f-57c5-8a2e-6730a85e20d7"
+        ],
+        "missing": [],
+        "dependsOn": null,
+        "duplicateOfFactIds": [],
+        "automation": "manual",
+        "explanation": "다익스트라는 우선순위 큐에서 삽입, 최솟값 꺼내기, 키 줄이기 연산을 써요 (노트 「Synthetic dijkstra」)\n인덱스 있는 이진 최소 힙은 삽입, 최솟값 꺼내기, 키 줄이기 연산을 모두 제공해요 (노트 「Synthetic indexed-heap」)\n그래서 인덱스 있는 이진 최소 힙으로 다익스트라의 우선순위 큐를 구현할 수 있어요. 가장 빠르거나 가장 좋은 구현이라는 뜻은 아니에요.\n이 결론이 성립하는 조건: 다익스트라: 간선 가중치가 음수가 아님 / 인덱스 있는 이진 최소 힙: 원소끼리 키를 비교할 수 있음",
+        "soundness": null
+      },
+      {
+        "derivationId": "d-11cb1848f0554d1f",
+        "rule": "R2",
+        "ruleVersion": "r2-cost-1",
+        "status": "conclusion",
+        "reasons": [
+          "두 노트의 전제로 규칙 R2 를 통과했어요"
+        ],
+        "algorithm": {
+          "key": "dijkstra",
+          "label": "다익스트라"
+        },
+        "structure": {
+          "key": "indexed_binary_min_heap",
+          "label": "인덱스 있는 이진 최소 힙"
+        },
+        "role": "priority_queue",
+        "conclusion": "인덱스 있는 이진 최소 힙으로 구현한 다익스트라의 시간은 O((V + E) log V) 이하예요",
+        "result": "O((V + E) log V)",
+        "case": "worst",
+        "conditions": [
+          {
+            "text": "다익스트라: 간선 가중치가 음수가 아님",
+            "factId": "dijkstra#1"
+          },
+          {
+            "text": "인덱스 있는 이진 최소 힙: 원소끼리 키를 비교할 수 있음",
+            "factId": "indexed-heap#1"
+          },
+          {
+            "text": "상한이에요. 실제 실행이 이보다 빠를 수 있고, 가장 빠른 구현이라는 뜻은 아니에요",
+            "factId": null
+          }
+        ],
+        "steps": [
+          {
+            "text": "다익스트라는 우선순위 큐에서 삽입을 최대 V번, 최솟값 꺼내기를 최대 V번, 키 줄이기를 최대 E번 해요 (노트 「Synthetic dijkstra」)",
+            "factIds": [
+              "dijkstra#2",
+              "dijkstra#3",
+              "dijkstra#4"
+            ],
+            "expr": null
+          },
+          {
+            "text": "인덱스 있는 이진 최소 힙에서 삽입은 O(log n), 최솟값 꺼내기는 O(log n), 키 줄이기는 O(log n)이에요 (n 은 우선순위 큐 크기) (노트 「Synthetic indexed-heap」)",
+            "factIds": [
+              "indexed-heap#3",
+              "indexed-heap#4",
+              "indexed-heap#5"
+            ],
+            "expr": null
+          },
+          {
+            "text": "우선순위 큐 크기 n 은 최대 V라서 (n ≤ V) 각 연산의 비용에 넣으면 삽입 O(log V), 최솟값 꺼내기 O(log V), 키 줄이기 O(log V)예요 (노트 「Synthetic dijkstra」)",
+            "factIds": [
+              "dijkstra#5"
+            ],
+            "expr": "O(log V), O(log V), O(log V)"
+          },
+          {
+            "text": "횟수와 비용을 곱해 더하면 O(V log V) + O(V log V) + O(E log V) = O((V + E) log V)예요",
+            "factIds": [],
+            "expr": "O((V + E) log V)"
+          },
+          {
+            "text": "우선순위 큐 밖의 일에는 O(V+E)가 들어요 (노트 「Synthetic dijkstra」). 모두 더하면 O((V + E) log V)예요",
+            "factIds": [
+              "dijkstra#6"
+            ],
+            "expr": "O((V + E) log V)"
+          }
+        ],
+        "premiseFactIds": [
+          "dijkstra#2",
+          "dijkstra#3",
+          "dijkstra#4",
+          "dijkstra#5",
+          "dijkstra#6",
+          "indexed-heap#2",
+          "indexed-heap#3",
+          "indexed-heap#4",
+          "indexed-heap#5"
+        ],
+        "noteIds": [
+          "a867587d-8bc9-53f4-a32a-f9322e7056a1",
+          "fd061f37-665f-57c5-8a2e-6730a85e20d7"
+        ],
+        "missing": [],
+        "dependsOn": "d-3beb166511b77d1b",
+        "duplicateOfFactIds": [],
+        "automation": "manual",
+        "explanation": "다익스트라는 우선순위 큐에서 삽입을 최대 V번, 최솟값 꺼내기를 최대 V번, 키 줄이기를 최대 E번 해요 (노트 「Synthetic dijkstra」)\n인덱스 있는 이진 최소 힙에서 삽입은 O(log n), 최솟값 꺼내기는 O(log n), 키 줄이기는 O(log n)이에요 (n 은 우선순위 큐 크기) (노트 「Synthetic indexed-heap」)\n우선순위 큐 크기 n 은 최대 V라서 (n ≤ V) 각 연산의 비용에 넣으면 삽입 O(log V), 최솟값 꺼내기 O(log V), 키 줄이기 O(log V)예요 (노트 「Synthetic dijkstra」)\n횟수와 비용을 곱해 더하면 O(V log V) + O(V log V) + O(E log V) = O((V + E) log V)예요\n우선순위 큐 밖의 일에는 O(V+E)가 들어요 (노트 「Synthetic dijkstra」). 모두 더하면 O((V + E) log V)예요\n이 결론이 성립하는 조건: 다익스트라: 간선 가중치가 음수가 아님 / 인덱스 있는 이진 최소 힙: 원소끼리 키를 비교할 수 있음 / 상한이에요. 실제 실행이 이보다 빠를 수 있고, 가장 빠른 구현이라는 뜻은 아니에요",
+        "soundness": null
+      }
+    ],
+    "unusedFacts": [],
+    "noveltyScope": {
+      "noteIds": [
+        "a867587d-8bc9-53f4-a32a-f9322e7056a1",
+        "fd061f37-665f-57c5-8a2e-6730a85e20d7"
+      ]
+    }
+  },
+  "verificationScope": "actual HTTP response"
+}

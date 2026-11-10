@@ -42,8 +42,8 @@ class DevTokenIntegrationTest {
         assertThat(document.path("security").isMissingNode()).isTrue();
 
         document.path("paths").properties().forEach(path -> {
-            boolean protectedPath = path.getKey().equals("/api/auth/me")
-                    || path.getKey().startsWith("/api/topics") || path.getKey().startsWith("/api/notes");
+            boolean protectedPath = !java.util.Set.of("/api/v1/health","/api/capabilities","/api/auth/providers",
+                    "/api/auth/oauth2/{provider}","/api/auth/oauth2/{provider}/callback","/api/auth/refresh","/api/auth/logout","/api/auth/dev/token").contains(path.getKey());
             path.getValue().properties().forEach(operation -> {
                 var security = operation.getValue().path("security");
                 if (protectedPath) {
@@ -68,7 +68,7 @@ class DevTokenIntegrationTest {
                     var api = operation.getValue();
                     assertThat(api.path("summary").asString()).as(path.getKey()).isNotBlank();
                     assertThat(api.path("description").asString()).as(path.getKey()).isNotBlank();
-                    assertThat(api.path("tags").get(0).asString()).isIn("인증", "주제", "노트", "분석");
+                    assertThat(api.path("tags").get(0).asString()).isIn("인증", "주제", "노트", "분석", "그래프");
                     api.path("responses").properties().stream()
                             .filter(entry -> entry.getKey().startsWith("4"))
                             .forEach(entry -> {
