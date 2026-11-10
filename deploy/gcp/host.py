@@ -26,6 +26,7 @@ ROOT = Path('/var/lib/capstone-gcp')
 CONFIG = Path('/etc/capstone-gcp')
 TOOLS = Path('/opt/capstone-gcp')
 RUNTIME = Path('/run/capstone-gcp')
+NGINX = Path('/etc/nginx/conf.d/capstone-gcp.conf')
 
 
 def command(args, *, env=None, data=None):
@@ -118,6 +119,14 @@ class Host:
         self.config = trusted(CONFIG / 'host.json')
         self.scope = release_scope(self.config)
         self.cloud = Cloud(self.config['releaseBucket'], prefix=self.scope)
+        self.opening = False
+
+    def hold_path(self):
+        return ROOT / self.scope / 'maintenance-hold.json'
+
+    def held(self):
+        # Only the operator's checked reopen may serve live while a hold exists.
+        return not self.opening and self.hold_path().exists()
 
     def configuration(self, manifest):
         self.config = trusted(CONFIG / 'configurations' / (manifest['configRevision'] + '.json'))
@@ -260,8 +269,9 @@ class Host:
         command(['iptables', '-C', 'DOCKER-USER', '-s', '172.30.36.0/24', '-d', '169.254.169.254/32', '-j', 'REJECT'])
 
     def maintenance(self, enabled):
+        enabled = enabled or self.held()
         source = TOOLS / ('nginx-maintenance.conf' if enabled else 'nginx-live.conf')
-        atomic(Path('/etc/nginx/conf.d/capstone-gcp.conf'), source.read_text(), 0o644)
+        atomic(NGINX, source.read_text(), 0o644)
         command(['nginx', '-t'])
         command(['systemctl', 'reload', 'nginx'])
         self.wait_tls_status(503 if enabled else 200)
@@ -317,19 +327,93 @@ class Host:
             time.sleep(0.1)
 
     def smoke_public(self, m):
-        self.wait_tls_status(200)
+        # Under an operator hold the public check is the held 503; `off` verifies 200.
+        self.wait_tls_status(503 if self.held() else 200)
+
+
+def restart_current(host, m):
+    host.prepare_database(m)
+    require(version(host.history(m)) == m['flyway']['after'], 'Current schema differs at boot; migration forbidden')
+    host.preflight(m, host.history(m), resume=True)
+    host.activate(m)
+    require(version(host.history(m)) == m['flyway']['after'], 'Schema changed during boot')
+    host.smoke(m)
+
+
+def reopen(host):
+    require(not host.pending(), 'Unresolved operation; recover before reopening')
+    state, _ = host.cloud.read('state.json')
+    require(state and state['current'], 'No current release to reopen')
+    m = state['current']
+    try:
+        host.maintenance(True)
+        restart_current(host, m)
+        host.opening = True
+        host.maintenance(False)
+        host.smoke_public(m)
+        host.hold_path().unlink(missing_ok=True)
+    except Exception:
+        host.maintenance(True)
+        raise
+    finally:
+        host.opening = False
+
+
+def maintenance_status(host):
+    path = host.hold_path()
+    hold = trusted(path) if path.exists() else None
+    try:
+        active = NGINX.read_text()
+    except OSError:
+        active = None
+    modes = [('maintenance', 'nginx-maintenance.conf'), ('live', 'nginx-live.conf')]
+    nginx = next((mode for mode, name in modes if active == (TOOLS / name).read_text()), 'unknown')
+    return {'hold': hold is not None, 'holdSince': hold and hold['since'], 'holdBy': hold and hold['by'],
+            'nginx': nginx, 'pendingOperations': len(host.pending())}
+
+
+def operator_maintenance(host, action):
+    user = os.environ.get('SUDO_USER')
+    record = {'action': action, 'at': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+              'by': user if match(r'[A-Za-z0-9_.-]{1,64}', user) else None, 'result': 'failed'}
+    (ROOT / host.scope).mkdir(mode=0o700, parents=True, exist_ok=True)
+    try:
+        if action == 'on':
+            if not host.hold_path().exists():
+                atomic(host.hold_path(), canonical({'since': record['at'], 'by': record['by']}))
+            host.maintenance(True)
+        else:
+            reopen(host)
+        record['result'] = 'ok'
+    finally:
+        fd = os.open(ROOT / host.scope / 'maintenance.log', os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+        try:
+            os.write(fd, (canonical(record) + '\n').encode())
+            os.fsync(fd)
+        finally:
+            os.close(fd)
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--operation')
     parser.add_argument('--resume', action='store_true')
+    parser.add_argument('--maintenance', choices=['on', 'off', 'status'])
     args = parser.parse_args()
+    if args.maintenance and (args.operation is not None or args.resume):
+        parser.error('--maintenance cannot be combined with other operations')
+    if args.maintenance == 'status':
+        print(json.dumps(maintenance_status(Host()), sort_keys=True))
+        return
     ROOT.mkdir(mode=0o700, parents=True, exist_ok=True)
     RUNTIME.mkdir(mode=0o755, parents=True, exist_ok=True)
     with (ROOT / 'release.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         host = Host()
+        if args.maintenance:
+            operator_maintenance(host, args.maintenance)
+            print(json.dumps(maintenance_status(host), sort_keys=True))
+            return
         if args.resume:
             pending = host.pending()
             require(len(pending) <= 1, 'Multiple unresolved operations')
@@ -341,12 +425,7 @@ def main():
                     m = state['current']
                     try:
                         host.maintenance(True)
-                        host.prepare_database(m)
-                        require(version(host.history(m)) == m['flyway']['after'], 'Current schema differs at boot; migration forbidden')
-                        host.preflight(m, host.history(m), resume=True)
-                        host.activate(m)
-                        require(version(host.history(m)) == m['flyway']['after'], 'Schema changed during boot')
-                        host.smoke(m)
+                        restart_current(host, m)
                         host.maintenance(False)
                         host.smoke_public(m)
                     except Exception:
