@@ -33,6 +33,11 @@ def role(name,trust,stmts):
     return {'Type':'AWS::IAM::Role','Properties':{'RoleName':name,'Path':'/capstone/',
         'PermissionsBoundary':BOUNDARY,'AssumeRolePolicyDocument':trust,'Tags':TAGS,
         'Policies':[{'PolicyName':'capstone-runtime','PolicyDocument':policy(stmts)}]}}
+def gz(data):
+    # Pin the gzip OS byte (Python 3.13+ writes 0xff, older zlib-backed gzip.compress 0x03).
+    raw=gzip.compress(data,mtime=0)
+    if raw[:4]!=b'\x1f\x8b\x08\x00':raise ValueError('Unexpected gzip header')
+    return raw[:9]+b'\xff'+raw[10:]
 def resource(t,props,**extra):return {'Type':t,'Properties':props,**extra}
 def document(name,command,parameters=None):
     content={'schemaVersion':'2.2','description':'Fixed CAPSTONE root-owned host operation',
@@ -107,11 +112,11 @@ def bootstrap():
     r['VerifyDocument']=document('capstone-verify-infra','/opt/capstone/tools/bin/python /opt/capstone/host/ssm-operation.py verify')
     r['TlsDocument']=document('capstone-tls','/opt/capstone/tools/bin/python /opt/capstone/host/ssm-operation.py tls')
     # Inline a fixed verifier so inspection never reinstalls host files or reads secrets.
-    verifier=base64.b64encode(gzip.compress((HERE/'verify-tls-host.py').read_bytes(),mtime=0)).decode()
+    verifier=base64.b64encode(gz((HERE/'verify-tls-host.py').read_bytes())).decode()
     r['TlsVerifyDocument']=document('capstone-verify-tls',"/opt/capstone/tools/bin/python - <<'CAPSTONE_TLS_VERIFY'\nimport base64,gzip\nexec(compile(gzip.decompress(base64.b64decode('"+verifier+"')).decode(),'capstone-verify-tls','exec'))\nCAPSTONE_TLS_VERIFY")
     recovery=(HERE/'recover-release-host.py').read_text()
     recovery=recovery.replace('__ORIGINAL_RELEASE_SHA__','26209200b4d602a0a0dd1a1d06810b19c0b453c8e5697aa98eeeba02f5c36fa4')
-    encoded=base64.b64encode(gzip.compress(recovery.encode(),mtime=0)).decode()
+    encoded=base64.b64encode(gz(recovery.encode())).decode()
     archive={'Fn::FindInMap':['HostAssets','Content','Archive']}
     recovery_command={'Fn::Join':['',["/opt/capstone/tools/bin/python - <<'CAPSTONE_RECOVER_RELEASE'\nimport base64,gzip,io,lzma,tarfile\nwith tarfile.open(fileobj=io.BytesIO(lzma.decompress(base64.b64decode('",archive,"')))) as files:\n REVIEWED_RELEASE_BYTES=files.extractfile('host/release.py').read()\nexec(compile(gzip.decompress(base64.b64decode('"+encoded+"')).decode(),'capstone-recover-release','exec'))\nCAPSTONE_RECOVER_RELEASE"]]}
     r['RecoverReleaseDocument']=document('capstone-recover-release',recovery_command,{
@@ -120,7 +125,7 @@ def bootstrap():
         'ManifestSha':{'type':'String','allowedPattern':'^[a-f0-9]{64}$','interpolationType':'ENV_VAR'}})
     updater=(HERE/'update-pipeline-host.py').read_text()
     updater=updater.replace('__BASELINE_HASHES__',repr(PIPELINE_BASELINE))
-    encoded_updater=base64.b64encode(gzip.compress(updater.encode(),mtime=0)).decode()
+    encoded_updater=base64.b64encode(gz(updater.encode())).decode()
     update_command={'Fn::Join':['',["/opt/capstone/tools/bin/python - <<'CAPSTONE_UPDATE_PIPELINE'\nimport base64,gzip,io,lzma,tarfile\nwith tarfile.open(fileobj=io.BytesIO(lzma.decompress(base64.b64decode('",archive,"')))) as files:\n REVIEWED_FILES={p.name.removeprefix('host/'):files.extractfile(p).read() for p in files.getmembers() if p.isfile()}\nexec(compile(gzip.decompress(base64.b64decode('"+encoded_updater+"')).decode(),'capstone-update-pipeline','exec'))\nCAPSTONE_UPDATE_PIPELINE"]]}
     r['UpdatePipelineDocument']=document('capstone-update-pipeline',update_command,{
         'ExpectedRelease':{'type':'String','allowedPattern':'^[a-z0-9][a-z0-9-]{0,63}$','interpolationType':'ENV_VAR'},
@@ -168,7 +173,7 @@ def payload(bootstrap_only=False):
             info=tarfile.TarInfo('host/pipeline-files.json');info.size=len(data);info.mtime=0;info.mode=0o600
             archive.addfile(info,io.BytesIO(data))
     if bootstrap_only:
-        return base64.b64encode(gzip.compress(buf.getvalue(),mtime=0)).decode()
+        return base64.b64encode(gz(buf.getvalue())).decode()
     # The shared bootstrap archive keeps the template under the 51,200-byte TemplateBody
     # limit; runtime UserData keeps its gzip format and content.
     return base64.b64encode(lzma.compress(buf.getvalue(),preset=9|lzma.PRESET_EXTREME)).decode()

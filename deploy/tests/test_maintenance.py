@@ -1,12 +1,15 @@
 import base64
+import binascii
 import contextlib
 import fcntl
+import gzip
 import hashlib
 import importlib.util
 import io
 import json
 import lzma
 import os
+import re
 import subprocess
 import sys
 import tarfile
@@ -44,6 +47,35 @@ class Runner:
         return ''
     def used(self,*prefix):
         return [c for c in self.calls if c[:len(prefix)]==list(prefix)]
+
+
+BLOB=re.compile(r'[A-Za-z0-9+/=]{200,}')
+
+
+def unpacked(blob):
+    """(kind, content) of a base64 gzip/xz blob, or None when it is not one."""
+    try:raw=base64.b64decode(blob,validate=True)
+    except binascii.Error:return None
+    for kind,unpack in [('gzip',gzip.decompress),('xz',lambda b:lzma.decompress(b,format=lzma.FORMAT_XZ))]:
+        try:return kind,unpack(raw)
+        except (OSError,EOFError,lzma.LZMAError):pass
+    return None
+
+
+def normalized(value,found):
+    """Copy of a template with compressed blobs replaced by digests of their content."""
+    if isinstance(value,dict):return {k:normalized(v,found) for k,v in value.items()}
+    if isinstance(value,list):return [normalized(v,found) for v in value]
+    if not isinstance(value,str):return value
+    def marker(m):
+        hit=unpacked(m.group())
+        if not hit:return m.group()
+        found.append(hit[0]);return '<%s:%s>'%(hit[0],hashlib.sha256(hit[1]).hexdigest())
+    return BLOB.sub(marker,value)
+
+
+def os_byte(blob,value):
+    raw=bytearray(base64.b64decode(blob));raw[9]=value;return base64.b64encode(bytes(raw)).decode()
 
 
 def local_status(host,path):
@@ -246,10 +278,53 @@ class MaintenanceDocumentTests(unittest.TestCase):
         self.assertEqual(documents,['arn:aws:ssm:ap-northeast-2:378040395204:document/capstone-deploy'])
 
     def test_generated_templates_match_committed_files(self):
+        # Compare unpacked content: gzip/xz byte streams may differ across Python and zlib/liblzma builds.
         here=ROOT/'infra/cloudformation'
-        self.assertEqual(json.loads((here/'bootstrap.json').read_text()),self.template)
-        self.assertEqual(json.loads((here/'runtime.json').read_text()),build.runtime())
+        # bootstrap: TLS verifier, release recovery and pipeline updater (gzip) + shared HostAssets archive (xz);
+        # runtime: bootstrap-only UserData archive (gzip).
+        for name,template,kinds in [('bootstrap',self.template,['gzip','gzip','gzip','xz']),('runtime',build.runtime(),['gzip'])]:
+            committed,generated=[],[]
+            self.assertEqual(normalized(json.loads((here/(name+'.json')).read_text()),committed),normalized(template,generated),name)
+            self.assertEqual((sorted(committed),sorted(generated)),(kinds,kinds),name)
         self.assertLessEqual(len((here/'bootstrap.json').read_bytes()),51200)
+
+    def test_gzip_helper_pins_os_byte_and_round_trips(self):
+        self.assertEqual(build.gz(b'x')[9],0xff)
+        self.assertEqual(gzip.decompress(build.gz(b'x')),b'x')
+        with patch.object(build.gzip,'compress',return_value=b'\x1f\x8b\x08\x08rest'),self.assertRaises(ValueError):build.gz(b'x')
+
+    def test_normalization_ignores_compression_bytes_not_content(self):
+        def mark(blob):
+            found=[];out=normalized({'Fn::Join':['',["b64decode('"+blob+"')"]]},found)['Fn::Join'][1][0]
+            self.assertEqual(len(found),1);return out
+        data=(ROOT/'deploy/host/release.py').read_bytes()
+        gz=base64.b64encode(build.gz(data)).decode()
+        self.assertEqual(mark(gz),mark(os_byte(gz,0x03)))
+        self.assertNotEqual(mark(gz),mark(base64.b64encode(build.gz(data+b' ')).decode()))
+        xz=[base64.b64encode(lzma.compress(data,preset=p)).decode() for p in [0,9|lzma.PRESET_EXTREME]]
+        self.assertNotEqual(*xz);self.assertEqual(mark(xz[0]),mark(xz[1]))
+        self.assertEqual(normalized('A'*300,[]),'A'*300)  # base64 that does not unpack stays as is
+
+    def test_normalization_reproduces_ci_os_byte_failure_and_catches_host_changes(self):
+        here=ROOT/'infra/cloudformation'
+        committed=json.loads((here/'bootstrap.json').read_text())
+        command=committed['Resources']['TlsVerifyDocument']['Properties']['Content']['mainSteps'][0]['inputs']['runCommand']
+        blob=BLOB.search(command[0]).group()
+        changed=json.loads(json.dumps(committed))
+        changed['Resources']['TlsVerifyDocument']['Properties']['Content']['mainSteps'][0]['inputs']['runCommand']=[command[0].replace(blob,os_byte(blob,0x03))]
+        self.assertNotEqual(changed,committed)  # the old byte-level comparison failed here
+        self.assertEqual(normalized(changed,[]),normalized(committed,[]))
+        archive=committed['Mappings']['HostAssets']['Content']['Archive']
+        with tarfile.open(fileobj=io.BytesIO(lzma.decompress(base64.b64decode(archive)))) as files:
+            members=[(m,files.extractfile(m).read()) for m in files.getmembers()]
+        buf=io.BytesIO()
+        with tarfile.open(fileobj=buf,mode='w') as files:
+            for m,data in members:
+                if m.name=='host/release.py':data=data.replace(b'ReleaseError',b'ReleaseFault',1);m.size=len(data)
+                files.addfile(m,io.BytesIO(data))
+        changed=json.loads(json.dumps(committed))
+        changed['Mappings']['HostAssets']['Content']['Archive']=base64.b64encode(lzma.compress(buf.getvalue(),preset=9|lzma.PRESET_EXTREME)).decode()
+        self.assertNotEqual(normalized(changed,[]),normalized(committed,[]))
 
     def test_shared_archive_contains_reviewed_host_files(self):
         archive=base64.b64decode(self.template['Mappings']['HostAssets']['Content']['Archive'])
