@@ -222,3 +222,62 @@ run "reject_non_seoul_zone" {
   variables { zone = "us-central1-a" }
   expect_failures = [var.zone]
 }
+
+run "publisher_and_dns_preparation" {
+  command = plan
+  variables {
+    github_app_publish_only = true
+    prepare_public_dns      = true
+  }
+  assert {
+    condition = (
+      !google_iam_workload_identity_pool.github.disabled &&
+      !google_iam_workload_identity_pool_provider.github.disabled &&
+      strcontains(google_iam_workload_identity_pool_provider.github.attribute_condition, "assertion.environment == 'image-publish'") &&
+      !strcontains(google_iam_workload_identity_pool_provider.github.attribute_condition, "production") &&
+      !strcontains(google_iam_workload_identity_pool_provider.github.attribute_condition, local.ai_repo_id) &&
+      one(google_dns_managed_zone.public).dns_name == "capsnote.art." &&
+      one(google_dns_managed_zone.public).visibility == "public"
+    )
+    error_message = "Preparation must admit app publishers only and use the intended public zone."
+  }
+}
+
+run "reject_ambiguous_federation" {
+  command = plan
+  variables {
+    github_app_publish_only   = true
+    github_federation_enabled = true
+  }
+  expect_failures = [var.github_app_publish_only]
+}
+
+run "app_deploy_excludes_publishers_and_ai" {
+  command = plan
+  variables { github_app_deploy_only = true }
+  assert {
+    condition = (
+      !google_iam_workload_identity_pool_provider.github.disabled &&
+      strcontains(google_iam_workload_identity_pool_provider.github.attribute_condition, local.deploy_workflow) &&
+      !strcontains(google_iam_workload_identity_pool_provider.github.attribute_condition, local.ai_repo_id) &&
+      !strcontains(google_iam_workload_identity_pool_provider.github.attribute_condition, "image-publish")
+    )
+    error_message = "App deploy must require the reviewed reusable workflow and exclude AI and all publishers."
+  }
+}
+run "reject_app_deploy_without_pin" {
+  command = plan
+  variables {
+    github_app_deploy_only  = true
+    app_deploy_workflow_sha = "refs/heads/main"
+  }
+  expect_failures = [var.github_app_deploy_only]
+}
+run "reject_overlapping_app_modes" {
+  command = plan
+  variables {
+    github_app_deploy_only  = true
+    github_app_publish_only = true
+  }
+  expect_failures = [var.github_app_deploy_only]
+}

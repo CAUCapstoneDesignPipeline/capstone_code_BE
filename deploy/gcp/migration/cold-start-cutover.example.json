@@ -1,0 +1,26 @@
+{
+  "writersStopped": {
+    "awsAutoDeploy": false,
+    "gcpAutoDeploy": false,
+    "be": false,
+    "oauthCallback": false,
+    "oauthRefresh": false,
+    "worker": false,
+    "operatorScripts": false,
+    "databaseSessions": false
+  },
+  "gates": {
+    "flywayVerified": false,
+    "tlsVerified": false,
+    "oauthVerified": false,
+    "aiOffVerified": false,
+    "backupVerified": false,
+    "aiStandaloneAccepted": false,
+    "feBeDeployAccepted": false,
+    "freshDatabaseVerified": false,
+    "oldSessionsRejected": false
+  },
+  "rollback": "gcp-maintenance-before-writes",
+  "gcpWritesResumed": false,
+  "mode": "cold-start"
+}

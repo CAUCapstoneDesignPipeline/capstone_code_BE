@@ -110,3 +110,26 @@ resource "terraform_data" "federation_gate" {
     }
   }
 }
+
+variable "github_app_publish_only" {
+  description = "Enable only manual main-branch BE and FE image publishers. Production deploy and AI identities are excluded."
+  type        = bool
+  default     = false
+  validation {
+    condition     = !(var.github_app_publish_only && var.github_federation_enabled)
+    error_message = "Select either app image publication or full federation."
+  }
+}
+
+variable "github_app_deploy_only" {
+  description = "Allow only BE/FE manual production deploy jobs invoking the pinned BE reusable workflow."
+  type        = bool
+  default     = false
+  validation {
+    condition = !var.github_app_deploy_only || (
+      !var.github_app_publish_only && !var.github_federation_enabled &&
+      can(regex("^[a-f0-9]{40}$", var.app_deploy_workflow_sha))
+    )
+    error_message = "App-only deployment requires a pinned workflow SHA and both other federation modes disabled."
+  }
+}

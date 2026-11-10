@@ -53,3 +53,12 @@ resource "google_sql_database" "app" {
   instance = google_sql_database_instance.main.name
   lifecycle { prevent_destroy = true }
 }
+
+# Fresh namespace on the existing instance. The legacy database is independent.
+resource "google_sql_database" "cold_start" {
+  name            = "capstone_live"
+  instance        = google_sql_database_instance.main.name
+  charset         = "UTF8"
+  deletion_policy = "PREVENT"
+  lifecycle { prevent_destroy = true }
+}

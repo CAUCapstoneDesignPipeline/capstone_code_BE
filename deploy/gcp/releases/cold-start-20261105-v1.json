@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 3,
+  "releaseId": "cold-start-20261105-v1",
+  "be": {
+    "image": "asia-northeast3-docker.pkg.dev/capsnote/capstone-be/be@sha256:6a4339c829ef63864439f716f4d4b118da485fa00c712d51cb82f9b76c8f22e9",
+    "sourceSha": "c9063f76884bb349d954491893b7bc0ea88bcc35"
+  },
+  "web": {
+    "image": "asia-northeast3-docker.pkg.dev/capsnote/capstone-web/web@sha256:1ca7c7f51c577539f37af7deda804e5bcc056ef85e7657d8b6e6680b094c2c2d",
+    "sourceSha": "f1ec0b2b2f2c17e3324ef952e60fe302f30e47f8"
+  },
+  "proxy": {
+    "image": "gcr.io/cloud-sql-connectors/cloud-sql-proxy@sha256:b0183dada4394925de5ca2ca833ef04706cb0a15a725be18c4c62e83eeae69ac"
+  },
+  "aiImage": null,
+  "aiEnabled": false,
+  "configRevision": "8f90a0f3c3953838108b8425576ddb91363c25a10b015d5aa230b54c60e8322a",
+  "bootstrapRevision": "efaabd05dc61a347909561603401ff612b7b0998",
+  "secretVersions": {
+    "dbPassword": "projects/capsnote/secrets/capsnote-prod-db-password/versions/1",
+    "jwtSecret": "projects/capsnote/secrets/capsnote-prod-jwt-secret/versions/2",
+    "googleClientSecret": "projects/capsnote/secrets/capsnote-prod-google-client-secret/versions/1",
+    "allowedEmails": "projects/capsnote/secrets/capsnote-prod-allowed-emails/versions/1"
+  },
+  "flyway": {
+    "before": "empty",
+    "after": "2",
+    "rollbackCompatibleWith": [
+      "2"
+    ],
+    "migrations": [
+      {
+        "version": "1",
+        "sha256": "c26c36b8984752a4da05440ec39bf5b93bf6e89b5876feb15a67ec67896904fb"
+      },
+      {
+        "version": "2",
+        "sha256": "af1501d310de19c65a133a5d5b23c86565ca2f00079e577afd31dcdf098d0aee"
+      }
+    ],
+    "backupReference": null
+  }
+}

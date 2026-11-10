@@ -117,14 +117,14 @@ resource "google_service_account_iam_member" "deployer_act_as_runtime" {
 resource "google_iam_workload_identity_pool" "github" {
   workload_identity_pool_id = "capsnote-github"
   display_name              = "CAPSNOTE GitHub Actions"
-  disabled                  = !var.github_federation_enabled
+  disabled                  = !local.github_pool_enabled
   depends_on                = [google_project_service.required, terraform_data.federation_gate]
 }
 
 resource "google_iam_workload_identity_pool_provider" "github" {
   workload_identity_pool_id          = google_iam_workload_identity_pool.github.workload_identity_pool_id
   workload_identity_pool_provider_id = "github"
-  disabled                           = !var.github_federation_enabled
+  disabled                           = !local.github_pool_enabled
   attribute_mapping = {
     "google.subject"                = "assertion.sub"
     "attribute.repository_id"       = "assertion.repository_id"
@@ -132,7 +132,30 @@ resource "google_iam_workload_identity_pool_provider" "github" {
     "attribute.ref"                 = "assertion.ref"
     "attribute.job_scope"           = "assertion.repository_id + '_' + ('environment' in assertion ? assertion.environment : '')"
   }
-  attribute_condition = <<-CEL
+  attribute_condition = (var.github_app_deploy_only ? local.app_deploy_condition :
+  var.github_app_publish_only ? local.app_publish_condition : local.full_github_condition)
+  oidc { issuer_uri = "https://token.actions.githubusercontent.com" }
+  # Empty allowed_audiences uses Google's provider-resource-name audience validation.
+}
+
+locals {
+  github_pool_enabled   = var.github_federation_enabled || var.github_app_publish_only || var.github_app_deploy_only
+  app_deploy_condition  = <<-CEL
+    assertion.repository_owner_id == '${local.github_owner_id}' &&
+    assertion.event_name == 'workflow_dispatch' && assertion.ref == 'refs/heads/main' &&
+    'environment' in assertion && assertion.environment == 'production' &&
+    'job_workflow_ref' in assertion && assertion.job_workflow_ref == '${local.deploy_workflow}' &&
+    ((assertion.repository_id == '${local.github_repos.be.id}' && assertion.workflow_ref == '${local.github_owner}/${local.github_repos.be.name}/.github/workflows/gcp-deploy.yml@refs/heads/main') ||
+     (assertion.repository_id == '${local.github_repos.web.id}' && assertion.workflow_ref == '${local.github_owner}/${local.github_repos.web.name}/.github/workflows/gcp-deploy.yml@refs/heads/main'))
+  CEL
+  app_publish_condition = <<-CEL
+    assertion.repository_owner_id == '${local.github_owner_id}' &&
+    assertion.event_name == 'workflow_dispatch' && assertion.ref == 'refs/heads/main' &&
+    'environment' in assertion && assertion.environment == 'image-publish' &&
+    ((assertion.repository_id == '${local.github_repos.be.id}' && assertion.workflow_ref == '${local.github_owner}/${local.github_repos.be.name}/.github/workflows/gcp-publish-image.yml@refs/heads/main') ||
+     (assertion.repository_id == '${local.github_repos.web.id}' && assertion.workflow_ref == '${local.github_owner}/${local.github_repos.web.name}/.github/workflows/gcp-publish-image.yml@refs/heads/main'))
+  CEL
+  full_github_condition = <<-CEL
     assertion.repository_owner_id == '${local.github_owner_id}' &&
     'environment' in assertion &&
     (
@@ -157,8 +180,6 @@ resource "google_iam_workload_identity_pool_provider" "github" {
        ))
     )
   CEL
-  oidc { issuer_uri = "https://token.actions.githubusercontent.com" }
-  # Empty allowed_audiences uses Google's provider-resource-name audience validation.
 }
 
 resource "google_service_account_iam_member" "publisher_federation" {

@@ -6,6 +6,7 @@ from pathlib import Path
 import subprocess
 import sys
 import time
+from iap import connection
 from contract import checksum, match, require, validate_request, ID, SHA, DIGEST
 
 OWNER = '324880339'
@@ -39,13 +40,12 @@ def prepare(env, root):
     request={'operationId':env.get('OPERATION_ID'),'operation':env.get('OPERATION'),
              'expectedRelease':env.get('EXPECTED_RELEASE'),'manifest':manifest,'manifestHash':checksum(manifest)}
     validate_request(request)
-    require(env.get('GCP_PROJECT_ID') == 'capsnote' and env.get('GCP_ZONE') in ['asia-northeast3-a','asia-northeast3-b','asia-northeast3-c'] and env.get('GCP_VM_NAME') == 'capsnote-prod-app', 'Wrong deployment target')
+    require(env.get('GCP_PROJECT_ID') == 'capsnote' and env.get('GCP_ZONE') == 'asia-northeast3-a' and env.get('GCP_VM_NAME') == 'capsnote-prod-app', 'Wrong deployment target')
     return request
 
 
-def ssh(env, command, data=None):
-    args=['gcloud','compute','ssh',env['GCP_VM_NAME'],'--project',env['GCP_PROJECT_ID'],
-          '--zone',env['GCP_ZONE'],'--tunnel-through-iap','--quiet','--command',command]
+def ssh(channel, command, data=None):
+    args=channel+[command]
     result=subprocess.run(args,input=data,capture_output=True,text=True,timeout=90)
     require(result.returncode == 0,'IAP command failed; operation may still be running')
     return json.loads(result.stdout)
@@ -57,11 +57,16 @@ def main():
         print('Caller, immutable tools and reviewed manifest validated')
         return
     require(not sys.argv[1:], 'Unsupported command')
-    reply=ssh(os.environ,'sudo /usr/bin/python3 /opt/capstone-gcp/submit.py',json.dumps(request))
+    with connection() as channel:
+        execute(channel, request)
+
+
+def execute(channel, request):
+    reply=ssh(channel,'sudo /usr/bin/python3 /opt/capstone-gcp/submit.py',json.dumps(request))
     require(reply['operationId'] == request['operationId'],'Unexpected operation')
     # Only operation IDs matching the strict grammar enter this fixed command.
     for attempt in range(120):
-        reply=ssh(os.environ,'sudo /usr/bin/python3 /opt/capstone-gcp/status.py '+request['operationId'])
+        reply=ssh(channel,'sudo /usr/bin/python3 /opt/capstone-gcp/status.py '+request['operationId'])
         if reply['status'] == 'done':
             with open(os.environ['GITHUB_OUTPUT'],'a') as output:
                 output.write('operation_id='+request['operationId']+'\nrelease_id='+request['manifest']['releaseId']+'\n')

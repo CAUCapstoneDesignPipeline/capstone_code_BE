@@ -146,10 +146,14 @@ def writers_closed(record):
 
 def cutover_check(record):
     writers_closed(record['writersStopped'])
-    required={'restoreCompared','flywayVerified','tlsVerified','oauthVerified','aiOffVerified','backupVerified','aiStandaloneAccepted','feBeDeployAccepted'}
+    mode=record.get('mode','restored-cutover')
+    require(mode in ('cold-start','restored-cutover'),'Unknown cutover mode')
+    required={'flywayVerified','tlsVerified','oauthVerified','aiOffVerified','backupVerified','aiStandaloneAccepted','feBeDeployAccepted'}
+    required.update({'freshDatabaseVerified','oldSessionsRejected'} if mode=='cold-start' else {'restoreCompared'})
     require(set(record['gates'])==required and all(v is True for v in record['gates'].values()),'Cutover acceptance missing')
     require(type(record['gcpWritesResumed']) is bool,'Write-resume state must be boolean')
-    require(record['rollback'] in ['before-writes-source-preserved','gcp-forward-or-release-rollback'],'Explicit rollback strategy required')
+    before_writes='gcp-maintenance-before-writes' if mode=='cold-start' else 'before-writes-source-preserved'
+    require(record['rollback'] in [before_writes,'gcp-forward-or-release-rollback'],'Explicit rollback strategy required')
     require(not record['gcpWritesResumed'] or record['rollback']=='gcp-forward-or-release-rollback','DNS-only rollback forbidden after GCP writes')
     return {'readyForApproval':True,'executed':False}
 

@@ -60,30 +60,92 @@ def trusted(path):
     return json.loads(path.read_text())
 
 
+COLD_DATABASE = 'capstone_live'
+COLD_ROLE = 'capstone_live_app'
+COLD_SCOPE = 'cold-start/' + COLD_DATABASE + '/'
+
+# Check catalog objects without sampling application rows. PostgreSQL-owned
+# system schemas and the default plpgsql extension exist in a fresh database.
+COLD_EMPTY_QUERY = """
+WITH app_schemas AS (
+    SELECT oid, nspname FROM pg_namespace
+    WHERE nspname !~ '^pg_' AND nspname <> 'information_schema'
+)
+SELECT current_database() = 'capstone_live' AND current_user = 'capstone_live_app'
+    AND NOT EXISTS (SELECT FROM pg_roles WHERE rolname = current_user
+        AND (rolsuper OR rolcreatedb OR rolcreaterole OR rolreplication OR rolbypassrls))
+    AND NOT EXISTS (SELECT FROM pg_auth_members WHERE member = (current_user::regrole)::oid)
+    AND NOT EXISTS (SELECT FROM pg_database WHERE datname = current_database() AND datdba = (current_user::regrole)::oid)
+    AND has_schema_privilege(current_user, 'public', 'CREATE')
+    AND NOT EXISTS (SELECT FROM app_schemas WHERE nspname <> 'public')
+    AND NOT EXISTS (SELECT FROM pg_class WHERE relnamespace IN (SELECT oid FROM app_schemas))
+    AND NOT EXISTS (SELECT FROM pg_proc WHERE pronamespace IN (SELECT oid FROM app_schemas))
+    AND NOT EXISTS (SELECT FROM pg_type WHERE typnamespace IN (SELECT oid FROM app_schemas))
+    AND NOT EXISTS (SELECT FROM pg_depend WHERE refclassid = 'pg_namespace'::regclass
+        AND refobjid = 'public'::regnamespace AND deptype = 'n')
+    AND NOT EXISTS (SELECT FROM pg_extension WHERE extname <> 'plpgsql')
+    AND NOT EXISTS (SELECT FROM pg_largeobject_metadata)
+"""
+
+
+def release_scope(config):
+    require(config['releaseBucket'] == 'capsnote-169516793433-releases', 'Wrong release bucket')
+    instance = config['sqlConnection']
+    if config['databasePurpose'] == 'isolated-rehearsal':
+        prefix = 'capsnote:asia-northeast3:'
+        require(isinstance(instance, str) and re.fullmatch(prefix + r'capsnote-rehearsal-[a-z0-9-]{1,40}', instance),
+                'Synthetic releases require a dedicated private rehearsal instance')
+        return 'rehearsals/' + instance[len(prefix):] + '/'
+    if config['databasePurpose'] == 'cold-start':
+        require(instance == 'capsnote:asia-northeast3:capsnote-prod-pg16'
+                and config.get('database') == COLD_DATABASE and config.get('databaseUser') == COLD_ROLE
+                and config.get('restoreVerified') is False, 'Wrong cold-start target')
+        require(type(config.get('jwtSecretVersion')) is int and config['jwtSecretVersion'] >= 2,
+                'Cold start requires a separate GCP signing key')
+        return COLD_SCOPE
+    require(config['databasePurpose'] == 'restored-cutover' and config['restoreVerified'] is True
+            and instance == 'capsnote:asia-northeast3:capsnote-prod-pg16', 'Verified production restore required')
+    return ''
+
+
+def local_state():
+    return ROOT / release_scope(trusted(CONFIG / 'host.json'))
+
+
 class Host:
     def __init__(self):
         require(os.geteuid() == 0, 'Root host required')
         self.config = trusted(CONFIG / 'host.json')
-        self.cloud = Cloud(self.config['releaseBucket'])
+        self.scope = release_scope(self.config)
+        self.cloud = Cloud(self.config['releaseBucket'], prefix=self.scope)
 
     def configuration(self, manifest):
         self.config = trusted(CONFIG / 'configurations' / (manifest['configRevision'] + '.json'))
         require(checksum(self.config) == manifest['configRevision'], 'Configuration hash mismatch')
-        require(self.config['releaseBucket'] == 'capsnote-169516793433-releases', 'Wrong release bucket')
+        require(release_scope(self.config) == self.scope, 'Manifest changes host database scope')
+        if self.scope == COLD_SCOPE:
+            require(self.config['jwtSecretVersion'] == trusted(CONFIG / 'host.json')['jwtSecretVersion'],
+                    'Manifest changes the host signing key version')
         require(re.fullmatch(r'capsnote:asia-northeast3:[a-z0-9-]+', self.config['sqlConnection']), 'Wrong SQL instance')
-        require(self.config['database'] == 'capstone' and self.config['databaseUser'] == 'capstone_app', 'Wrong DB role')
-        require(self.config['databasePurpose'] in ['isolated-rehearsal', 'restored-cutover'], 'Database purpose must be approved')
-        require(self.config['databasePurpose'] != 'restored-cutover' or self.config['restoreVerified'] is True, 'Never run Flyway before source restoration')
+        if self.scope == COLD_SCOPE:
+            expected = 'projects/capsnote/secrets/capsnote-prod-jwt-secret/versions/' + str(self.config['jwtSecretVersion'])
+            require(manifest['secretVersions']['jwtSecret'] == expected, 'Wrong cold-start JWT version')
+        else:
+            require(self.config['database'] == 'capstone' and self.config['databaseUser'] == 'capstone_app', 'Wrong DB role')
+
+    def check_initial_release(self, manifest, history):
+        if self.scope == COLD_SCOPE:
+            require(not history and manifest['flyway']['before'] == 'empty', 'First cold release requires a fresh database')
 
     def journal(self, operation):
-        path = ROOT / 'operations' / (operation + '.json')
+        path = ROOT / self.scope / 'operations' / (operation + '.json')
         return trusted(path) if path.exists() else None
 
     def pending(self):
-        return [trusted(p) for p in (ROOT / 'operations').glob('*.json') if trusted(p)['phase'] not in ['done', 'rolled-back']]
+        return [trusted(p) for p in (ROOT / self.scope / 'operations').glob('*.json') if trusted(p)['phase'] not in ['done', 'rolled-back']]
 
     def save(self, value):
-        atomic(ROOT / 'operations' / (value['operationId'] + '.json'), canonical(value))
+        atomic(ROOT / self.scope / 'operations' / (value['operationId'] + '.json'), canonical(value))
 
     def compose(self, manifest, *args):
         self.configuration(manifest)
@@ -105,10 +167,19 @@ class Host:
             try:
                 exists = command(['psql', '-X', '-qAt', '-v', 'ON_ERROR_STOP=1', '-c', "SELECT to_regclass('public.flyway_schema_history') IS NOT NULL"], env=env).strip()
                 if exists == 'f':
-                    require(self.config['databasePurpose'] == 'isolated-rehearsal', 'Restored database has no Flyway history')
+                    if self.scope == COLD_SCOPE:
+                        state, _ = self.cloud.read('state.json')
+                        require(state is None and manifest['flyway']['before'] == 'empty',
+                                'Cold-start schema or previous state already initialized')
+                        empty = command(['psql', '-X', '-qAt', '-v', 'ON_ERROR_STOP=1', '-c', COLD_EMPTY_QUERY], env=env)
+                        require(empty.strip() == 't', 'Cold-start database is not empty or role is unsafe')
+                    else:
+                        require(self.config['databasePurpose'] == 'isolated-rehearsal', 'Restored database has no Flyway history')
                     return []
                 sql = "SELECT coalesce(json_agg(t ORDER BY installed_rank),'[]') FROM (SELECT installed_rank,version,checksum,success FROM public.flyway_schema_history) t"
-                return json.loads(command(['psql', '-X', '-qAt', '-v', 'ON_ERROR_STOP=1', '-c', sql], env=env))
+                rows = json.loads(command(['psql', '-X', '-qAt', '-v', 'ON_ERROR_STOP=1', '-c', sql], env=env))
+                require(self.scope != COLD_SCOPE or rows, 'Unexpected empty Flyway history table')
+                return rows
             except ReleaseError:
                 if attempt == 19:
                     raise
@@ -140,8 +211,8 @@ class Host:
             backup = trusted(CONFIG / 'backup-evidence.json')
             require(backup['reference'] == m['flyway']['backupReference'] and backup['status'] == 'SUCCESSFUL' and backup['history'] == history, 'Matching completed SQL backup required')
             require(0 <= time.time() - backup['confirmedAtEpoch'] < 3600, 'Backup evidence expired')
-        properties = {'spring.datasource.url': 'jdbc:postgresql://proxy:5432/capstone?logServerErrorDetail=false',
-                      'spring.datasource.username': 'capstone_app', 'capstone.ai.enabled': 'false',
+        properties = {'spring.datasource.url': f"jdbc:postgresql://proxy:5432/{self.config['database']}?logServerErrorDetail=false",
+                      'spring.datasource.username': self.config['databaseUser'], 'capstone.ai.enabled': 'false',
                       'capstone.auth.dev-token.enabled': 'false', 'capstone.auth.google.enabled': 'true',
                       'capstone.auth.app-url': 'https://capsnote.art',
                       'capstone.auth.google.client-id': self.config['googleClientId'],
@@ -193,6 +264,7 @@ class Host:
         atomic(Path('/etc/nginx/conf.d/capstone-gcp.conf'), source.read_text(), 0o644)
         command(['nginx', '-t'])
         command(['systemctl', 'reload', 'nginx'])
+        self.wait_tls_status(503 if enabled else 200)
 
     def activate(self, m):
         self.compose(m, 'stop', '-t', '30', 'be', 'web')
@@ -221,13 +293,31 @@ class Host:
         with urllib.request.urlopen('http://127.0.0.1:18081/', timeout=5) as response:
             require(b'<div id="root"></div>' in response.read(), 'Web readiness failed')
 
-    def smoke_public(self, m):
-        # Loopback TLS/SNI prevents old DNS from making a new-host smoke falsely pass.
+    @staticmethod
+    def wait_tls_status(expected, seconds=10):
+        # Nginx signals its master asynchronously; old workers can still accept
+        # a connection after systemctl reload returns. Check the real vhost.
         context = ssl.create_default_context()
-        with socket.create_connection(('127.0.0.1', 443), timeout=5) as connection:
-            with context.wrap_socket(connection, server_hostname='capsnote.art') as tls:
-                tls.sendall(b'GET /api/v1/health HTTP/1.1\r\nHost: capsnote.art\r\nConnection: close\r\n\r\n')
-                require(b' 200 ' in tls.recv(1024).split(b'\r\n')[0], 'Public local TLS smoke failed')
+        deadline = time.monotonic() + seconds
+        while True:
+            try:
+                with socket.create_connection(('127.0.0.1', 443), timeout=2) as connection:
+                    with context.wrap_socket(connection, server_hostname='capsnote.art') as tls:
+                        tls.sendall(b'GET /api/v1/health HTTP/1.1\r\nHost: capsnote.art\r\nConnection: close\r\n\r\n')
+                        with tls.makefile('rb') as response:
+                            status = response.readline(1024).split()
+                        if len(status) >= 2 and status[1] == str(expected).encode():
+                            return
+            except ssl.SSLCertVerificationError:
+                raise
+            except OSError:
+                pass
+            if time.monotonic() >= deadline:
+                raise ReleaseError('Nginx did not serve the requested mode')
+            time.sleep(0.1)
+
+    def smoke_public(self, m):
+        self.wait_tls_status(200)
 
 
 def main():
@@ -264,7 +354,7 @@ def main():
                         raise
         else:
             require(match(ID, args.operation), 'Invalid operation ID')
-            request = trusted(ROOT / 'requests' / (args.operation + '.json'))
+            request = trusted(ROOT / host.scope / 'requests' / (args.operation + '.json'))
             engine.run(host, request)
     print('Operation finished; details remain on the host.')
 
