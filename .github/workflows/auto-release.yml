@@ -1,0 +1,61 @@
+name: Automatic production release
+'on':
+  workflow_call:
+    inputs:
+      service:
+        required: true
+        type: string
+      source_sha:
+        required: true
+        type: string
+      image_digest:
+        required: true
+        type: string
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  release:
+    if: github.ref == 'refs/heads/main'
+    concurrency:
+      group: capstone-production
+      cancel-in-progress: false
+    environment: production
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      PRODUCTION_DEPLOY_ENABLED: ${{ vars.PRODUCTION_DEPLOY_ENABLED }}
+      SSM_DOCUMENT_VERSION: ${{ vars.SSM_DOCUMENT_VERSION }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+    - name: Require enabled main deployment
+      run: |-
+        python3 - <<'PY'
+        import os
+        assert os.environ['PRODUCTION_DEPLOY_ENABLED']=='true'
+        assert os.environ['SSM_DOCUMENT_VERSION']=='4'
+        PY
+    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      with:
+        repository: CAUCapstoneDesignPipeline/capstone_code_BE
+        ref: ${{ github.repository == 'CAUCapstoneDesignPipeline/capstone_code_BE' && github.sha || 'main' }}
+        persist-credentials: false
+    - uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708
+      with:
+        role-to-assume: arn:aws:iam::378040395204:role/capstone/capstone-prod-deploy
+        aws-region: ap-northeast-2
+        allowed-account-ids: '378040395204'
+        role-session-name: auto-${{ github.run_id }}
+    - name: Deploy published component with current configuration
+      env:
+        SERVICE: ${{ inputs.service }}
+        SOURCE_SHA: ${{ inputs.source_sha }}
+        IMAGE_DIGEST: ${{ inputs.image_digest }}
+      run: python3 deploy/pipeline/auto-release.py --service "$SERVICE" --source "$SOURCE_SHA" --digest "$IMAGE_DIGEST"
+    - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      if: always()
+      with:
+        name: auto-release-${{ inputs.service }}-${{ github.run_id }}-${{ github.run_attempt }}
+        path: auto-release/
+        retention-days: 30
+        if-no-files-found: warn

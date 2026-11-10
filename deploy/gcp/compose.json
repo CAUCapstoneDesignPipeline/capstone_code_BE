@@ -1,0 +1,136 @@
+{
+  "name": "capstone-gcp",
+  "services": {
+    "be": {
+      "image": "${BE_IMAGE:?digest required}",
+      "platform": "linux/amd64",
+      "user": "10001:10001",
+      "restart": "no",
+      "read_only": true,
+      "init": true,
+      "cpus": 1.25,
+      "mem_limit": "1100m",
+      "pids_limit": 256,
+      "cap_drop": [
+        "ALL"
+      ],
+      "security_opt": [
+        "no-new-privileges:true"
+      ],
+      "tmpfs": [
+        "/tmp:rw,noexec,nosuid,size=64m"
+      ],
+      "ports": [
+        "127.0.0.1:18080:8080"
+      ],
+      "environment": {
+        "SPRING_PROFILES_ACTIVE": "prod",
+        "SPRING_CONFIG_ADDITIONAL_LOCATION": "file:/run/secrets/be.properties",
+        "CAPSTONE_AI_ENABLED": "false"
+      },
+      "volumes": [
+        {
+          "type": "bind",
+          "source": "${RUNTIME_DIR:?runtime required}/be.properties",
+          "target": "/run/secrets/be.properties",
+          "read_only": true,
+          "bind": {
+            "create_host_path": false
+          }
+        }
+      ],
+      "stop_grace_period": "30s",
+      "logging": {
+        "driver": "none"
+      },
+      "networks": {
+        "runtime": {
+          "ipv4_address": "172.30.36.3"
+        }
+      }
+    },
+    "web": {
+      "image": "${WEB_IMAGE:?digest required}",
+      "platform": "linux/amd64",
+      "user": "101:101",
+      "restart": "no",
+      "read_only": true,
+      "cpus": 0.25,
+      "mem_limit": "128m",
+      "pids_limit": 64,
+      "cap_drop": [
+        "ALL"
+      ],
+      "security_opt": [
+        "no-new-privileges:true"
+      ],
+      "tmpfs": [
+        "/tmp:rw,noexec,nosuid,size=32m"
+      ],
+      "ports": [
+        "127.0.0.1:18081:8080"
+      ],
+      "environment": {
+        "CAPSTONE_WEB_MODE": "notes-web"
+      },
+      "logging": {
+        "driver": "local",
+        "options": {
+          "max-size": "5m",
+          "max-file": "2"
+        }
+      },
+      "networks": {
+        "runtime": {
+          "ipv4_address": "172.30.36.4"
+        }
+      }
+    },
+    "proxy": {
+      "image": "${PROXY_IMAGE:?digest required}",
+      "platform": "linux/amd64",
+      "user": "65532:65532",
+      "read_only": true,
+      "restart": "no",
+      "cap_drop": [
+        "ALL"
+      ],
+      "security_opt": [
+        "no-new-privileges:true"
+      ],
+      "command": [
+        "--private-ip",
+        "--address=0.0.0.0",
+        "--port=5432",
+        "${SQL_CONNECTION:?connection required}"
+      ],
+      "ports": [
+        "127.0.0.1:15432:5432"
+      ],
+      "networks": {
+        "runtime": {
+          "ipv4_address": "172.30.36.2"
+        }
+      },
+      "logging": {
+        "driver": "local",
+        "options": {
+          "max-size": "5m",
+          "max-file": "2"
+        }
+      }
+    }
+  },
+  "networks": {
+    "runtime": {
+      "driver": "bridge",
+      "ipam": {
+        "config": [
+          {
+            "subnet": "172.30.36.0/24"
+          }
+        ]
+      }
+    }
+  }
+}

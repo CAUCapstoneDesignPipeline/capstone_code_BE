@@ -31,8 +31,7 @@ def validate(m):
              'secretVersions','flyway','gates','aiEnabled','aiImage'])
     require(type(m['schemaVersion']) is int and m['schemaVersion'] == 2, 'Unsupported manifest version')
     require(isinstance(m['releaseId'], str) and re.fullmatch(RELEASE, m['releaseId']), 'Invalid release ID')
-    # notes-web is deliberately closed until actual FE auth/P4 has been implemented.
-    require(m['mode'] == 'api-only', 'Only api-only is approved by this pipeline implementation')
+    require(m['mode'] in ['api-only','notes-web'], 'Unsupported web mode')
     require(m['aiEnabled'] is False and m['aiImage'] is None, 'AI must remain disabled')
     for name in ['be','web']:
         keys(m[name], ['sourceSha','digest'])
@@ -42,6 +41,8 @@ def validate(m):
     keys(m['secretVersions'], ['dbPassword','jwtSecret','googleClientSecret','allowedEmails'])
     for name, version in m['secretVersions'].items():
         require(type(version) is int and version >= (1 if name in ['dbPassword','jwtSecret'] else 0), 'Invalid secret version')
+    if m['mode']=='notes-web':
+        require(all(m['secretVersions'][name]>0 for name in ['googleClientSecret','allowedEmails']), 'Real Google login and allowlist required for notes-web')
     keys(m['flyway'], ['before','after','rollbackCompatibleWith','backup'])
     for name in ['before','after']:
         require(isinstance(m['flyway'][name], str) and re.fullmatch(r'empty|[0-9]+', m['flyway'][name]), 'Invalid Flyway version')

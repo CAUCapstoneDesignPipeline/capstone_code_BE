@@ -3,8 +3,14 @@ name: Rollback production
   workflow_dispatch:
     inputs:
       manifest:
-        description: Reviewed deploy/releases/<release-id>.json on main
-        required: true
+        description: Previous release file on main; leave empty when supplying artifact JSON
+        required: false
+        default: ''
+        type: string
+      manifest_json:
+        description: Exact previous-manifest.json from the current automatic release artifact
+        required: false
+        default: ''
         type: string
       expected_release:
         description: Current release ID; none only for first deployment
@@ -36,6 +42,7 @@ jobs:
     with:
       operation: rollback
       manifest: ${{ inputs.manifest }}
+      rollback_manifest_json: ${{ inputs.manifest_json }}
       expected_release: ${{ inputs.expected_release }}
     needs: authorize
     permissions:

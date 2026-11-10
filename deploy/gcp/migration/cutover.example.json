@@ -1,0 +1,24 @@
+{
+  "writersStopped": {
+    "awsAutoDeploy": false,
+    "gcpAutoDeploy": false,
+    "be": false,
+    "oauthCallback": false,
+    "oauthRefresh": false,
+    "worker": false,
+    "operatorScripts": false,
+    "databaseSessions": false
+  },
+  "gates": {
+    "restoreCompared": false,
+    "flywayVerified": false,
+    "tlsVerified": false,
+    "oauthVerified": false,
+    "aiOffVerified": false,
+    "backupVerified": false,
+    "aiStandaloneAccepted": false,
+    "feBeDeployAccepted": false
+  },
+  "rollback": "before-writes-source-preserved",
+  "gcpWritesResumed": false
+}

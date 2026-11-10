@@ -6,7 +6,12 @@ name: Reviewed release executor
         required: true
         type: string
       manifest:
-        required: true
+        required: false
+        default: ''
+        type: string
+      rollback_manifest_json:
+        required: false
+        default: ''
         type: string
       expected_release:
         required: true
@@ -23,6 +28,7 @@ jobs:
     env:
       PRODUCTION_DEPLOY_ENABLED: ${{ vars.PRODUCTION_DEPLOY_ENABLED }}
       SSM_DOCUMENT_VERSION: ${{ vars.SSM_DOCUMENT_VERSION }}
+      ROLLBACK_MANIFEST_JSON: ${{ inputs.rollback_manifest_json }}
     steps:
     - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       with:
@@ -30,6 +36,7 @@ jobs:
     - name: Validate reviewed manifest before AWS access
       env:
         MANIFEST: ${{ inputs.manifest }}
+        OPERATION: ${{ inputs.operation }}
       run: python3 deploy/pipeline/release-command.py validate --manifest "$MANIFEST"
     - uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708
       with:

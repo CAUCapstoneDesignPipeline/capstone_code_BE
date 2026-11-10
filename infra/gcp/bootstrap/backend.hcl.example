@@ -1,0 +1,2 @@
+bucket = "capsnote-169516793433-tfstate"
+prefix = "gcp/bootstrap"

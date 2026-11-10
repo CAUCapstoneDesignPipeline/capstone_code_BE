@@ -1,0 +1,10 @@
+[Unit]
+Description=CAPSTONE sanitized app readiness and TLS observation
+After=nginx.service docker.service
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /opt/capstone-gcp/observe.py
+UMask=0027
+TimeoutStartSec=30
+StandardOutput=null
+StandardError=null
