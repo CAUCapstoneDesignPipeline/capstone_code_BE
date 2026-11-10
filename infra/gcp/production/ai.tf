@@ -125,11 +125,13 @@ resource "google_compute_instance" "ai" {
     email  = google_service_account.ai_runtime.email
     scopes = ["https://www.googleapis.com/auth/cloud-platform"]
   }
+  # Guest attributes let the guest agent publish SSH host keys (hostkeys/) for out-of-band pinning.
   metadata = {
     enable-oslogin           = "TRUE"
     block-project-ssh-keys   = "TRUE"
     serial-port-enable       = "FALSE"
     disable-legacy-endpoints = "TRUE"
+    enable-guest-attributes  = "TRUE"
   }
   shielded_instance_config {
     enable_secure_boot          = true
