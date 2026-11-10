@@ -5,6 +5,7 @@ import gzip
 import hashlib
 import io
 import json
+import lzma
 import tarfile
 from pathlib import Path
 
@@ -16,8 +17,9 @@ IAM = f'arn:aws:iam::{ACCOUNT}'
 ARN = f'arn:aws:{{service}}:{REGION}:{ACCOUNT}:{{resource}}'
 TAGS = [{'Key':'Project','Value':'capstone'}, {'Key':'Environment','Value':'prod'}]
 BOUNDARY = IAM + ':policy/CapstoneWorkloadBoundary'
-# Exact deployed runner sources from main 865871a; application images stay protocol 4.
-PIPELINE_BASELINE = {'manifest.py': '3da346f4062252bd57065309b2dd60e009652a38d02f6d924adff28fdf169596', 'release.py': '9a2ae56b7f636bbad3512b44b859932cf28596b422a4c69f4b3548a54a3784a0', 'configure-release.py': '23a1229d35e4303e74e9cd6e9f000c1f9f5883bc27fe57a0c56985071d4b96fb'}
+# Exact deployed runner source installed by capstone-update-pipeline v1 (2026-10-11,
+# unchanged through main 5e04ba7); application images stay protocol 4.
+PIPELINE_BASELINE = {'release.py': '36fd8b4348db28434e4977c4c783a4ed11df4c5e5eff3993fbb1f887f6a0e985'}
 def ref(x): return {'Ref':x}
 def get(x,y): return {'Fn::GetAtt':[x,y]}
 def sub(x): return {'Fn::Sub':x}
@@ -111,7 +113,7 @@ def bootstrap():
     recovery=recovery.replace('__ORIGINAL_RELEASE_SHA__','26209200b4d602a0a0dd1a1d06810b19c0b453c8e5697aa98eeeba02f5c36fa4')
     encoded=base64.b64encode(gzip.compress(recovery.encode(),mtime=0)).decode()
     archive={'Fn::FindInMap':['HostAssets','Content','Archive']}
-    recovery_command={'Fn::Join':['',["/opt/capstone/tools/bin/python - <<'CAPSTONE_RECOVER_RELEASE'\nimport base64,gzip,io,tarfile\nwith tarfile.open(fileobj=io.BytesIO(gzip.decompress(base64.b64decode('",archive,"')))) as files:\n REVIEWED_RELEASE_BYTES=files.extractfile('host/release.py').read()\nexec(compile(gzip.decompress(base64.b64decode('"+encoded+"')).decode(),'capstone-recover-release','exec'))\nCAPSTONE_RECOVER_RELEASE"]]}
+    recovery_command={'Fn::Join':['',["/opt/capstone/tools/bin/python - <<'CAPSTONE_RECOVER_RELEASE'\nimport base64,gzip,io,lzma,tarfile\nwith tarfile.open(fileobj=io.BytesIO(lzma.decompress(base64.b64decode('",archive,"')))) as files:\n REVIEWED_RELEASE_BYTES=files.extractfile('host/release.py').read()\nexec(compile(gzip.decompress(base64.b64decode('"+encoded+"')).decode(),'capstone-recover-release','exec'))\nCAPSTONE_RECOVER_RELEASE"]]}
     r['RecoverReleaseDocument']=document('capstone-recover-release',recovery_command,{
         'RecoveryOperation':{'type':'String','allowedValues':['status','finish-commit'],'interpolationType':'ENV_VAR'},
         'ReleaseId':{'type':'String','allowedPattern':'^[a-z0-9][a-z0-9-]{0,63}$','interpolationType':'ENV_VAR'},
@@ -119,13 +121,13 @@ def bootstrap():
     updater=(HERE/'update-pipeline-host.py').read_text()
     updater=updater.replace('__BASELINE_HASHES__',repr(PIPELINE_BASELINE))
     encoded_updater=base64.b64encode(gzip.compress(updater.encode(),mtime=0)).decode()
-    update_command={'Fn::Join':['',["/opt/capstone/tools/bin/python - <<'CAPSTONE_UPDATE_PIPELINE'\nimport base64,gzip,io,tarfile\nwith tarfile.open(fileobj=io.BytesIO(gzip.decompress(base64.b64decode('",archive,"')))) as files:\n REVIEWED_FILES={p.name.removeprefix('host/'):files.extractfile(p).read() for p in files.getmembers() if p.isfile()}\nexec(compile(gzip.decompress(base64.b64decode('"+encoded_updater+"')).decode(),'capstone-update-pipeline','exec'))\nCAPSTONE_UPDATE_PIPELINE"]]}
+    update_command={'Fn::Join':['',["/opt/capstone/tools/bin/python - <<'CAPSTONE_UPDATE_PIPELINE'\nimport base64,gzip,io,lzma,tarfile\nwith tarfile.open(fileobj=io.BytesIO(lzma.decompress(base64.b64decode('",archive,"')))) as files:\n REVIEWED_FILES={p.name.removeprefix('host/'):files.extractfile(p).read() for p in files.getmembers() if p.isfile()}\nexec(compile(gzip.decompress(base64.b64decode('"+encoded_updater+"')).decode(),'capstone-update-pipeline','exec'))\nCAPSTONE_UPDATE_PIPELINE"]]}
     r['UpdatePipelineDocument']=document('capstone-update-pipeline',update_command,{
         'ExpectedRelease':{'type':'String','allowedPattern':'^[a-z0-9][a-z0-9-]{0,63}$','interpolationType':'ENV_VAR'},
         'ManifestSha':{'type':'String','allowedPattern':'^[a-f0-9]{64}$','interpolationType':'ENV_VAR'}})
     # Install only this repository's fixed files on a new project host. No user
     # arguments or generic shell access; also supports a failed initial install.
-    install_command="set -eu\numask 077\ntest ! -f /etc/capstone/current.json\ntest ! -f /etc/capstone/release-pending.json\npython3 - <<'PY'\nimport base64,gzip,io,tarfile\ndata=base64.b64decode('"+payload()+"')\nwith tarfile.open(fileobj=io.BytesIO(gzip.decompress(data))) as archive: archive.extractall('/opt/capstone')\nPY\nflock -n /run/capstone-install.lock /bin/bash /opt/capstone/host/install.sh\n/opt/capstone/tools/bin/python /opt/capstone/host/ssm-operation.py install"
+    install_command="set -eu\numask 077\ntest ! -f /etc/capstone/current.json\ntest ! -f /etc/capstone/release-pending.json\npython3 - <<'PY'\nimport base64,io,lzma,tarfile\ndata=base64.b64decode('"+payload()+"')\nwith tarfile.open(fileobj=io.BytesIO(lzma.decompress(data))) as archive: archive.extractall('/opt/capstone')\nPY\nflock -n /run/capstone-install.lock /bin/bash /opt/capstone/host/install.sh\n/opt/capstone/tools/bin/python /opt/capstone/host/ssm-operation.py install"
     # Store the reviewed archive once, shared by initial installation and pipeline preparation.
     before,after=install_command.split(payload())
     archive={'Fn::FindInMap':['HostAssets','Content','Archive']}
@@ -137,6 +139,10 @@ def bootstrap():
         'ConfigurationOperation':{'type':'String','allowedValues':['initial-config','stage-config','backup-evidence'],'interpolationType':'ENV_VAR'},
         'ExpectedRelease':{'type':'String','default':'none','allowedPattern':'^(none|[a-z0-9][a-z0-9-]{0,63})$','interpolationType':'ENV_VAR'},
         'ConfigurationJson':{'type':'String','allowedPattern':r'^\{[^\r\n]+\}$','minChars':3,'maxChars':3502,'interpolationType':'ENV_VAR'}})
+    # Operator-only hold for the AWS write stop. The deploy role may send only capstone-deploy.
+    r['MaintenanceDocument']=document('capstone-maintenance','/opt/capstone/tools/bin/python /opt/capstone/host/release.py --maintenance "$SSM_MaintenanceOperation"',{
+        'MaintenanceOperation':{'type':'String','allowedValues':['on','off','status'],'interpolationType':'ENV_VAR'}})
+    r['MaintenanceDocument']['Properties']['Content']['description']='Fixed CAPSTONE operator maintenance hold; on, off or status only'
     outputs={n:{'Value':v,'Export':{'Name':'capstone-bootstrap-'+n}} for n,v in {
         'SecretsKeyArn':get('SecretsKey','Arn'),'HostProfile':ref('HostProfile'),'TopicArn':ref('OperationsTopic'),
         'BeRepository':get('BeRepository','RepositoryUri'),'WebRepository':get('WebRepository','RepositoryUri'),
@@ -161,7 +167,11 @@ def payload(bootstrap_only=False):
             data=json.dumps(hashes,sort_keys=True).encode()
             info=tarfile.TarInfo('host/pipeline-files.json');info.size=len(data);info.mtime=0;info.mode=0o600
             archive.addfile(info,io.BytesIO(data))
-    return base64.b64encode(gzip.compress(buf.getvalue(),mtime=0)).decode()
+    if bootstrap_only:
+        return base64.b64encode(gzip.compress(buf.getvalue(),mtime=0)).decode()
+    # The shared bootstrap archive keeps the template under the 51,200-byte TemplateBody
+    # limit; runtime UserData keeps its gzip format and content.
+    return base64.b64encode(lzma.compress(buf.getvalue(),preset=9|lzma.PRESET_EXTREME)).decode()
 
 def runtime():
     r={}
