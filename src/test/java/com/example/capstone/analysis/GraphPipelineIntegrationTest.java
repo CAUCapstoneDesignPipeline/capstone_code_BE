@@ -70,7 +70,8 @@ class GraphPipelineIntegrationTest extends ApiIntegrationSupport {
         }
         server.mode="condition";execute(first);
         assertEquals(4,jdbc.queryForObject("select count(distinct identity_sha256) from analysis_result where user_id=?",Integer.class,userId));
-        assertTrue(json(call("GET","/api/graph?scope=all",null)).path("nodes").size()>=4);
+        var pages=json(call("GET","/api/graph?scope=all",null));assertEquals(3,pages.path("nodes").size());assertFalse(pages.path("edges").isEmpty());
+        for(var edge:pages.path("edges")) assertFalse(edge.path("sharedKeywords").isEmpty());
     }
     @Test void reusedAliasCannotLoseItsSourceSnapshotWhenScopeChanges() throws Exception {
         UUID first=note("앞",null,"A>B"),outside=note("뒤1",null,"B>C");note("뒤2",null,"B>D");execute(first);
