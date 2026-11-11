@@ -36,7 +36,7 @@ def main():
             require(actual in ([changed[name],digest] if name in changed else [digest]))
             require(old[name] in ([changed[name],digest] if name in changed else [digest]))
         # The old source remains recoverable without touching application state.
-        backup=state/'pipeline-backups'/'google-notes-v1'
+        backup=state/'pipeline-backups'/'aws-maintenance-v1'
         backup.mkdir(parents=True,exist_ok=True,mode=0o700)
         def atomic(path,data,mode):
             tmp=path.with_suffix(path.suffix+'.tmp')

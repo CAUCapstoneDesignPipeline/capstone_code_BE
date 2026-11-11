@@ -2,6 +2,7 @@
 """Fixed digest deployment. No CLI credentials, arbitrary commands or secret output."""
 import base64
 import fcntl
+import http.client
 import json
 import os
 import shutil
@@ -16,12 +17,18 @@ import urllib.error
 from datetime import datetime, timezone
 from pathlib import Path
 import boto3
-from manifest import REGISTRY, ReleaseError, canonical, checksum, image, require, transition, validate, PIPELINE_PROTOCOL, AI_OFF_SMOKE
+from manifest import REGISTRY, ReleaseError, canonical, checksum, image, require, transition, validate, version, PIPELINE_PROTOCOL, AI_OFF_SMOKE
 
 BASE=Path('/opt/capstone/releases')
 RUNTIME=Path('/run/capstone/releases')
 STATE=Path('/etc/capstone')
 HOST=Path('/opt/capstone/host')
+NGINX=Path('/etc/nginx/conf.d/capstone.conf')
+LOCK=Path('/run/capstone-release.lock')
+HOLD='maintenance-hold.json'
+MAINTENANCE=['on','off','status']
+# Read-only count of other DB sessions; only the application role's rows are fully visible.
+SESSIONS="SELECT count(*) FILTER (WHERE usename='capstone_app'), count(*) FILTER (WHERE usename<>'capstone_app') FROM pg_stat_activity WHERE pid<>pg_backend_pid();"
 
 
 def run(args, env=None, input=None):
@@ -49,9 +56,10 @@ def private_json(path):
 
 
 class Host:
-    def __init__(self):
+    def __init__(self, allow_pending=False):
         require(os.geteuid() == 0, 'Root host entry point required')
-        require(not (STATE/'release-pending.json').exists(), 'Unresolved release requires investigation')
+        # Only closing/reading operator actions may run beside an unresolved journal.
+        require(allow_pending or not (STATE/'release-pending.json').exists(), 'Unresolved release requires investigation')
         require((STATE/'pipeline-version').read_text().strip()==PIPELINE_PROTOCOL, 'Reviewed pipeline installation required')
         self.config=private_json(STATE/'production.json')
         self.infrastructure=private_json(STATE/'infrastructure.json')
@@ -74,11 +82,15 @@ class Host:
         if expected is not None: require(p['Version']==expected, 'Secret revision changed; do not restore old credentials')
         return p['Value']
 
-    def history(self):
+    def database(self):
         if self.db_env is None:
             self.db_env=dict(os.environ, PGHOST=self.infrastructure['dbEndpoint'], PGPORT='5432',PGDATABASE='capstone',
                 PGUSER='capstone_app', PGPASSWORD=self.secret('db-password'), PGSSLMODE='verify-full',
                 PGSSLROOTCERT='/etc/capstone/rds-ca.pem', PGCONNECT_TIMEOUT='10')
+        return self.db_env
+
+    def history(self):
+        self.database()
         exists=run(['psql','-X','-qAt','-c',"SELECT to_regclass('public.flyway_schema_history') IS NOT NULL;"],env=self.db_env).strip()
         if exists=='f': return []
         rows=run(['psql','-X','-qAt','-c',"SELECT COALESCE(json_agg(x ORDER BY installed_rank),'[]') FROM (SELECT installed_rank,version,checksum,success FROM public.flyway_schema_history) x;"],env=self.db_env)
@@ -162,11 +174,62 @@ class Host:
     def finish(self):
         (STATE/'release-pending.json').unlink()
 
-    def maintenance(self, enabled):
+    def held(self):
+        return (STATE/HOLD).exists()
+
+    def maintenance(self, enabled, opening=False):
+        # An operator hold is released only by the checked `--maintenance off` path.
+        require(enabled or opening or not self.held(), 'Operator maintenance hold active')
         config='server {\n listen 80 default_server;\n server_name capsnote.art;\n access_log off;\n error_log /var/log/capstone/nginx-error.log crit;\n location ^~ /.well-known/acme-challenge/ { root /var/www/capstone; }\n location / { return 301 https://capsnote.art$request_uri; }\n}\nserver {\n listen 443 ssl;\n server_name capsnote.art;\n ssl_certificate /etc/letsencrypt/live/capsnote.art/fullchain.pem;\n ssl_certificate_key /etc/letsencrypt/live/capsnote.art/privkey.pem;\n ssl_protocols TLSv1.2 TLSv1.3;\n access_log off;\n error_log /var/log/capstone/nginx-error.log crit;\n client_max_body_size 16m;\n location / {\n CAPSTONE_ROUTE\n }\n}\n'
         route='add_header Retry-After 30 always; return 503;' if enabled else 'proxy_pass http://127.0.0.1:18081; proxy_set_header Host capsnote.art; proxy_set_header X-Forwarded-Proto https; proxy_set_header X-Forwarded-For $remote_addr;'
-        atomic(Path('/etc/nginx/conf.d/capstone.conf'),config.replace('CAPSTONE_ROUTE',route),0o644)
+        atomic(NGINX,config.replace('CAPSTONE_ROUTE',route),0o644)
         run(['nginx','-t']);run(['systemctl','reload','nginx'])
+
+    def nginx_mode(self):
+        text=NGINX.read_text() if NGINX.exists() else ''
+        if 'add_header Retry-After 30 always; return 503;' in text and 'proxy_pass' not in text: return 'maintenance'
+        return 'live' if 'proxy_pass http://127.0.0.1:18081;' in text else 'other'
+
+    def local_status(self, path):
+        # Local Nginx with the public SNI/Host, so the check does not depend on where DNS points.
+        connection=None
+        try:
+            context=ssl.create_default_context()
+            connection=http.client.HTTPSConnection('capsnote.art',443,timeout=5,context=context)
+            connection.sock=context.wrap_socket(socket.create_connection(('127.0.0.1',443),timeout=5),server_hostname='capsnote.art')
+            connection.request('GET',path)
+            return connection.getresponse().status
+        except Exception: return 0
+        finally:
+            if connection: connection.close()
+
+    def wait_local_maintenance(self):
+        # systemctl reload returns before nginx replaces its live workers.
+        deadline=time.monotonic()+30
+        while True:
+            if all(self.local_status(path)==503 for path in ['/','/api/v1/health','/api/auth/refresh']): return True
+            if time.monotonic()>=deadline: return False
+            time.sleep(1)
+
+    def be_running(self):
+        return bool(run(['docker','ps','-q','--filter','label=com.docker.compose.project=capstone-production','--filter','label=com.docker.compose.service=be']).strip())
+
+    def db_sessions(self):
+        try:
+            app,other=(int(x) for x in run(['psql','-X','-qAt','-c',SESSIONS],env=self.database()).strip().split('|'))
+            return {'dbAppSessions':app,'dbOtherRoleSessions':other}
+        except Exception:
+            return {'dbAppSessions':None,'dbOtherRoleSessions':None}
+
+    def status(self):
+        current=self.current()
+        try: since=json.loads((STATE/HOLD).read_text())['since'] if self.held() else None
+        except Exception: since='unreadable'
+        summary={'hold':self.held(),'holdSince':since,'nginx':self.nginx_mode(),'localStatus':self.local_status('/api/v1/health'),
+                 'beRunning':self.be_running(),'releaseId':current['releaseId'] if current else None,
+                 'pendingRelease':(STATE/'release-pending.json').exists()}
+        summary.update(self.db_sessions())
+        return summary
 
     def stop_be(self):
         current=self.current()
@@ -239,19 +302,64 @@ def web_page_matches(m,body):
     return b'<div id="root"></div>' in body and b'type="module"' in body and b'api-only' not in body
 
 
+def restart_current(host, current):
+    """Boot-resume checks; ingress stays closed until the caller opens it."""
+    validate(current)
+    host.maintenance(True)
+    require(version(host.history())==current['flyway']['after'], 'Unexpected schema during boot')
+    host.preflight(current,is_resume=True);host.start_be(current);host.wait_be();host.start_web(current);host.smoke(current)
+
+
+def operator_maintenance(operation):
+    """Fixed operator hold: closing is always allowed, opening only after resume checks."""
+    if operation=='status':
+        return Host(allow_pending=True).status(),True
+    with open(LOCK,'a') as lock:
+        try: fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        except BlockingIOError: raise ReleaseError('Another release is running') from None
+        if operation=='on':
+            host=Host(allow_pending=True)
+            if not host.held(): atomic(STATE/HOLD,canonical({'since':datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')})+'\n')
+            host.maintenance(True);host.stop_be()
+            served=host.wait_local_maintenance();summary=host.status()
+            return summary,served and summary['hold'] and summary['nginx']=='maintenance' and not summary['beRunning']
+        require(operation=='off', 'Unsupported maintenance operation')
+        host=Host();current=host.current()
+        require(host.held(), 'No operator maintenance hold')
+        require(current is not None, 'Committed current release required')
+        try:
+            # preflight rejects DNS that no longer points here: never reopen AWS after cutover.
+            restart_current(host,current)
+            host.maintenance(False,opening=True);host.smoke_public(current)
+            (STATE/HOLD).unlink()
+        except Exception:
+            try: host.maintenance(True);host.stop_be()
+            except Exception: pass
+            raise ReleaseError('Maintenance kept; operator hold remains (details suppressed)') from None
+        return host.status(),True
+
+
 def main():
     if sys.argv[1:]==['--resume']:
-        with open('/run/capstone-release.lock','a') as lock:
+        with open(LOCK,'a') as lock:
             fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
             host=Host(); current=host.current()
             if current is None: return
-            validate(current)
-            host.maintenance(True)
-            from manifest import version
-            require(version(host.history())==current['flyway']['after'], 'Unexpected schema during boot')
-            host.preflight(current,is_resume=True);host.start_be(current);host.wait_be();host.start_web(current);host.smoke(current)
+            if host.held():
+                # Writes stay stopped across reboot: no BE, no DB session, no public route.
+                host.maintenance(True)
+                if host.be_running(): host.stop_be()
+                print('Operator maintenance hold kept after boot; BE not started.')
+                return
+            restart_current(host,current)
             host.maintenance(False);host.smoke_public(current)
         print('Current release resumed after boot.')
+        return
+    if sys.argv[1:2]==['--maintenance']:
+        require(len(sys.argv)==3 and sys.argv[2] in MAINTENANCE, 'Unsupported host arguments')
+        summary,ok=operator_maintenance(sys.argv[2])
+        print(json.dumps(summary,sort_keys=True))
+        if not ok: sys.exit(1)
         return
     require(not sys.argv[1:], 'Unsupported host arguments')
     manifest=json.loads(os.environ['SSM_ManifestJson'])
@@ -259,10 +367,13 @@ def main():
     require(checksum(manifest)==os.environ['SSM_ManifestSha'], 'Manifest hash mismatch')
     require(manifest['releaseId']==os.environ['SSM_ReleaseId'] and manifest['be']['digest']==os.environ['SSM_BeDigest'] and manifest['web']['digest']==os.environ['SSM_WebDigest'], 'Document parameters differ from manifest')
     STATE.mkdir(exist_ok=True,mode=0o700)
-    with open('/run/capstone-release.lock','a') as lock:
+    with open(LOCK,'a') as lock:
         try: fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
         except BlockingIOError: raise ReleaseError('Another release is running') from None
-        transition(Host(),manifest,os.environ['SSM_ExpectedRelease'],os.environ['SSM_Operation'])
+        host=Host()
+        # A deploy/rollback would start BE and DB sessions behind the hold; refuse before any change.
+        require(not host.held(), 'Operator maintenance hold active')
+        transition(host,manifest,os.environ['SSM_ExpectedRelease'],os.environ['SSM_Operation'])
     print('Release completed successfully; credentials and command output suppressed.')
 
 if __name__=='__main__':
