@@ -27,8 +27,10 @@ public class AnalysisService {
     @Transactional(readOnly=true)
     public NoteAnalysisResponse get(UUID userId, UUID noteId) {
         notes.requireOwned(userId, noteId);
+        boolean continuing=work.rerequested(userId,noteId);
         return new NoteAnalysisResponse(jobs.latest(userId, noteId)
                 .map(AnalysisJobResponse::from)
+                .map(job->continuing && "superseded".equals(job.lifecycleState())?job.continuing():job)
                 .orElse(null));
     }
 

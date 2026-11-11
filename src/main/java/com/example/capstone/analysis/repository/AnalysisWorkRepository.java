@@ -12,6 +12,11 @@ import com.example.capstone.analysis.client.AiResponseValidator;
 /** Bound, fixed SQL for PostgreSQL snapshots, queue claiming and lease compare-and-swap. */
 @Repository
 public class AnalysisWorkRepository {
+    /** superseded CTE가 돌려준 요청 노트에 이어 실행을 표시한다. 같은 노트가 연속 3회 대체되면 더 표시하지 않는다. */
+    public static final String RERUN_SUPERSEDED="""
+        update note n set analysis_supersede_streak=n.analysis_supersede_streak+1,analysis_rerequested=(n.analysis_supersede_streak+1<3)
+        where n.user_id=:user and n.id in(select note_id from superseded)
+        """;
     private final AnalysisStore db;
     public AnalysisWorkRepository(AnalysisStore db) { this.db=db; }
     public void retireUnresumable(UUID user,UUID note) {
@@ -47,11 +52,32 @@ public class AnalysisWorkRepository {
     }
     public void advanceGraph(UUID user) { db.write("update app_user set graph_revision=graph_revision+1 where id=:user",Map.of("user",user)); }
     // graph_revision은 첫 선점 때 기록한다. 대기 중에 다른 작업이 그래프를 게시해도 이 작업이 대체되지 않는다.
-    public void create(UUID id,UUID user,UUID note,int version,long input,Instant deadline,String extractor) {
+    public void create(UUID id,UUID user,UUID note,int version,long input,Instant deadline,String extractor,boolean explicit) {
         db.write("""
           insert into analysis_job(id,user_id,note_id,note_version,status,extractor,lifecycle_state,input_revision,deadline,contract_revision,runtime_epoch)
           values(:id,:user,:note,:version,'pending',:extractor,'queued',:input,:deadline,'ai-integration-2026-10-30-adopted.1',(select epoch from analysis_runtime_fence where singleton))
           """,Map.of("id",id,"user",user,"note",note,"version",version,"input",input,"deadline",deadline,"extractor",extractor));
+        // 새 작업이 생기면 이어 실행 표시를 해제한다. 사용자의 명시 요청은 연속 대체 횟수도 처음부터 센다.
+        db.write("update note set analysis_rerequested=false,analysis_supersede_streak=case when :explicit=true then 0 else analysis_supersede_streak end where id=:note and user_id=:user",
+                Map.of("note",note,"user",user,"explicit",explicit));
+    }
+    public JsonNode nextRerequested() {
+        return db.one("select jsonb_build_object('noteId',id,'userId',user_id)::text from note where analysis_rerequested order by updated_at,id limit 1",Map.of());
+    }
+    public boolean lockRerequested(UUID user,UUID note) {
+        return db.one("select to_jsonb(id)::text from note where id=:note and user_id=:user and analysis_rerequested for update",Map.of("user",user,"note",note))!=null;
+    }
+    public void clearRerequest(UUID user,UUID note) { db.write("update note set analysis_rerequested=false where id=:note and user_id=:user",Map.of("user",user,"note",note)); }
+    public boolean rerequested(UUID user,UUID note) {
+        JsonNode row=db.one("select to_jsonb(analysis_rerequested)::text from note where id=:note and user_id=:user",Map.of("user",user,"note",note));return row!=null && row.asBoolean();
+    }
+    public void succeeded(UUID user,UUID note) { db.write("update note set analysis_supersede_streak=0 where id=:note and user_id=:user",Map.of("user",user,"note",note)); }
+    public void supersede(UUID user,UUID job,UUID token) {
+        db.write("""
+          with superseded as (update analysis_job set status='failed',lifecycle_state='superseded',failure_code='STALE_INPUT',finished_at=clock_timestamp(),lease_token=null,lease_until=null
+           where id=:job and user_id=:user and runtime_epoch=(select epoch from analysis_runtime_fence where singleton) and lease_token=:token and lifecycle_state='running'
+            and lease_until>clock_timestamp() and deadline>clock_timestamp() returning note_id)
+          """+RERUN_SUPERSEDED,Map.of("user",user,"job",job,"token",token));
     }
     public void snapshot(UUID job,UUID user,JsonNode doc) {
         var p=new LinkedHashMap<String,Object>();
@@ -139,6 +165,11 @@ public class AnalysisWorkRepository {
           update analysis_job set status='failed',lifecycle_state='cancelled',failure_code='CANCELLED',lease_token=null,lease_until=null,finished_at=clock_timestamp()
           where user_id=:user and lifecycle_state in ('queued','running')
           """,Map.of("user",user));
+        // 취소된 요청은 AI가 다시 켜져도 자동으로 이어 실행하지 않는다.
+        db.write("update note set analysis_rerequested=false where user_id=:user and analysis_rerequested",Map.of("user",user));
+    }
+    public List<UUID> rerequestedUsers() {
+        return db.rows("select distinct to_jsonb(user_id)::text from note where analysis_rerequested order by 1",Map.of()).stream().map(n->UUID.fromString(n.asString())).toList();
     }
     public JsonNode cachedFacts(UUID user,String key,UUID note) {
         return db.one("""
