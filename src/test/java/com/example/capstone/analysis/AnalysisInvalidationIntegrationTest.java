@@ -41,10 +41,11 @@ class AnalysisInvalidationIntegrationTest extends ApiIntegrationSupport {
         UUID id=UUID.fromString(r1.path("id").asString());
         call("POST","/api/candidates/"+id+"/review","{\"expectedRevision\":1,\"action\":\"accept\",\"reason\":null,\"learning\":\"new_understanding\",\"editedConclusion\":null,\"idempotencyKey\":\"decision\"}").andExpect(status().isCreated());
         call("PUT","/api/notes/"+a,"{\"title\":\"a\",\"body\":\"바뀐 원문\",\"version\":0}").andExpect(status().isOk());
-        assertEquals(2,jdbc.queryForObject("select count(*) from analysis_result where job_id=? and freshness='stale'",Integer.class,job.id()));
+        assertEquals("evidence_lost",jdbc.queryForObject("select freshness from analysis_result where id=?",String.class,id));
+        assertEquals("stale",jdbc.queryForObject("select freshness from analysis_result where id=?",String.class,UUID.fromString(r2.path("id").asString())));
         assertTrue(json(call("GET","/api/candidates",null)).path("results").isEmpty());
         call("PUT","/api/notes/"+a,"{\"title\":\"a\",\"body\":\"가\",\"version\":1}").andExpect(status().isOk());
-        JsonNode detail=json(call("GET","/api/candidates/"+id,null));assertEquals("stale",detail.path("freshness").asString());assertEquals("accepted",detail.path("reviewStatus").asString());assertEquals("sound",detail.path("soundness").asString());
+        JsonNode detail=json(call("GET","/api/candidates/"+id,null));assertEquals("evidence_lost",detail.path("freshness").asString());assertEquals("accepted",detail.path("reviewStatus").asString());assertEquals("sound",detail.path("soundness").asString());
         assertEquals(1,jdbc.queryForObject("select count(*) from analysis_review_event where result_id=?",Integer.class,id));
         assertEquals(2L,jdbc.queryForObject("select input_revision from note where id=?",Long.class,a));
         assertEquals(1,jdbc.queryForObject("select count(*) from analysis_job where note_id=?",Integer.class,a));

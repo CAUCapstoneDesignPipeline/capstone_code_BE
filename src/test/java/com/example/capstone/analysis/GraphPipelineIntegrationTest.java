@@ -96,7 +96,9 @@ class GraphPipelineIntegrationTest extends ApiIntegrationSupport {
         capture(cases,"graph","GET","/graph",call("GET","/api/graph",null),200);
         capture(cases,"reviews","GET","/reviews",call("GET","/api/reviews",null),200);
         call("PUT","/api/notes/"+primary,"{\"title\":\"앞\",\"body\":\"A>B 변경\",\"version\":0}").andExpect(status().isOk());
-        var stale=capture(cases,"stale-detail","GET","/candidates/{candidateId}",call("GET","/api/candidates/"+id,null),200);assertEquals("stale",stale.path("freshness").asString());
+        assertEquals("current",json(call("GET","/api/candidates/"+id,null)).path("freshness").asString());
+        call("PUT","/api/notes/"+primary,"{\"title\":\"앞\",\"body\":\"전부 바꾼 본문\",\"version\":1}").andExpect(status().isOk());
+        var lost=capture(cases,"evidence-lost-detail","GET","/candidates/{candidateId}",call("GET","/api/candidates/"+id,null),200);assertEquals("evidence_lost",lost.path("freshness").asString());
         var envelope=mapper.createObjectNode().put("schemaVersion",1).put("syntheticOnly",true);envelope.putObject("producer").put("commit","working-tree").put("suite",getClass().getSimpleName());envelope.set("cases",cases);
         Path target=Path.of(".local/verification/results/public-analysis-acceptance.json");Files.createDirectories(target.getParent());Files.writeString(target,envelope.toPrettyString());
         var usage=mapper.createObjectNode().put("syntheticOnly",true).put("source","PostgreSQL analysis_stage");usage.putNull("measuredCost");usage.put("costMeasurement","not_exposed_by_ai_contract");
