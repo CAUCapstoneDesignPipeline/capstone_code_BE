@@ -45,7 +45,7 @@ public class AnalysisWorkService {
         repository.lockRuntime();
         if(!gate.stillAllowed())throw new ApiException(ErrorCode.AI_UNAVAILABLE,"AI 분석은 아직 사용할 수 없습니다.",java.util.Map.of("reason","MISCONFIGURED"));
         UUID job=UUID.randomUUID();
-        repository.create(job,user,note,primary.path("noteVersion").asInt(),primary.path("inputRevision").asLong(),repository.graphRevision(user),Instant.now().plusSeconds(900),extractor);
+        repository.create(job,user,note,primary.path("noteVersion").asInt(),primary.path("inputRevision").asLong(),Instant.now().plusSeconds(900),extractor);
         documents.forEach(doc->repository.snapshot(job,user,doc)); return repository.job(user,job);
     }
     @Transactional

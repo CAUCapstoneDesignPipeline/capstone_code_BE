@@ -14,8 +14,8 @@ public class AnalysisInvalidationRepository {
         List<UUID> ids=db.rows("select to_jsonb(id)::text from note where user_id=:user order by id",Map.of("user",user)).stream().map(n->UUID.fromString(n.asString())).toList();
         invalidate(user,ids,true);
     }
+    // 그래프 revision은 결과 게시에서만 올린다. snapshot에 이 노트가 없는 실행 중 작업은 계속 진행한다.
     public void invalidate(UUID user,List<UUID> ids,boolean inputChanged) {
-        db.write("update app_user set graph_revision=graph_revision+1 where id=:user",Map.of("user",user));
         if(ids.isEmpty()) return;
         var p=Map.of("user",user,"ids",ids);
         if(inputChanged) db.write("update note set input_revision=input_revision+1 where user_id=:user and id in (:ids)",p);
