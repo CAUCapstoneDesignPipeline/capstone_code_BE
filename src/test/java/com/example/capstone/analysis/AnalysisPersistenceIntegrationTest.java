@@ -26,8 +26,9 @@ class AnalysisPersistenceIntegrationTest extends ApiIntegrationSupport {
         UUID sa=snapshot(job,a,"가 🧠"), sb=snapshot(job,b,"나"), result=UUID.randomUUID();
         jdbc.update("""
           insert into analysis_result(id,user_id,job_id,external_ref,identity_sha256,kind,conclusion,conditions,trace,detail,
-           derivation_status,soundness,novelty_note_ids) values(?,?,?,'r1',?,'derivation','결론','[]','[]','{}','conclusion','sound','[]')
-          """,result,userId,job,AiResponseValidator.hash("identity"));
+           derivation_status,soundness,novelty_note_ids,fingerprint_sha256,recommendation_id,recommendation_revision,content_sha256)
+           values(?,?,?,'r1',?,'derivation','결론','[]','[]','{}','conclusion','sound','[]',?,?,1,?)
+          """,result,userId,job,AiResponseValidator.hash("identity"),AiResponseValidator.hash("fingerprint"),result,AiResponseValidator.hash("content"));
         for(UUID snapshot:new UUID[]{sa,sb}) jdbc.update("insert into analysis_result_evidence(id,user_id,result_id,snapshot_id,job_id,claim_ref,start_offset,end_offset,quote) values(?,?,?,?,?,'claim',0,1,'합성')",UUID.randomUUID(),userId,result,snapshot,job);
         assertEquals(2,jdbc.queryForObject("select count(*) from analysis_result_evidence where result_id=?",Integer.class,result));
         assertThrows(org.springframework.dao.DataIntegrityViolationException.class,()->jdbc.update("insert into analysis_result_evidence(id,user_id,result_id,snapshot_id,job_id,claim_ref,start_offset,end_offset,quote) values(?,?,?,?,?,'foreign',0,1,'합성')",UUID.randomUUID(),otherId,result,sa,job));
