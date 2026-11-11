@@ -9,7 +9,6 @@ import org.springframework.stereotype.Repository;
 public class AnalysisInvalidationRepository {
     private final AnalysisStore db;
     public AnalysisInvalidationRepository(AnalysisStore db) { this.db=db; }
-    public List<UUID> noteIds(UUID user,UUID topic) { return db.rows("select to_jsonb(id)::text from note where user_id=:user and topic_id=:topic order by id",Map.of("user",user,"topic",topic)).stream().map(n->UUID.fromString(n.asString())).toList(); }
     public void policyChanged(UUID user) {
         List<UUID> ids=db.rows("select to_jsonb(id)::text from note where user_id=:user order by id",Map.of("user",user)).stream().map(n->UUID.fromString(n.asString())).toList();
         invalidate(user,ids,true);

@@ -77,7 +77,7 @@ public class NoteService {
             }
             throw exception;
         }
-        if(!java.util.Objects.equals(note.getTopicId(),destination)) invalidation.noteChanged(userId,id,true);
+        // 주제 이동은 분석 입력을 바꾸지 않는다. 실행 중 작업·근거·결과를 그대로 둔다.
         return NoteResponse.from(owned(userId,id,false));
     }
     private ApiException moveDuplicate(String title) {
