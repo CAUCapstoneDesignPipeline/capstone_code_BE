@@ -517,20 +517,14 @@
         "title": "Result"
       },
       "role": {
-        "enum": [
-          "priority_queue",
-          "queue",
-          "stack",
-          "deque",
-          "dictionary",
-          "set",
-          "disjoint_set",
-          "ordered_set",
-          "list",
-          "array",
-          "graph"
-        ],
+        "pattern": "^[a-z][a-z0-9_]{0,39}$",
         "title": "Role",
+        "type": "string"
+      },
+      "roleLabel": {
+        "maxLength": 80,
+        "minLength": 1,
+        "title": "Rolelabel",
         "type": "string"
       },
       "rule": {
@@ -587,6 +581,7 @@
       "algorithm",
       "structure",
       "role",
+      "roleLabel",
       "conclusion",
       "result",
       "case",
@@ -743,31 +738,7 @@
           "op": {
             "anyOf": [
               {
-                "enum": [
-                  "insert",
-                  "extract_min",
-                  "extract_max",
-                  "find_min",
-                  "find_max",
-                  "decrease_key",
-                  "increase_key",
-                  "delete",
-                  "search",
-                  "update",
-                  "push",
-                  "pop",
-                  "peek",
-                  "enqueue",
-                  "dequeue",
-                  "union",
-                  "find",
-                  "make_set",
-                  "build",
-                  "merge",
-                  "access",
-                  "successor",
-                  "adjacent"
-                ],
+                "pattern": "^[a-z][a-z0-9_]{0,39}$",
                 "type": "string"
               },
               {
@@ -775,6 +746,19 @@
               }
             ],
             "title": "Op"
+          },
+          "opLabel": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oplabel"
           },
           "origin": {
             "enum": [
@@ -814,19 +798,7 @@
           "role": {
             "anyOf": [
               {
-                "enum": [
-                  "priority_queue",
-                  "queue",
-                  "stack",
-                  "deque",
-                  "dictionary",
-                  "set",
-                  "disjoint_set",
-                  "ordered_set",
-                  "list",
-                  "array",
-                  "graph"
-                ],
+                "pattern": "^[a-z][a-z0-9_]{0,39}$",
                 "type": "string"
               },
               {
@@ -834,6 +806,19 @@
               }
             ],
             "title": "Role"
+          },
+          "roleLabel": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rolelabel"
           },
           "subject": {
             "maxLength": 200,
@@ -856,6 +841,8 @@
           "subjectKey",
           "role",
           "op",
+          "roleLabel",
+          "opLabel",
           "expr",
           "case",
           "negated",
@@ -1284,20 +1271,14 @@
             "title": "Result"
           },
           "role": {
-            "enum": [
-              "priority_queue",
-              "queue",
-              "stack",
-              "deque",
-              "dictionary",
-              "set",
-              "disjoint_set",
-              "ordered_set",
-              "list",
-              "array",
-              "graph"
-            ],
+            "pattern": "^[a-z][a-z0-9_]{0,39}$",
             "title": "Role",
+            "type": "string"
+          },
+          "roleLabel": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Rolelabel",
             "type": "string"
           },
           "rule": {
@@ -1354,6 +1335,7 @@
           "algorithm",
           "structure",
           "role",
+          "roleLabel",
           "conclusion",
           "result",
           "case",
@@ -3689,31 +3671,7 @@
       "op": {
         "anyOf": [
           {
-            "enum": [
-              "insert",
-              "extract_min",
-              "extract_max",
-              "find_min",
-              "find_max",
-              "decrease_key",
-              "increase_key",
-              "delete",
-              "search",
-              "update",
-              "push",
-              "pop",
-              "peek",
-              "enqueue",
-              "dequeue",
-              "union",
-              "find",
-              "make_set",
-              "build",
-              "merge",
-              "access",
-              "successor",
-              "adjacent"
-            ],
+            "pattern": "^[a-z][a-z0-9_]{0,39}$",
             "type": "string"
           },
           {
@@ -3721,6 +3679,19 @@
           }
         ],
         "title": "Op"
+      },
+      "opLabel": {
+        "anyOf": [
+          {
+            "maxLength": 80,
+            "minLength": 1,
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Oplabel"
       },
       "origin": {
         "enum": [
@@ -3760,19 +3731,7 @@
       "role": {
         "anyOf": [
           {
-            "enum": [
-              "priority_queue",
-              "queue",
-              "stack",
-              "deque",
-              "dictionary",
-              "set",
-              "disjoint_set",
-              "ordered_set",
-              "list",
-              "array",
-              "graph"
-            ],
+            "pattern": "^[a-z][a-z0-9_]{0,39}$",
             "type": "string"
           },
           {
@@ -3780,6 +3739,19 @@
           }
         ],
         "title": "Role"
+      },
+      "roleLabel": {
+        "anyOf": [
+          {
+            "maxLength": 80,
+            "minLength": 1,
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Rolelabel"
       },
       "subject": {
         "maxLength": 200,
@@ -3802,6 +3774,8 @@
       "subjectKey",
       "role",
       "op",
+      "roleLabel",
+      "opLabel",
       "expr",
       "case",
       "negated",
@@ -4018,6 +3992,30 @@
       "context": {
         "$ref": "#/$defs/Context"
       },
+      "knownOps": {
+        "default": [],
+        "items": {
+          "maxLength": 80,
+          "minLength": 1,
+          "pattern": "^[a-z0-9_]{1,80}$",
+          "type": "string"
+        },
+        "maxItems": 200,
+        "title": "Knownops",
+        "type": "array"
+      },
+      "knownRoles": {
+        "default": [],
+        "items": {
+          "maxLength": 80,
+          "minLength": 1,
+          "pattern": "^[a-z0-9_]{1,80}$",
+          "type": "string"
+        },
+        "maxItems": 200,
+        "title": "Knownroles",
+        "type": "array"
+      },
       "knownSubjects": {
         "default": [],
         "items": {
@@ -4148,31 +4146,7 @@
           "op": {
             "anyOf": [
               {
-                "enum": [
-                  "insert",
-                  "extract_min",
-                  "extract_max",
-                  "find_min",
-                  "find_max",
-                  "decrease_key",
-                  "increase_key",
-                  "delete",
-                  "search",
-                  "update",
-                  "push",
-                  "pop",
-                  "peek",
-                  "enqueue",
-                  "dequeue",
-                  "union",
-                  "find",
-                  "make_set",
-                  "build",
-                  "merge",
-                  "access",
-                  "successor",
-                  "adjacent"
-                ],
+                "pattern": "^[a-z][a-z0-9_]{0,39}$",
                 "type": "string"
               },
               {
@@ -4180,6 +4154,19 @@
               }
             ],
             "title": "Op"
+          },
+          "opLabel": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oplabel"
           },
           "origin": {
             "enum": [
@@ -4219,19 +4206,7 @@
           "role": {
             "anyOf": [
               {
-                "enum": [
-                  "priority_queue",
-                  "queue",
-                  "stack",
-                  "deque",
-                  "dictionary",
-                  "set",
-                  "disjoint_set",
-                  "ordered_set",
-                  "list",
-                  "array",
-                  "graph"
-                ],
+                "pattern": "^[a-z][a-z0-9_]{0,39}$",
                 "type": "string"
               },
               {
@@ -4239,6 +4214,19 @@
               }
             ],
             "title": "Role"
+          },
+          "roleLabel": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rolelabel"
           },
           "subject": {
             "maxLength": 200,
@@ -4261,6 +4249,8 @@
           "subjectKey",
           "role",
           "op",
+          "roleLabel",
+          "opLabel",
           "expr",
           "case",
           "negated",

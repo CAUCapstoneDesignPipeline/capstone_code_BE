@@ -36,7 +36,7 @@ public final class SyntheticPipelineServer implements AutoCloseable {
                     if(path.equals("/health/ready")) {
                         if(readiness.equals("timeout"))Thread.sleep(4000);
                         if(readiness.equals("unavailable")) { exchange.sendResponseHeaders(503,-1);return; }
-                        var ready=mapper.createObjectNode().put("status","ready").put("schemaVersion","1.0");ready.set("profileVersions",mapper.valueToTree(List.of("extract-det-3","embeddings-bge-m3-1","merge-det-1","bridges-det-1","edges-det-1","explain-llm-8","explanation-det-3","links-det-1","facts-llm-1","derive-sound-1")));if(readiness.equals("missing"))((ArrayNode)ready.path("profileVersions")).remove(8);response=ready;
+                        var ready=mapper.createObjectNode().put("status","ready").put("schemaVersion","1.0");ready.set("profileVersions",mapper.valueToTree(List.of("extract-det-3","embeddings-bge-m3-1","merge-det-1","bridges-det-1","edges-det-1","explain-llm-8","explanation-det-3","links-det-1","facts-llm-3","derive-sound-1")));if(readiness.equals("missing"))((ArrayNode)ready.path("profileVersions")).remove(8);response=ready;
                     } else {
                         byte[] bytes=exchange.getRequestBody().readNBytes(2097153);if(bytes.length>2097152) { exchange.sendResponseHeaders(413,-1);return; }
                         JsonNode request=mapper.readTree(bytes);requests.add(request);if(mode.equals("blocked") && path.equals("/explanations")) { entered.countDown();release.await(10,java.util.concurrent.TimeUnit.SECONDS); }response=respond(path,request);
@@ -95,7 +95,7 @@ public final class SyntheticPipelineServer implements AutoCloseable {
                 }
                 if(body.startsWith("기존 결론")) {
                     var f=facts.addObject().put("factId","stated#1").put("kind","stated_result").put("subject","다익스트라").put("subjectKey","dijkstra").put("role","priority_queue").put("expr","O((V+E)*log(V))").put("case","worst").put("negated",false).put("origin","extracted");
-                    for(String field:List.of("op","condition","other","otherKey"))f.putNull(field);
+                    for(String field:List.of("op","roleLabel","opLabel","condition","other","otherKey"))f.putNull(field);
                     var e=f.putObject("evidence").put("startOffset",0).put("endOffset",body.length()).put("quote",body);for(String field:List.of("noteId","noteVersion","bodySha256"))e.set(field,doc.path(field));
                 }
                 if(mode.equals("known-change") && body.contains("dijkstra")) for(var f:facts)((ObjectNode)f).put("subjectKey","changed_subject");

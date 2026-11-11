@@ -25,7 +25,7 @@ public class AiPipelineConfiguration {
     private volatile boolean rejected;
     public AiPipelineConfiguration(AiProperties flags,AiPipelineProperties config,AiClientProperties client,ObjectMapper mapper,AiSchemaValidator schemas,Environment environment) {
         profiles.put(AiOperation.EXTRACT,"extract-det-3");profiles.put(AiOperation.EMBEDDINGS,"embeddings-bge-m3-1");profiles.put(AiOperation.MERGE,"merge-det-1");profiles.put(AiOperation.BRIDGES,"bridges-det-1");
-        profiles.put(AiOperation.EDGES,"edges-det-1");profiles.put(AiOperation.EXPLAIN,"explain-llm-8");profiles.put(AiOperation.VERIFY_EXPLANATION,"explanation-det-3");profiles.put(AiOperation.LINKS,"links-det-1");profiles.put(AiOperation.FACTS,"facts-llm-1");profiles.put(AiOperation.DERIVE,"derive-sound-1");
+        profiles.put(AiOperation.EDGES,"edges-det-1");profiles.put(AiOperation.EXPLAIN,"explain-llm-8");profiles.put(AiOperation.VERIFY_EXPLANATION,"explanation-det-3");profiles.put(AiOperation.LINKS,"links-det-1");profiles.put(AiOperation.FACTS,"facts-llm-3");profiles.put(AiOperation.DERIVE,"derive-sound-1");
         boolean development=environment.matchesProfiles("test","local") && !environment.matchesProfiles("prod");
         synthetic=development && config.syntheticStub();
         if(!flags.enabled()) return;
