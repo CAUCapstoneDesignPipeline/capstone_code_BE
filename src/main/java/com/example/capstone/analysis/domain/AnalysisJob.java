@@ -21,6 +21,13 @@ public class AnalysisJob {
     @Column(name = "started_at") private Instant startedAt;
     @Column(name = "finished_at") private Instant finishedAt;
 
+    @Column(name="lifecycle_state",columnDefinition="text") private String lifecycleState;
+    @Column(name="input_revision") private Long inputRevision;
+    @Column(name="failure_code",columnDefinition="text") private String failureCode;
+
+    public String getLifecycleState() { return lifecycleState; }
+    public Long getInputRevision() { return inputRevision; }
+    public String getFailureCode() { return failureCode; }
     protected AnalysisJob() { }
 
     public UUID getId() { return id; }
