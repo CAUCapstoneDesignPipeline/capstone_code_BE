@@ -71,17 +71,19 @@ public class RecommendationService {
         JsonNode result=repository.lockResult(user,id);if(result==null) throw new ApiException(ErrorCode.NOT_FOUND,"추천을 찾을 수 없습니다.");
         String answered=repository.finalAnswer(user,id),action=request.action();
         if(answered!=null) { if(answered.equals(action)) return;throw conflict("이미 답한 추천입니다."); }
-        if(action.equals("understood") && (!"conclusion".equals(result.path("derivation_status").asString())
-                || !"sound".equals(result.path("soundness").asString()) || !"current".equals(result.path("freshness").asString()))) throw conflict("추천 내용이 바뀌었습니다. 다시 확인해 주세요.");
+        // 근거 문장이 바뀌었거나 사라진 추천에는 어떤 답도 기록하지 않는다.
+        if(!"current".equals(result.path("freshness").asString()))
+            throw new ApiException(ErrorCode.RECOMMENDATION_STALE,"근거가 바뀐 추천에는 답할 수 없습니다.",java.util.Map.of("freshness",result.path("freshness").asString()));
+        UUID resultId=UUID.fromString(result.path("id").asString());
         if(!action.equals("confused")) {
             String key="recommendation-feedback:"+id+":"+action;
             var review=action.equals("understood")?new ReviewEventRequest(0,"accept",null,"new_understanding",null,key):new ReviewEventRequest(0,"reject","already_known","already_known",null,key);
-            reviews.review(user,id,result.path("revision").asInt()+1,review,AiResponseValidator.hash(id+":"+key));
+            reviews.review(user,resultId,result.path("revision").asInt()+1,review,AiResponseValidator.hash(resultId+":"+key));
         }
-        repository.feedback(user,id,action);
+        repository.feedback(user,resultId,action);
     }
     private RecommendationResponse card(JsonNode row) {
-        return new RecommendationResponse(UUID.fromString(row.path("id").asString()),evidence(row.path("evidenceA")),evidence(row.path("evidenceB")),null,
+        return new RecommendationResponse(UUID.fromString(row.path("id").asString()),row.path("revision").asInt(),row.path("freshness").asString(),evidence(row.path("evidenceA")),evidence(row.path("evidenceB")),null,
                 row.path("conclusion").asString(),mapper.treeToValue(row.path("relatedKeywords"),mapper.getTypeFactory().constructCollectionType(List.class,String.class)));
     }
     private RecommendationResponse.Evidence evidence(JsonNode e) {

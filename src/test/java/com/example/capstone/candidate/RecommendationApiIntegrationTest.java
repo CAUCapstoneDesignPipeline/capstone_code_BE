@@ -75,7 +75,8 @@ class RecommendationApiIntegrationTest extends ApiIntegrationSupport {
             assertEquals(a.toString(),card.path("evidenceA").path("noteId").asString());assertEquals("재시도 정책",card.path("evidenceA").path("noteTitle").asString());
             assertEquals(b.toString(),card.path("evidenceB").path("noteId").asString());
             assertEquals("클라이언트는 응답 시간이 초과되면 요청을 재전송한다.",card.path("evidenceA").path("quote").asString());
-            assertTrue(card.path("externalKnowledge").isNull());assertEquals(List.of("재시도","멱등성","중복 방지"),mapper.treeToValue(card.path("relatedKeywords"),List.class));
+            assertTrue(card.path("externalKnowledge").isNull());assertEquals(List.of("재시도","멱등성",card.path("conclusion").asString()),mapper.treeToValue(card.path("relatedKeywords"),List.class));
+            assertEquals(1,card.path("revision").asInt());assertEquals("current",card.path("freshness").asString());
         }
     }
     @Test void ownershipAndAuthenticationAreEnforced() throws Exception {
@@ -146,14 +147,60 @@ class RecommendationApiIntegrationTest extends ApiIntegrationSupport {
         assertEquals("AI_UNAVAILABLE",error.path("error").path("code").asString());
         assertEquals(0,jdbc.queryForObject("select count(*) from analysis_job where note_id=?",Integer.class,a));
     }
+    @Test void reanalysisKeepsCardIdAndRaisesRevisionOnlyWhenContentChanges() throws Exception {
+        UUID a=note("a",null,"요청 노트 문장이다."),b=note("b",null,"다른 노트 문장이다.");
+        List<String> path=List.of("재시도","멱등성","중복 방지");
+        JsonNode first=run(a,w->List.of(result(w,List.of(a,b),"결론",false,path),result(w,List.of(a,b),"다른 경로",false,List.of("재시도","캐시","중복 방지"))));
+        assertEquals(2,first.size());assertNotEquals(first.get(0).path("id").asString(),first.get(1).path("id").asString());
+        String id=(first.get(0).path("conclusion").asString().equals("결론")?first.get(0):first.get(1)).path("id").asString();
+        JsonNode same=run(a,w->List.of(result(w,List.of(a,b),"결론",false,List.of(" 재시도","멱등성 ","중복  방지"))));
+        assertEquals(id,same.get(0).path("id").asString());assertEquals(1,same.get(0).path("revision").asInt());assertEquals("current",same.get(0).path("freshness").asString());
+        JsonNode changed=run(a,w->List.of(result(w,List.of(a,b),"바뀐 결론",false,path)));
+        assertEquals(id,changed.get(0).path("id").asString());assertEquals(2,changed.get(0).path("revision").asInt());assertEquals("바뀐 결론",changed.get(0).path("conclusion").asString());
+    }
+    @Test void knownFingerprintIsNotRecommendedAgain() throws Exception {
+        UUID a=note("a",null,"요청 노트 문장이다."),b=note("b",null,"다른 노트 문장이다.");
+        JsonNode first=run(a,w->List.of(result(w,List.of(a,b),"이미 아는 결론",false)));
+        call("POST","/api/recommendations/"+first.get(0).path("id").asString()+"/feedback","{\"action\":\"known\"}").andExpect(status().isNoContent());
+        action.set(w->new PipelineOutput(List.of(),List.of(),List.of(result(w,List.of(a,b),"이미 아는 결론",false))));
+        String job=request(a).path("id").asString();ready();worker.runOne();
+        JsonNode again=json(call("GET","/api/recommendation-jobs/"+job,null));
+        assertTrue(again.path("recommendations").isEmpty());assertEquals("NO_RECOMMENDATIONS",again.path("outcome").asString());
+    }
+    @Test void staleAndEvidenceLostCardsRejectEveryAnswerWithoutRecording() throws Exception {
+        UUID a=note("a",null,"남길 문장이다. 지울 문장이다."),b=note("b",null,"다른 노트 문장이다.");
+        List<String> kept=List.of("가","나","다"),dropped=List.of("가","라","다");
+        action.set(w->new PipelineOutput(List.of(),List.of(),List.of(result(w,List.of(a,b),"남는 결론",false,kept),result(w,List.of(a,b),"사라질 결론",false,dropped))));
+        String old=request(a).path("id").asString();ready();worker.runOne();
+        run(a,w->List.of(result(w,List.of(a,b),"남는 결론",false,kept)));
+        JsonNode cards=json(call("GET","/api/recommendation-jobs/"+old,null)).path("recommendations");
+        JsonNode stale=null,current=null;for(JsonNode card:cards) if(card.path("conclusion").asString().equals("사라질 결론")) stale=card;else current=card;
+        assertEquals("stale",stale.path("freshness").asString());assertEquals("current",current.path("freshness").asString());
+        for(String answer:List.of("understood","known","confused")) {
+            JsonNode error=json(call("POST","/api/recommendations/"+stale.path("id").asString()+"/feedback","{\"action\":\""+answer+"\"}").andExpect(status().isConflict()));
+            assertEquals("RECOMMENDATION_STALE",error.path("error").path("code").asString());
+        }
+        assertEquals(0,jdbc.queryForObject("select count(*) from recommendation_feedback f join analysis_result r on r.id=f.result_id where r.recommendation_id=?",Integer.class,UUID.fromString(stale.path("id").asString())));
+        call("PUT","/api/notes/"+a,"{\"title\":\"a\",\"body\":\"남김 없이 바꾼 본문이다.\",\"version\":0}").andExpect(status().isOk());
+        JsonNode lost=json(call("GET","/api/recommendation-jobs/"+old,null)).path("recommendations");
+        for(JsonNode card:lost) assertEquals("evidence_lost",card.path("freshness").asString());
+        assertEquals("RECOMMENDATION_STALE",json(call("POST","/api/recommendations/"+current.path("id").asString()+"/feedback","{\"action\":\"understood\"}").andExpect(status().isConflict())).path("error").path("code").asString());
+        assertEquals("unreviewed",reviewStatus(current.path("id").asString()));
+    }
+    private JsonNode run(UUID note,Function<Work,List<JsonNode>> results) throws Exception {
+        action.set(w->new PipelineOutput(List.of(),List.of(),results.apply(w)));
+        String job=request(note).path("id").asString();ready();assertTrue(worker.runOne());
+        return json(call("GET","/api/recommendation-jobs/"+job,null)).path("recommendations");
+    }
     private JsonNode request(UUID note) throws Exception { ready();return json(call("POST","/api/notes/"+note+"/recommendation-jobs",null).andExpect(status().isAccepted())); }
     private void ready() { server.enqueue(new ScriptedAiServer.Reply(200,"{\"status\":\"ready\",\"schemaVersion\":\"1.0\",\"profileVersions\":[\"fixture\"]}",Map.of())); }
-    private String reviewStatus(String id) { return jdbc.queryForObject("select review_status from analysis_result where id=?",String.class,UUID.fromString(id)); }
-    private int events(String id) { return jdbc.queryForObject("select count(*) from analysis_review_event where result_id=?",Integer.class,UUID.fromString(id)); }
-    private ObjectNode result(Work job,List<UUID> notes,String conclusion,boolean hypothesis) {
+    private String reviewStatus(String id) { return jdbc.queryForObject("select review_status from analysis_result where recommendation_id=? order by created_at desc,id desc limit 1",String.class,UUID.fromString(id)); }
+    private int events(String id) { return jdbc.queryForObject("select count(*) from analysis_review_event e join analysis_result r on r.id=e.result_id where r.recommendation_id=?",Integer.class,UUID.fromString(id)); }
+    private ObjectNode result(Work job,List<UUID> notes,String conclusion,boolean hypothesis) { return result(job,notes,conclusion,hypothesis,List.of("재시도","멱등성",conclusion)); }
+    private ObjectNode result(Work job,List<UUID> notes,String conclusion,boolean hypothesis,List<String> labels) {
         ObjectNode r=mapper.createObjectNode();UUID id=UUID.randomUUID();r.put("id",id.toString());r.put("ref",id.toString());r.put("identitySha256",AiResponseValidator.hash(id.toString()));r.put("kind","graph");r.put("conclusion",conclusion);r.putArray("conditions");r.putArray("trace");
         ObjectNode detail=r.putObject("detail");detail.put("hypothesis",hypothesis);var concepts=detail.putObject("path").putArray("concepts");
-        for(String label:List.of("재시도","멱등성","중복 방지")) concepts.addObject().put("conceptId",UUID.randomUUID().toString()).put("label",label);
+        for(String label:labels) concepts.addObject().put("conceptId",UUID.randomUUID().toString()).put("label",label);
         r.put("derivationStatus","conclusion");r.put("soundness","sound");r.putArray("dependsOn");
         var novelty=r.putArray("noveltyNoteIds");var evidence=r.putArray("evidence");
         for(UUID note:notes) {
