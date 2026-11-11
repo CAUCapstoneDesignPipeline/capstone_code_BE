@@ -165,3 +165,33 @@ class ColdStartV2ReleaseTest(unittest.TestCase):
             with self.subTest(state=state), self.assertRaises(ReleaseError):
                 run(platform, request(self.v2, op='v2-first', expected=expected))
             self.assertEqual(platform.journals, {})
+
+
+class ColdStartV3ReleaseTest(unittest.TestCase):
+    """v3 re-releases v2 with only the web image moved to FE main 20b9a64."""
+
+    def setUp(self):
+        self.v1 = release('cold-start-20261105-v1')
+        self.v2 = release('cold-start-20261105-v2')
+        self.v3 = release('cold-start-20261105-v3')
+
+    def test_v3_only_moves_release_id_and_web_image(self):
+        validate(self.v3)
+        self.assertEqual({k for k in self.v2 if self.v2[k] != self.v3[k]}, {'releaseId', 'web'})
+        self.assertEqual(self.v3['web']['sourceSha'], '20b9a645720c3265311fdb85ada35fd8fa7ba875')
+        self.assertEqual((self.v3['bootstrapRevision'], self.v3['flyway']), (V2_TOOLS, self.v2['flyway']))
+
+    def test_v2_to_v3_deploy_then_rollback_to_v2(self):
+        platform = Fake()
+        platform.cloud.state = {'current': self.v2, 'previous': self.v1}
+        deploy = request(self.v3, op='cold-start-20261105-v3-deploy', expected='cold-start-20261105-v2')
+        self.assertEqual(run(platform, deploy), 'done')
+        self.assertEqual(platform.cloud.state, {'current': self.v3, 'previous': self.v2})
+        changed_v2 = dict(self.v2, web=self.v3['web'])
+        with self.assertRaisesRegex(ReleaseError, 'previous manifest'):
+            run(platform, request(changed_v2, operation='rollback', op='v3-bad-rollback', expected='cold-start-20261105-v3'))
+        back = request(self.v2, operation='rollback', op='cold-start-20261105-v3-rollback', expected='cold-start-20261105-v3')
+        self.assertEqual(run(platform, back), 'done')
+        self.assertEqual(platform.cloud.state, {'current': self.v2, 'previous': self.v3})
+        activated = [e[1] for e in platform.events if isinstance(e, tuple) and e[0] == 'activate']
+        self.assertEqual(activated, ['cold-start-20261105-v3', 'cold-start-20261105-v2'])
