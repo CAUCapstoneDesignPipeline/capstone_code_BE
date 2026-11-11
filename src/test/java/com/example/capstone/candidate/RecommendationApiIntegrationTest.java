@@ -37,7 +37,7 @@ import com.example.capstone.support.ApiIntegrationSupport;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@SpringBootTest(properties={"capstone.ai.enabled=true","capstone.ai.execution.budget-microunits=1000","capstone.ai.execution.currency=KRW","capstone.ai.execution.required-profiles=fixture","capstone.ai.execution.worker-enabled=false"})
+@SpringBootTest(properties={"capstone.ai.execution.readiness-cache=0s","capstone.ai.enabled=true","capstone.ai.execution.budget-microunits=1000","capstone.ai.execution.currency=KRW","capstone.ai.execution.required-profiles=fixture","capstone.ai.execution.worker-enabled=false"})
 @AutoConfigureMockMvc(print=MockMvcPrint.NONE)
 @ActiveProfiles("test")
 @Testcontainers
