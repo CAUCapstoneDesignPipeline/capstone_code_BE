@@ -26,7 +26,7 @@
       "environment": {
         "SPRING_PROFILES_ACTIVE": "prod",
         "SPRING_CONFIG_ADDITIONAL_LOCATION": "file:/run/secrets/be.properties",
-        "CAPSTONE_AI_ENABLED": "false"
+        "CAPSTONE_AI_ENABLED": "${CAPSTONE_AI_ENABLED:?ai flag required}"
       },
       "volumes": [
         {
@@ -37,7 +37,28 @@
           "bind": {
             "create_host_path": false
           }
+        },
+        {
+          "type": "bind",
+          "source": "${RUNTIME_DIR:?runtime required}/ai",
+          "target": "/run/capstone-ai",
+          "read_only": true,
+          "bind": {
+            "create_host_path": false
+          }
+        },
+        {
+          "type": "bind",
+          "source": "${AI_CONTROL_DIR:?ai control required}",
+          "target": "/run/capstone-ai-control",
+          "read_only": true,
+          "bind": {
+            "create_host_path": false
+          }
         }
+      ],
+      "extra_hosts": [
+        "capsnote-prod-ai.asia-northeast3-a.c.capsnote.internal:10.60.2.10"
       ],
       "stop_grace_period": "30s",
       "logging": {

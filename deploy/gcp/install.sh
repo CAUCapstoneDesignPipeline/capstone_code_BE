@@ -17,6 +17,10 @@ apt-get update -qq
 DEBIAN_FRONTEND=noninteractive apt-get install -y docker.io docker-compose-v2 nginx postgresql-client-16 python3 iptables certbot logrotate
 install -d -m 0700 /var/lib/capstone-gcp/requests /var/lib/capstone-gcp/operations /etc/capstone-gcp/configurations
 install -d -m 0755 /run/capstone-gcp /var/www/capstone/.well-known/acme-challenge
+# Public AI content files (<sha256>.policy.json, .attestation.json, .ca.pem), root 0644, never secrets.
+install -d -m 0755 /etc/capstone-gcp/ai
+# The per-scope AI control directory depends on host.json; after placing it, create it with
+# /usr/bin/python3 /opt/capstone-gcp/host.py --ai-suspend off   (0755 root, no suspension file).
 systemctl enable --now docker
 install -m 0644 /opt/capstone-gcp/operation.service /etc/systemd/system/capstone-gcp-operation@.service
 install -m 0644 /opt/capstone-gcp/resume.service /etc/systemd/system/capstone-gcp-resume.service
