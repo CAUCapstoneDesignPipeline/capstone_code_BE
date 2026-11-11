@@ -15,5 +15,10 @@ public class AnalysisInvalidationService {
     @Transactional public void policyChanged(UUID user) { users.lockById(user).orElseThrow();repository.policyChanged(user); }
     @Transactional public void noteChanged(UUID user,UUID note,boolean inputChanged) {
         users.lockById(user).orElseThrow();repository.invalidate(user,List.of(note),inputChanged);
+        if(inputChanged) repository.evidenceChanged(user,note,false);
     }
+    @Transactional public void noteDeleted(UUID user,UUID note) {
+        users.lockById(user).orElseThrow();repository.invalidate(user,List.of(note),false);repository.evidenceChanged(user,note,true);
+    }
+    @Transactional public void newerAnalysisSucceeded(UUID user,UUID note,UUID job) { repository.supersededByNewerAnalysis(user,note,job); }
 }

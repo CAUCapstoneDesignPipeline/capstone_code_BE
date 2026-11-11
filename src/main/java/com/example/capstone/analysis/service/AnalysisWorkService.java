@@ -99,6 +99,7 @@ public class AnalysisWorkService {
         if(!permitted(work) || !repository.inputsCurrent(work.userId(),work.id())) throw new LeaseLostException();
         if(!repository.lockRuntimeCurrent(work.id()) || !gate.stillAllowed())throw new LeaseLostException();
         if(!output.graphItems().isEmpty()) repository.advanceGraph(work.userId());
+        invalidation.newerAnalysisSucceeded(work.userId(),work.noteId(),work.id());
         if(!repository.finish(work.id(),work.leaseToken(),"succeeded",null)) throw new LeaseLostException();
     }
     @Transactional public void retireDisabled(Work work) {

@@ -90,7 +90,7 @@ public class NoteService {
         if(notes.hasEvidence(userId,id)) {
             throw new ApiException(ErrorCode.NOTE_DELETE_BLOCKED,"근거가 연결된 노트는 아직 삭제할 수 없습니다.");
         }
-        invalidation.noteChanged(userId,id,false);
+        invalidation.noteDeleted(userId,id);
         notes.delete(note); notes.flush();
     }
     @Transactional(readOnly=true)
