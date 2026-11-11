@@ -77,7 +77,7 @@ public class NoteService {
             }
             throw exception;
         }
-        if(!java.util.Objects.equals(note.getTopicId(),destination)) invalidation.noteChanged(userId,id,true);
+        // 주제 이동은 분석 입력을 바꾸지 않는다. 실행 중 작업·근거·결과를 그대로 둔다.
         return NoteResponse.from(owned(userId,id,false));
     }
     private ApiException moveDuplicate(String title) {
@@ -90,7 +90,7 @@ public class NoteService {
         if(notes.hasEvidence(userId,id)) {
             throw new ApiException(ErrorCode.NOTE_DELETE_BLOCKED,"근거가 연결된 노트는 아직 삭제할 수 없습니다.");
         }
-        invalidation.noteChanged(userId,id,false);
+        invalidation.noteDeleted(userId,id);
         notes.delete(note); notes.flush();
     }
     @Transactional(readOnly=true)

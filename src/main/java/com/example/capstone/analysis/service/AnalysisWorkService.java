@@ -35,6 +35,22 @@ public class AnalysisWorkService {
         repository.retireUnresumable(user,note);
         repository.lockRuntime();
         if(!gate.stillAllowed())throw new ApiException(ErrorCode.AI_UNAVAILABLE,"AI 분석은 아직 사용할 수 없습니다.",java.util.Map.of("reason","MISCONFIGURED"));
+        return enqueue(user,note,extractor,true);
+    }
+    /** 대기 작업이 없을 때 대체된 명시 요청 하나를 최신 내용으로 다시 접수한다. 새 POST가 아니므로 정책 변경 판단은 실행 시점에 한다. */
+    @Transactional
+    public boolean resume(String policyDigest) {
+        if(!gate.allowed()) return false;
+        JsonNode next=repository.nextRerequested();if(next==null) return false;
+        UUID user=UUID.fromString(next.path("userId").asString()),note=UUID.fromString(next.path("noteId").asString());
+        if(users.lockById(user).isEmpty() || !repository.lockRerequested(user,note)) return false;
+        repository.clearRerequest(user,note);
+        repository.lockRuntime();
+        if(!gate.stillAllowed()) return false;
+        try { enqueue(user,note,policyDigest==null?"ai-integration-2026-10-30-adopted.1":"policy:"+policyDigest,false);return true; }
+        catch(ApiException skipped) { return false; }
+    }
+    private JsonNode enqueue(UUID user,UUID note,String extractor,boolean explicit) {
         repository.retireUnresumable(user,note);
         JsonNode active=repository.active(user,note); if(active!=null) return active;
         List<JsonNode> documents=repository.documents(user,note);
@@ -45,7 +61,7 @@ public class AnalysisWorkService {
         repository.lockRuntime();
         if(!gate.stillAllowed())throw new ApiException(ErrorCode.AI_UNAVAILABLE,"AI 분석은 아직 사용할 수 없습니다.",java.util.Map.of("reason","MISCONFIGURED"));
         UUID job=UUID.randomUUID();
-        repository.create(job,user,note,primary.path("noteVersion").asInt(),primary.path("inputRevision").asLong(),repository.graphRevision(user),Instant.now().plusSeconds(900),extractor);
+        repository.create(job,user,note,primary.path("noteVersion").asInt(),primary.path("inputRevision").asLong(),Instant.now().plusSeconds(900),extractor,explicit);
         documents.forEach(doc->repository.snapshot(job,user,doc)); return repository.job(user,job);
     }
     @Transactional
@@ -66,13 +82,14 @@ public class AnalysisWorkService {
         if(!permitted(work)) { repository.cancelJob(work.id());return false; }
         if(!repository.lockValid(work.userId(),work.id(),work.leaseToken())) return false;
         if(policyFingerprint!=null && !("policy:"+policyFingerprint).equals(work.inputPolicy())) { invalidation.policyChanged(work.userId());return false; }
-        if(!repository.inputsCurrent(work.userId(),work.id())) { repository.finish(work.id(),work.leaseToken(),"superseded","STALE_INPUT");return false; }
+        if(!repository.inputsCurrent(work.userId(),work.id())) { repository.supersede(work.userId(),work.id(),work.leaseToken());return false; }
         return true;
     }
     @Transactional public void fail(Work work,String reason) {
         users.lockById(work.userId()).orElseThrow();if(!permitted(work)) { repository.cancelJob(work.id());return; }
         if(repository.lockValid(work.userId(),work.id(),work.leaseToken())) repository.finish(work.id(),work.leaseToken(),"failed",reason);
     }
+    @Transactional(readOnly=true) public boolean rerequested(UUID user,UUID note) { return repository.rerequested(user,note); }
     @Transactional(readOnly=true) public JsonNode cachedFacts(Work work,String key,UUID note) { return repository.cachedFacts(work.userId(),key,note); }
     @Transactional(readOnly=true) public JsonNode checkpoint(Work work,String key,String hash) { return repository.checkpoint(work.id(),key,hash); }
     @Transactional public void reserveAttempt(Work work,String key,String operation,JsonNode request) {
@@ -93,13 +110,15 @@ public class AnalysisWorkService {
     @Transactional public void complete(Work work,com.example.capstone.analysis.worker.AnalysisPipeline.PipelineOutput output) {
         users.lockById(work.userId()).orElseThrow();
         if(!repository.lockValid(work.userId(),work.id(),work.leaseToken())) throw new LeaseLostException();
-        if(!repository.inputsCurrent(work.userId(),work.id())) { repository.finish(work.id(),work.leaseToken(),"superseded","STALE_INPUT");return; }
+        if(!repository.inputsCurrent(work.userId(),work.id())) { repository.supersede(work.userId(),work.id(),work.leaseToken());return; }
         if(!permitted(work)) { repository.cancelJob(work.id());return; }
         results.publish(work,output);
         if(!permitted(work) || !repository.inputsCurrent(work.userId(),work.id())) throw new LeaseLostException();
         if(!repository.lockRuntimeCurrent(work.id()) || !gate.stillAllowed())throw new LeaseLostException();
         if(!output.graphItems().isEmpty()) repository.advanceGraph(work.userId());
+        invalidation.newerAnalysisSucceeded(work.userId(),work.noteId(),work.id());
         if(!repository.finish(work.id(),work.leaseToken(),"succeeded",null)) throw new LeaseLostException();
+        repository.succeeded(work.userId(),work.noteId());
     }
     @Transactional public void retireDisabled(Work work) {
         users.lockById(work.userId()).orElseThrow();
@@ -107,7 +126,8 @@ public class AnalysisWorkService {
     }
     @Transactional public void expire() { repository.expire(); }
     @Transactional public void cancelActive() {
-        for(UUID user:repository.activeUsers()) { if(users.lockById(user).isPresent()) repository.cancelUser(user); }
+        var affected=new java.util.TreeSet<UUID>(repository.activeUsers());affected.addAll(repository.rerequestedUsers());
+        for(UUID user:affected) { if(users.lockById(user).isPresent()) repository.cancelUser(user); }
     }
     private boolean permitted(Work work) { return gate.allowed() && repository.runtimeCurrent(work.id()) && (!work.inputPolicy().startsWith("policy:") || configuration.configured()); }
     public static final class LeaseLostException extends RuntimeException { public LeaseLostException() { super("Analysis lease or input changed"); } }

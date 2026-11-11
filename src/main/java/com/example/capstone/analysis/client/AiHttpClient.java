@@ -173,6 +173,36 @@ public final class AiHttpClient {
             throw last;
         } finally { permits.release(); }
     }
+    /**
+     * 챗봇 SSE를 연다. 되돌릴 수 없는 스트림이라 재시도하지 않고 X-Attempt-Id·Idempotency-Key를 보내지 않는다.
+     * 응답 헤더까지만 callTimeout을 적용하고, 본문은 호출자가 닫을 때까지 읽는다. 분석 호출의 동시 실행 자리는 쓰지 않는다.
+     */
+    public ChatResponse chat(JsonNode payload) {
+        if (!configured()) throw configuration();
+        byte[] body = mapper.writeValueAsBytes(payload);
+        if (body.length > REQUEST_LIMIT) throw new AiCallException(AiCallException.Reason.INPUT_LIMIT);
+        var request = HttpRequest.newBuilder(base.resolve("chat")).timeout(config.callTimeout())
+                .header("Authorization", "Bearer " + config.serviceToken()).header("X-Request-Id", UUID.randomUUID().toString())
+                .header("Accept", "text/event-stream").header("Content-Type", "application/json").header("X-Input-SHA256", hashBytes(body))
+                .POST(HttpRequest.BodyPublishers.ofByteArray(body)).build();
+        try {
+            HttpResponse<java.io.InputStream> response = http.send(request, HttpResponse.BodyHandlers.ofInputStream());
+            String type = response.headers().firstValue("Content-Type").orElse("").toLowerCase(java.util.Locale.ROOT);
+            if (response.statusCode() == 200 && type.startsWith("text/event-stream")) return new ChatResponse(200, null, response.body());
+            String code = null;
+            try (var in = response.body()) {
+                JsonNode error = mapper.readTree(in.readNBytes(65536)).path("error").path("code");
+                if (error.isString()) code = error.asString();
+            } catch (RuntimeException | java.io.IOException ignored) { /* 오류 본문은 코드만 쓴다. */ }
+            return new ChatResponse(response.statusCode() == 200 ? 502 : response.statusCode(), code, null);
+        } catch (java.net.http.HttpTimeoutException timeout) { throw new AiCallException(AiCallException.Reason.TIMEOUT);
+        } catch (java.io.IOException failed) { throw new AiCallException(AiCallException.Reason.UNAVAILABLE);
+        } catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); throw new AiCallException(AiCallException.Reason.UNAVAILABLE); }
+    }
+    /** status가 200이면 body는 SSE 스트림이고, 아니면 errorCode에 AI 계약 오류 코드가 있다. */
+    public record ChatResponse(int status, String errorCode, java.io.InputStream body) {
+        @Override public String toString() { return "AiChatResponse[status=" + status + ", errorCode=" + errorCode + "]"; }
+    }
     private static String hashBytes(byte[] bytes) {
         try { return java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(bytes)); }
         catch (java.security.NoSuchAlgorithmException impossible) { throw new IllegalStateException("SHA-256 unavailable"); }

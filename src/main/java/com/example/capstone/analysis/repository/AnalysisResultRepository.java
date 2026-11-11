@@ -39,14 +39,16 @@ public class AnalysisResultRepository {
               """,p);
         }
         for(var result:output.results()) {
-            var p=new LinkedHashMap<String,Object>();p.put("id",uuid(result,"id"));p.put("user",work.userId());p.put("job",work.id());
+            var p=new LinkedHashMap<String,Object>();p.put("id",uuid(result,"id"));recommendation(work,result,p);p.put("user",work.userId());p.put("job",work.id());
             p.put("ref",result.path("ref").asString());p.put("identity",result.path("identitySha256").asString());p.put("kind",result.path("kind").asString());
             p.put("conclusion",result.path("conclusion").asString());p.put("conditions",db.json(result.path("conditions")));
             p.put("trace",db.json(result.path("trace")));p.put("detail",db.json(result.path("detail")));p.put("status",result.path("derivationStatus").asString());
             p.put("soundness",result.path("soundness").asString());p.put("novelty",db.json(result.path("noveltyNoteIds")));
             db.write("""
-              insert into analysis_result(id,user_id,job_id,external_ref,identity_sha256,kind,conclusion,conditions,trace,detail,derivation_status,soundness,novelty_note_ids)
-              values(:id,:user,:job,:ref,:identity,:kind,:conclusion,cast(:conditions as jsonb),cast(:trace as jsonb),cast(:detail as jsonb),:status,:soundness,cast(:novelty as jsonb))
+              insert into analysis_result(id,user_id,job_id,external_ref,identity_sha256,kind,conclusion,conditions,trace,detail,derivation_status,soundness,novelty_note_ids,
+               fingerprint_sha256,recommendation_id,recommendation_revision,content_sha256)
+              values(:id,:user,:job,:ref,:identity,:kind,:conclusion,cast(:conditions as jsonb),cast(:trace as jsonb),cast(:detail as jsonb),:status,:soundness,cast(:novelty as jsonb),
+               :fingerprint,:recommendation,:recommendationRevision,:content)
               on conflict(job_id,external_ref) do nothing
               """,p);
         }
@@ -66,6 +68,29 @@ public class AnalysisResultRepository {
             for(var parent:result.path("dependsOn")) db.write("insert into analysis_dependency(user_id,job_id,result_id,depends_on_id) values(:user,:job,:result,:parent) on conflict do nothing",
                     Map.of("user",work.userId(),"job",work.id(),"result",resultId,"parent",UUID.fromString(parent.asString())));
         }
+    }
+    /**
+     * 후보 지문 = 사용자 + 근거 노트 쌍 + 경로 개념 이름(A-B-C). 개념 id는 노트 version마다 바뀌므로 이름을 정규화해 쓴다.
+     * LLM 결론은 지문에 넣지 않는다. 경로가 없는 도출 결과는 결과 identity를 쓴다.
+     */
+    private void recommendation(Work work,JsonNode result,Map<String,Object> p) {
+        var notes=new java.util.TreeSet<String>();var spans=new java.util.TreeSet<String>();
+        for(var evidence:result.path("evidence")) {
+            String note=work.documents().stream().filter(d->d.path("snapshotId").asString().equals(evidence.path("snapshotId").asString())).findFirst().orElseThrow().path("noteId").asString();
+            notes.add(note);spans.add(note+":"+evidence.path("startOffset").asInt()+":"+evidence.path("endOffset").asInt()+":"+evidence.path("quote").asString());
+        }
+        var labels=new java.util.ArrayList<String>();
+        for(var concept:result.path("detail").path("path").path("concepts")) labels.add(java.text.Normalizer.normalize(concept.path("label").asString(),java.text.Normalizer.Form.NFC).strip().replaceAll("\\s+"," ").toLowerCase(java.util.Locale.ROOT));
+        String path=labels.isEmpty()?"identity:"+result.path("identitySha256").asString():String.join("\u001f",labels);
+        String fingerprint=AiResponseValidator.hash("recommendation-fingerprint-v1\u001e"+work.userId()+"\u001e"+String.join(",",notes)+"\u001e"+path);
+        String content=AiResponseValidator.hash(result.path("conclusion").asString()+"\u001e"+String.join("\u001f",spans));
+        UUID recommendation=UUID.nameUUIDFromBytes(("recommendation:"+fingerprint).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        JsonNode previous=db.one("""
+          select jsonb_build_object('revision',recommendation_revision,'content',content_sha256)::text from analysis_result
+          where user_id=:user and recommendation_id=:recommendation and job_id<>:job order by created_at desc,id desc limit 1
+          """,Map.of("user",work.userId(),"recommendation",recommendation,"job",work.id()));
+        int revision=previous==null?1:previous.path("revision").asInt()+(previous.path("content").asString().equals(content)?0:1);
+        p.put("fingerprint",fingerprint);p.put("recommendation",recommendation);p.put("recommendationRevision",revision);p.put("content",content);
     }
     private Map<String,Object> base(Work work,JsonNode item) {
         var p=new LinkedHashMap<String,Object>();p.put("id",uuid(item,"id"));p.put("user",work.userId());p.put("job",work.id());p.put("snapshot",uuid(item,"snapshotId"));return p;
