@@ -122,7 +122,7 @@ public class AnalysisWorkRepository {
         return db.one("""
           select to_jsonb(not exists(select 1 from analysis_snapshot s left join note n on n.id=s.note_id and n.user_id=s.user_id
            where s.job_id=:job and s.user_id=:user and (n.id is null or s.freshness<>'current' or n.input_revision<>s.input_revision
-           or n.version<>s.note_version or n.body<>s.body or n.topic_id is distinct from s.topic_id))
+           or n.version<>s.note_version or n.body<>s.body))
            and exists(select 1 from analysis_job j join app_user u on u.id=j.user_id where j.id=:job and j.user_id=:user and j.graph_revision=u.graph_revision))::text
           """,Map.of("user",user,"job",job)).asBoolean();
     }

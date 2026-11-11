@@ -16,7 +16,4 @@ public class AnalysisInvalidationService {
     @Transactional public void noteChanged(UUID user,UUID note,boolean inputChanged) {
         users.lockById(user).orElseThrow();repository.invalidate(user,List.of(note),inputChanged);
     }
-    @Transactional public void topicChanged(UUID user,UUID topic) {
-        users.lockById(user).orElseThrow();repository.invalidate(user,repository.noteIds(user,topic),true);
-    }
 }

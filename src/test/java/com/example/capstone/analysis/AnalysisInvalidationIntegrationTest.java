@@ -50,13 +50,19 @@ class AnalysisInvalidationIntegrationTest extends ApiIntegrationSupport {
         assertEquals(1,jdbc.queryForObject("select count(*) from analysis_job where note_id=?",Integer.class,a));
         call("DELETE","/api/notes/"+a,null).andExpect(status().isConflict());
     }
-    @Test void moveKeepsPublicVersionButFencesInFlightJobUsingInputRevision() throws Exception {
-        UUID a=note("move",null,"가"),topic=topic("주제");work.submit(userId,a);Work claimed=work.claim();
+    @Test void moveKeepsPublicVersionInFlightJobEvidenceAndResults() throws Exception {
+        UUID a=note("move",null,"가"),b=note("other",null,"나"),topic=topic("주제");work.submit(userId,a);Work done=work.claim();
+        ObjectNode kept=result(done,List.of(a,b));work.complete(done,new PipelineOutput(List.of(),List.of(),List.of(kept)));
+        UUID span=jdbc.queryForObject("insert into evidence_span(user_id,note_id,note_version,start_offset,end_offset,quote) values(?,?,0,0,1,'가') returning id",UUID.class,userId,a);
+        work.submit(userId,a);Work claimed=work.claim();
+        String before=jdbc.queryForObject("select updated_at::text from note where id=?",String.class,a);
         JsonNode moved=json(call("PUT","/api/notes/"+a+"/topic","{\"topicId\":\""+topic+"\"}").andExpect(status().isOk()));assertEquals(0,moved.path("version").asInt());
-        assertEquals(1L,jdbc.queryForObject("select input_revision from note where id=?",Long.class,a));
-        assertEquals("superseded",jdbc.queryForObject("select lifecycle_state from analysis_job where id=?",String.class,claimed.id()));
-        assertThrows(AnalysisWorkService.LeaseLostException.class,()->work.complete(claimed,new PipelineOutput(List.of(),List.of(),List.of())));
-        assertEquals(1,jdbc.queryForObject("select count(*) from analysis_job where note_id=?",Integer.class,a));
+        assertNotEquals(before,jdbc.queryForObject("select updated_at::text from note where id=?",String.class,a));
+        assertEquals(0L,jdbc.queryForObject("select input_revision from note where id=?",Long.class,a));
+        assertEquals("valid",jdbc.queryForObject("select status from evidence_span where id=?",String.class,span));
+        assertEquals("current",jdbc.queryForObject("select freshness from analysis_result where id=?",String.class,UUID.fromString(kept.path("id").asString())));
+        assertTrue(work.current(claimed));work.complete(claimed,new PipelineOutput(List.of(),List.of(),List.of()));
+        assertEquals("succeeded",jdbc.queryForObject("select lifecycle_state from analysis_job where id=?",String.class,claimed.id()));
     }
     @Test void deletionBeforeResponseCannotResurrectJobAndSnapshotOnlyReferencesCanBeDeleted() throws Exception {
         UUID a=note("primary",null,"가"),b=note("candidate",null,"나");work.submit(userId,a);Work claimed=work.claim();
@@ -67,15 +73,20 @@ class AnalysisInvalidationIntegrationTest extends ApiIntegrationSupport {
         assertEquals(0,jdbc.queryForObject("select count(*) from analysis_job where id=?",Integer.class,claimed.id()));
         assertEquals(0,jdbc.queryForObject("select count(*) from analysis_snapshot where job_id=?",Integer.class,claimed.id()));
     }
-    @Test void topicRenameAndRemovalAdvanceIndependentRevisionWithoutSchedulingAnalysis() throws Exception {
-        UUID topic=topic("old"),a=note("topic-note",topic,"가");work.submit(userId,a);Work claimed=work.claim();
+    @Test void topicRenameAndRemovalKeepAnalysisWithoutSchedulingAnalysis() throws Exception {
+        UUID topic=topic("old"),a=note("topic-note",topic,"가"),b=note("other",null,"나");work.submit(userId,a);Work done=work.claim();
+        ObjectNode kept=result(done,List.of(a,b));work.complete(done,new PipelineOutput(List.of(),List.of(),List.of(kept)));
+        work.submit(userId,a);Work claimed=work.claim();
         call("PATCH","/api/topics/"+topic,"{\"name\":\"new\"}").andExpect(status().isOk());
-        assertEquals(1L,jdbc.queryForObject("select input_revision from note where id=?",Long.class,a));
         call("DELETE","/api/topics/"+topic,null).andExpect(status().isNoContent());
-        assertEquals(2L,jdbc.queryForObject("select input_revision from note where id=?",Long.class,a));
+        assertEquals(0L,jdbc.queryForObject("select input_revision from note where id=?",Long.class,a));
         assertEquals(0,jdbc.queryForObject("select version from note where id=?",Integer.class,a));
-        assertEquals("superseded",jdbc.queryForObject("select lifecycle_state from analysis_job where id=?",String.class,claimed.id()));
-        assertEquals(1,jdbc.queryForObject("select count(*) from analysis_job where note_id=?",Integer.class,a));
+        assertEquals("running",jdbc.queryForObject("select lifecycle_state from analysis_job where id=?",String.class,claimed.id()));
+        assertEquals("current",jdbc.queryForObject("select freshness from analysis_result where id=?",String.class,UUID.fromString(kept.path("id").asString())));
+        assertEquals(0,jdbc.queryForObject("select count(*) from analysis_snapshot where original_note_id=? and freshness<>'current'",Integer.class,a));
+        work.complete(claimed,new PipelineOutput(List.of(),List.of(),List.of()));
+        assertEquals("succeeded",jdbc.queryForObject("select lifecycle_state from analysis_job where id=?",String.class,claimed.id()));
+        assertEquals(2,jdbc.queryForObject("select count(*) from analysis_job where note_id=?",Integer.class,a));
     }
     @Test void explicitNewPolicyAdvancesInputsAndInvalidatesPreviousPolicyWithoutAutomaticEnqueue() throws Exception {
         UUID a=note("policy",null,"가");work.submit(userId,a,AiResponseValidator.hash("policy-one"));var old=work.claim();work.complete(old,new PipelineOutput(List.of(),List.of(),List.of()));
