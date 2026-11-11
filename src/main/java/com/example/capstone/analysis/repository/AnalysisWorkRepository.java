@@ -46,14 +46,12 @@ public class AnalysisWorkRepository {
         JsonNode value=db.one("select to_jsonb(extractor)::text from analysis_job where user_id=:user order by created_at desc,id desc limit 1",Map.of("user",user));return value==null?null:value.asString();
     }
     public void advanceGraph(UUID user) { db.write("update app_user set graph_revision=graph_revision+1 where id=:user",Map.of("user",user)); }
-    public long graphRevision(UUID user) {
-        return db.one("select to_jsonb(graph_revision)::text from app_user where id=:user",Map.of("user",user)).asLong();
-    }
-    public void create(UUID id,UUID user,UUID note,int version,long input,long graph,Instant deadline,String extractor) {
+    // graph_revision은 첫 선점 때 기록한다. 대기 중에 다른 작업이 그래프를 게시해도 이 작업이 대체되지 않는다.
+    public void create(UUID id,UUID user,UUID note,int version,long input,Instant deadline,String extractor) {
         db.write("""
-          insert into analysis_job(id,user_id,note_id,note_version,status,extractor,lifecycle_state,input_revision,graph_revision,deadline,contract_revision,runtime_epoch)
-          values(:id,:user,:note,:version,'pending',:extractor,'queued',:input,:graph,:deadline,'ai-integration-2026-10-30-adopted.1',(select epoch from analysis_runtime_fence where singleton))
-          """,Map.of("id",id,"user",user,"note",note,"version",version,"input",input,"graph",graph,"deadline",deadline,"extractor",extractor));
+          insert into analysis_job(id,user_id,note_id,note_version,status,extractor,lifecycle_state,input_revision,deadline,contract_revision,runtime_epoch)
+          values(:id,:user,:note,:version,'pending',:extractor,'queued',:input,:deadline,'ai-integration-2026-10-30-adopted.1',(select epoch from analysis_runtime_fence where singleton))
+          """,Map.of("id",id,"user",user,"note",note,"version",version,"input",input,"deadline",deadline,"extractor",extractor));
     }
     public void snapshot(UUID job,UUID user,JsonNode doc) {
         var p=new LinkedHashMap<String,Object>();
@@ -95,7 +93,8 @@ public class AnalysisWorkRepository {
           with candidate as (select id from analysis_job where user_id is not null and deadline>clock_timestamp() and attempt<3
            and (lifecycle_state='queued' or (lifecycle_state='running' and lease_until<clock_timestamp())) order by created_at,id for update skip locked limit 1)
           update analysis_job j set status='running',lifecycle_state='running',attempt=attempt+1,lease_token=:token,
-           lease_until=least(deadline,clock_timestamp()+interval '60 seconds'),started_at=coalesce(started_at,clock_timestamp())
+           lease_until=least(deadline,clock_timestamp()+interval '60 seconds'),started_at=coalesce(started_at,clock_timestamp()),
+           graph_revision=coalesce(j.graph_revision,(select u.graph_revision from app_user u where u.id=j.user_id))
           from candidate c where j.id=c.id returning to_jsonb(j)::text
           """,Map.of("token",token));
     }
