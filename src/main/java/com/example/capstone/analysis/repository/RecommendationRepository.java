@@ -57,6 +57,21 @@ public class RecommendationRepository {
     public JsonNode lockResult(UUID user,UUID id) {
         return db.one("select to_jsonb(r)::text from analysis_result r where r.user_id=:user and r.recommendation_id=:id and "+ELIGIBLE+" order by r.created_at desc,r.id desc limit 1 for update",Map.of("user",user,"id",id));
     }
+    /** 챗봇 배경 자료: 추천 id의 가장 새 결과, 요청 노트, 경로 개념 이름, 노트별 대표 근거 문장. */
+    public JsonNode chatCard(UUID user,UUID id) {
+        return db.one("""
+          select jsonb_build_object('conclusion',r.conclusion,'requestedNoteId',j.note_id,
+           'keywords',coalesce((select jsonb_agg(c.value->>'label' order by c.ordinality) from jsonb_array_elements(case when jsonb_typeof(r.detail->'path'->'concepts')='array' then r.detail->'path'->'concepts' else '[]'::jsonb end) with ordinality c),'[]'::jsonb),
+           'evidence',coalesce((select jsonb_agg(x.v order by x.requested desc,x.note) from(
+             select distinct on(s.original_note_id) s.original_note_id note,s.original_note_id=j.note_id requested,
+              jsonb_build_object('noteId',s.original_note_id,'noteTitle',coalesce(n.title,s.title),'quote',e.quote) v
+             from analysis_result_evidence e join analysis_snapshot s on s.id=e.snapshot_id and s.user_id=e.user_id
+              left join note n on n.id=s.note_id and n.user_id=s.user_id
+             where e.result_id=r.id and e.user_id=r.user_id and (r.kind<>'derivation' or e.claim_ref='premise')
+             order by s.original_note_id,e.start_offset,e.end_offset,e.id) x),'[]'::jsonb))::text
+          from analysis_result r join analysis_job j on j.id=r.job_id and j.user_id=r.user_id
+          where r.user_id=:user and r.recommendation_id=:id"""+" and "+ELIGIBLE+" order by r.created_at desc,r.id desc limit 1",Map.of("user",user,"id",id));
+    }
     /** 이해함·알고 있던 내용은 최종 답이다. 이해가 안 됨은 뒤에 최종 답을 받을 수 있다. */
     public String finalAnswer(UUID user,UUID recommendation) {
         JsonNode row=db.one("""

@@ -23,7 +23,8 @@ import com.example.capstone.candidate.service.RecommendationService;
 @SecurityRequirement(name="bearerAuth")
 public class RecommendationController {
     private final RecommendationService service;
-    public RecommendationController(RecommendationService service) { this.service=service; }
+    private final com.example.capstone.candidate.service.RecommendationChatService chat;
+    public RecommendationController(RecommendationService service,com.example.capstone.candidate.service.RecommendationChatService chat) { this.service=service;this.chat=chat; }
     @Operation(summary="추천 작업 요청",description="노트의 현재 내용으로 추천 작업을 만들거나 끝나지 않은 같은 노트의 작업을 202로 줍니다. AI가 꺼져 있으면 503 AI_UNAVAILABLE입니다.")
     @PostMapping("/api/notes/{noteId}/recommendation-jobs")
     public ResponseEntity<RecommendationJobResponse> request(@AuthenticationPrincipal Jwt jwt,@PathVariable String noteId) {
@@ -39,6 +40,13 @@ public class RecommendationController {
     public ResponseEntity<Void> feedback(@AuthenticationPrincipal Jwt jwt,@PathVariable String recommendationId,@RequestBody(required=false) JsonNode body) {
         service.feedback(user(jwt),InsightController.uuid(recommendationId),RecommendationFeedbackRequest.parse(body));
         return ResponseEntity.noContent().cacheControl(CacheControl.noStore()).build();
+    }
+    @Operation(summary="추천 챗봇",description="추천 카드를 배경 자료로 여러 턴 대화합니다. 응답은 SSE(start·delta·done·error)입니다. 대화는 저장하지 않으므로 지금까지의 messages를 모두 보냅니다. 연결을 끊으면 AI 호출도 멈춥니다.")
+    @PostMapping("/api/recommendations/{recommendationId}/chat")
+    public ResponseEntity<org.springframework.web.servlet.mvc.method.annotation.SseEmitter> chat(@AuthenticationPrincipal Jwt jwt,@PathVariable String recommendationId,@RequestBody(required=false) JsonNode body) {
+        var emitter=chat.chat(user(jwt),InsightController.uuid(recommendationId),com.example.capstone.candidate.dto.request.RecommendationChatRequest.parse(body));
+        // 프록시가 토큰 단위 응답을 모아 두지 않게 한다.
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).header("X-Accel-Buffering","no").body(emitter);
     }
     private static UUID user(Jwt jwt) { return UUID.fromString(jwt.getSubject()); }
 }
