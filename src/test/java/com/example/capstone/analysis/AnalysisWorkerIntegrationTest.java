@@ -117,4 +117,19 @@ class AnalysisWorkerIntegrationTest extends ApiIntegrationSupport {
         assertEquals("superseded",jdbc.queryForObject("select lifecycle_state from analysis_job where id=?",String.class,job));
         assertEquals(0,jdbc.queryForObject("select count(*) from analysis_result where job_id=?",Integer.class,job));
     }
+    @Test void workerResumesSupersededRequestWhenQueueIsEmpty() throws Exception {
+        UUID note=note("resume",null,"본문"),other=note("other",null,"근거");UUID job=submit(note);
+        CountDownLatch entered=new CountDownLatch(1),release=new CountDownLatch(1);
+        action.set(w->{ if(w.id().equals(job)) { entered.countDown();try { if(!release.await(5,TimeUnit.SECONDS)) throw new IllegalStateException(); } catch(InterruptedException e) { Thread.currentThread().interrupt();throw new IllegalStateException(); } }return EMPTY; });
+        try(var executor=Executors.newVirtualThreadPerTaskExecutor()) {
+            ready();var future=executor.submit(worker::runOne);assertTrue(entered.await(5,TimeUnit.SECONDS));
+            call("PUT","/api/notes/"+other,"{\"title\":\"other\",\"body\":\"바뀐 근거\",\"version\":0}").andExpect(status().isOk());
+            release.countDown();assertTrue(future.get(5,TimeUnit.SECONDS));
+        } finally { release.countDown(); }
+        assertEquals("superseded",jdbc.queryForObject("select lifecycle_state from analysis_job where id=?",String.class,job));
+        ready();assertTrue(worker.runOne());
+        var latest=json(call("GET","/api/notes/"+note+"/analysis",null)).path("job");
+        assertNotEquals(job.toString(),latest.path("id").asString());assertEquals("succeeded",latest.path("lifecycleState").asString());
+        ready();assertFalse(worker.runOne());
+    }
 }

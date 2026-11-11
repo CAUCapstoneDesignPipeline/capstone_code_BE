@@ -50,9 +50,10 @@ public class AnalysisInvalidationRepository {
         db.write("update analysis_snapshot set freshness='stale' where user_id=:user and original_note_id in (:ids) and freshness='current'",p);
         // 결과의 freshness는 근거 문장 기준(evidenceChanged)과 새 분석 성공(supersededByNewerAnalysis)으로만 바뀐다.
         db.write("""
-          update analysis_job j set status='failed',lifecycle_state='superseded',failure_code='STALE_INPUT',finished_at=clock_timestamp(),lease_token=null,lease_until=null
+          with superseded as (update analysis_job j set status='failed',lifecycle_state='superseded',failure_code='STALE_INPUT',finished_at=clock_timestamp(),lease_token=null,lease_until=null
            where j.user_id=:user and j.lifecycle_state in ('queued','running') and exists(select 1 from analysis_snapshot s where s.job_id=j.id and s.user_id=:user and s.original_note_id in (:ids))
-          """,p);
+           returning j.note_id)
+          """+AnalysisWorkRepository.RERUN_SUPERSEDED,p);
         db.write("update evidence_span set status='lost',lost_at=clock_timestamp() where user_id=:user and note_id in (:ids) and status='valid'",p);
         db.write("""
           with recursive lost(id) as (

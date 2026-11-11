@@ -35,7 +35,10 @@ public class AnalysisWorker {
         if(closing.get() || !activation.configured() || !busy.compareAndSet(false,true)) return false;
         try {
             if(!activation.available()) { work.expire();return false; }
-            var claimed=work.claim();if(claimed==null) return false;
+            var queued=work.claim();
+            // 대기 작업이 없을 때만 대체된 명시 요청을 이어 실행한다.
+            final var claimed=queued!=null?queued:work.resume(pipeline.getObject().policyFingerprint())?work.claim():null;
+            if(claimed==null) return false;
             AtomicBoolean lost=new AtomicBoolean();
             var heartbeat=heartbeats.scheduleAtFixedRate(()->{
                 try { if(!work.heartbeat(claimed)) lost.set(true); } catch(RuntimeException failure) { lost.set(true); }
