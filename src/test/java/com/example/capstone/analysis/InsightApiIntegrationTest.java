@@ -92,7 +92,9 @@ class InsightApiIntegrationTest extends ApiIntegrationSupport {
         UUID note=note("graph",null,"본문");
         JsonNode graph=capture("note-graph","GET","/notes/{noteId}/graph",call("GET","/api/notes/"+note+"/graph",null).andExpect(status().isOk()));
         assertTrue(graph.path("analysis").isNull());assertTrue(graph.path("concepts").isArray());assertTrue(graph.path("relations").isArray());
-        capture("graph","GET","/graph",call("GET","/api/graph?scope=note&noteId="+note,null).andExpect(status().isOk()));
+        JsonNode pages=capture("graph","GET","/graph",call("GET","/api/graph?scope=all",null).andExpect(status().isOk()));
+        assertEquals(1,pages.path("nodes").size());assertEquals(note.toString(),pages.path("nodes").get(0).path("id").asString());assertTrue(pages.path("edges").isEmpty());
+        call("GET","/api/graph?scope=note&noteId="+note,null).andExpect(status().isBadRequest());
         capture("types","GET","/relation-types",call("GET","/api/relation-types",null).andExpect(status().isOk()));
         call("GET","/api/notes/"+note+"/graph",null,otherBearer).andExpect(status().isNotFound());
         call("GET","/api/graph?scope=topic",null).andExpect(status().isBadRequest());writeCaptures();
@@ -114,7 +116,7 @@ class InsightApiIntegrationTest extends ApiIntegrationSupport {
         graph.add(item(sa,"relation",relation));work.complete(job,new PipelineOutput(List.of(),graph,List.of()));
         JsonNode noteGraph=capture("nonempty-note-graph","GET","/notes/{noteId}/graph",call("GET","/api/notes/"+a+"/graph",null).andExpect(status().isOk()));
         assertEquals(1,noteGraph.path("concepts").size());assertEquals(1,noteGraph.path("relations").size());assertEquals(a.toString(),noteGraph.path("relations").get(0).path("evidence").get(0).path("noteId").asString());
-        JsonNode global=capture("nonempty-graph","GET","/graph",call("GET","/api/graph",null).andExpect(status().isOk()));assertEquals(2,global.path("nodes").size());assertEquals(1,global.path("edges").size());
+        JsonNode global=capture("nonempty-graph","GET","/graph",call("GET","/api/graph",null).andExpect(status().isOk()));assertEquals(3,global.path("nodes").size());assertEquals(0,global.path("edges").size());
         capture("relation-detail","GET","/relations/{relationId}",call("GET","/api/relations/"+relationId,null).andExpect(status().isOk()));
         call("GET","/api/relations/"+relationId,null,otherBearer).andExpect(status().isNotFound());
         call("DELETE","/api/notes/"+a,null).andExpect(status().isConflict());

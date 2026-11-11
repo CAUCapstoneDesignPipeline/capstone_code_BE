@@ -34,20 +34,41 @@ public class GraphService {
         notes.requireOwned(user,note);var result=mapper.createObjectNode();result.put("noteId",note.toString());result.set("analysis",mapper.valueToTree(analysis.get(user,note).job()));
         result.set("concepts",mapper.valueToTree(concepts(user,"note",note,null,false)));result.set("relations",mapper.valueToTree(relations(user,"note",note,null,false)));return result;
     }
-    public ObjectNode graph(UUID user,String scope,String noteValue,String topicValue,boolean includeLost) {
-        if(!Set.of("all","topic","note").contains(scope)) throw invalid();
-        UUID note=null,topic=null;boolean unassigned="none".equals(topicValue);
-        if(scope.equals("note")) { note=id(noteValue);notes.requireOwned(user,note); }
-        if(scope.equals("topic") && !unassigned) { topic=id(topicValue);topics.owned(user,topic); }
-        var nodes=new LinkedHashMap<String,JsonNode>();var edges=mapper.createArrayNode();
-        for(var c:concepts(user,scope,note,topic,unassigned)) { ObjectNode node=mapper.createObjectNode();node.set("id",c.path("id"));node.set("label",c.path("label"));nodes.put(c.path("id").asString(),node); }
-        for(var r:relations(user,scope,note,topic,unassigned)) {
-            if(!includeLost && r.path("status").asString().equals("evidence_lost")) continue;
-            nodes.put(r.path("source").path("id").asString(),r.path("source"));nodes.put(r.path("target").path("id").asString(),r.path("target"));
-            var edge=mapper.createObjectNode();edge.set("id",r.path("id"));edge.set("sourceId",r.path("source").path("id"));edge.set("targetId",r.path("target").path("id"));
-            for(String key:new String[]{"type","origin","status","asHypothesis"}) edge.set(key,r.path(key));edges.add(edge);
+    /**
+     * 페이지 그래프(v0.4). 노드는 페이지, 엣지는 키워드를 하나 이상 공유하는 두 페이지 사이의 무방향 선 1개다.
+     * 키워드는 기능용 그래프의 개념으로, 병합된 개념(같은 canonical id)이나 정규화한 이름이 같은 개념을 같은 키워드로 본다.
+     * 공유 키워드가 없는 페이지도 노드로 주며, 응답 크기는 우선 제한하지 않는다(11/4 결정).
+     */
+    public ObjectNode pages(UUID user,String scope,String topicValue) {
+        if(!Set.of("all","topic").contains(scope)) throw invalid();
+        UUID topic=null;boolean unassigned=false;
+        if(scope.equals("topic")) {
+            if(topicValue==null || topicValue.isBlank()) throw invalid();
+            unassigned="none".equals(topicValue);
+            if(!unassigned) { topic=id(topicValue);topics.owned(user,topic); }
         }
-        var result=mapper.createObjectNode();result.put("scope",scope);result.set("nodes",mapper.valueToTree(nodes.values()));result.set("edges",edges);return result;
+        var nodes=repository.pages(user,scope.equals("all"),topic,unassigned);
+        var included=new java.util.HashSet<String>();nodes.forEach(n->included.add(n.path("id").asString()));
+        Map<String,String> aliases=com.example.capstone.analysis.service.AnalysisAliasService.mapping(repository.aliases(user));
+        var keywordsByNote=new java.util.HashMap<String,java.util.Set<String>>();var labels=new java.util.TreeMap<String,String>();
+        for(var row:repository.pageKeywords(user)) {
+            String note=row.path("noteId").asString(),label=java.text.Normalizer.normalize(row.path("label").asString(),java.text.Normalizer.Form.NFC).strip().replaceAll("\\s+"," ");
+            if(!included.contains(note) || label.isBlank()) continue;
+            String keyword="label:"+label.toLowerCase(java.util.Locale.ROOT);
+            String concept=row.path("conceptId").asString();concept=aliases.getOrDefault(concept,concept);
+            keywordsByNote.computeIfAbsent(note,ignored->new java.util.HashSet<>()).add(keyword);
+            labels.merge(keyword,label,(a,b)->a.compareTo(b)<=0?a:b);
+            keywordsByNote.get(note).add("concept:"+concept);labels.merge("concept:"+concept,label,(a,b)->a.compareTo(b)<=0?a:b);
+        }
+        var notes=new ArrayList<>(keywordsByNote.keySet());java.util.Collections.sort(notes);
+        var edges=mapper.createArrayNode();
+        for(int i=0;i<notes.size();i++) for(int j=i+1;j<notes.size();j++) {
+            var shared=new java.util.TreeSet<String>();
+            for(String keyword:keywordsByNote.get(notes.get(i))) if(keywordsByNote.get(notes.get(j)).contains(keyword)) shared.add(labels.get(keyword));
+            if(shared.isEmpty()) continue;
+            var edge=edges.addObject();edge.put("sourceId",notes.get(i));edge.put("targetId",notes.get(j));var names=edge.putArray("sharedKeywords");shared.forEach(names::add);
+        }
+        var result=mapper.createObjectNode();result.put("scope",scope);result.set("nodes",mapper.valueToTree(nodes));result.set("edges",edges);return result;
     }
     public ObjectNode relation(UUID user,UUID id) {
         for(var relation:relations(user,"all",null,null,false)) if(relation.path("id").asString().equals(id.toString())) {

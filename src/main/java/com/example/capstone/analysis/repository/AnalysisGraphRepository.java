@@ -28,6 +28,35 @@ public class AnalysisGraphRepository {
              and (nj.created_at,nj.id)>(j.created_at,j.id)) order by g.id
           """,p);
     }
+    /** 페이지 그래프 노드: 사용자의 노트. scope=topic이면 그 주제(또는 미분류)의 노트만. */
+    public List<JsonNode> pages(UUID user,boolean all,UUID topic,boolean unassigned) {
+        var p=new LinkedHashMap<String,Object>();p.put("user",user);p.put("all",all);p.put("topic",topic);p.put("unassigned",unassigned);
+        return db.rows("""
+          select jsonb_build_object('id',n.id,'title',n.title,'topicId',n.topic_id)::text from note n
+          where n.user_id=:user and (:all=true or n.topic_id=cast(:topic as uuid) or (:unassigned=true and n.topic_id is null))
+          order by n.created_at,n.id
+          """,p);
+    }
+    /**
+     * 페이지별 키워드(추출된 개념). 노트마다 그 노트를 포함한 가장 최근 성공 분석의 개념과 기존 개념 언급을 쓴다.
+     * 추천 등 생성된 지식(analysis_result)은 넣지 않는다.
+     */
+    public List<JsonNode> pageKeywords(UUID user) {
+        return db.rows("""
+          with latest as(
+           select distinct on(s.original_note_id) s.original_note_id note_id,s.id snapshot_id,s.job_id from analysis_snapshot s
+            join analysis_job j on j.id=s.job_id and j.user_id=s.user_id
+           where s.user_id=:user and j.status='succeeded'
+            and exists(select 1 from analysis_graph_item g where g.snapshot_id=s.id and g.user_id=s.user_id and g.kind='concept')
+           order by s.original_note_id,j.created_at desc,j.id desc)
+          select jsonb_build_object('noteId',l.note_id,'conceptId',g.value->>'id','label',g.value->>'label')::text
+           from latest l join analysis_graph_item g on g.snapshot_id=l.snapshot_id and g.job_id=l.job_id and g.user_id=:user and g.kind='concept'
+           join note n on n.id=l.note_id and n.user_id=:user
+          union all
+          select jsonb_build_object('noteId',m.note_id,'conceptId',c.id,'label',c.label)::text
+           from concept_mention m join concept c on c.id=m.concept_id and c.user_id=:user join note n on n.id=m.note_id and n.user_id=:user
+          """,Map.of("user",user));
+    }
     public List<JsonNode> reusableAliases(UUID user,List<UUID> notes) {
         return db.rows("""
           select g.value::text from analysis_graph_item g join analysis_job j on j.id=g.job_id and j.user_id=g.user_id
