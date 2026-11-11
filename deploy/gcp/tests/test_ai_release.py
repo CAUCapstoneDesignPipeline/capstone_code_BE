@@ -105,7 +105,18 @@ class SchemaThreeUnchangedTest(unittest.TestCase):
     """8.3-1: every AI-off manifest (real releases and mutations) gets the same result as the runner pin."""
 
     def manifests(self):
-        return [release(p.stem) for p in sorted(RELEASES.glob('*.json'))]
+        return [m for m in (release(p.stem) for p in sorted(RELEASES.glob('*.json'))) if m['schemaVersion'] == 3]
+
+    def test_real_ai_on_releases_pass_only_the_new_contract(self):
+        old = old_contract()
+        for m in (release(p.stem) for p in sorted(RELEASES.glob('*.json'))):
+            if m['schemaVersion'] == 3:
+                continue
+            with self.subTest(release=m['releaseId']):
+                self.assertEqual(m['schemaVersion'], 4)
+                validate(m)
+                if old is not None:
+                    self.assertNotEqual(outcome(old['validate'], m), 'ok')
 
     def test_real_releases_pass_new_contract(self):
         for m in self.manifests():
