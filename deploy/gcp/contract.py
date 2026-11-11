@@ -10,6 +10,18 @@ DIGEST = r'sha256:' + HASH
 REGISTRY = 'asia-northeast3-docker.pkg.dev/capsnote/'
 SECRETS = {'dbPassword': 'db-password', 'jwtSecret': 'jwt-secret',
            'googleClientSecret': 'google-client-secret', 'allowedEmails': 'allowed-emails'}
+FIELDS = ['schemaVersion', 'releaseId', 'be', 'web', 'proxy', 'configRevision',
+          'bootstrapRevision', 'secretVersions', 'flyway', 'aiEnabled', 'aiImage']
+# schemaVersion 4 (AI-on) adds one reviewed `ai` block; schemaVersion 3 stays AI-off and unchanged.
+AI_FIELDS = ['release', 'serviceToken', 'caSha256', 'policySha256', 'attestationSha256', 'profiles',
+             'budgetMicrounits', 'currency', 'pollMs']
+AI_TOKEN_SECRET = 'projects/capsnote/secrets/capsnote-prod-ai-service-token'
+# capstone.ai.pipeline.profiles.<operation> keys (BE AiOperation names, '-' for '_').
+AI_OPERATIONS = ('extract', 'embeddings', 'merge', 'bridges', 'edges', 'explain', 'verify-explanation',
+                 'links', 'facts', 'derive')
+PROFILE = r'[a-z][a-z0-9-]{0,79}'
+# Enable condition only; BE does not count or enforce it. Bound keeps the value exact in JSON and Java long.
+BUDGET_MAX = 2**53 - 1
 
 
 class ReleaseError(Exception):
@@ -37,12 +49,36 @@ def checksum(value):
     return hashlib.sha256(canonical(value).encode()).hexdigest()
 
 
+def ai_enabled(m):
+    return isinstance(m, dict) and type(m.get('schemaVersion')) is int and m['schemaVersion'] == 4
+
+
+def validate_ai(ai):
+    keys(ai, AI_FIELDS)
+    require(match(ID, ai['release']), 'Invalid AI release ID')
+    require(match(re.escape(AI_TOKEN_SECRET) + r'/versions/[1-9][0-9]*', ai['serviceToken']), 'Wrong AI token scope/version')
+    require(all(match(HASH, ai[k]) for k in ['caSha256', 'policySha256', 'attestationSha256']), 'AI content pins required')
+    profiles = ai['profiles']
+    require(isinstance(profiles, dict) and all(k in AI_OPERATIONS for k in profiles), 'Unknown AI operation')
+    require(all(match(PROFILE, v) and 'dev' not in v for v in profiles.values()), 'Invalid AI profile')
+    budget = ai['budgetMicrounits']
+    require(type(budget) is int and 0 < budget <= BUDGET_MAX, 'AI budget required')
+    require(match(r'[A-Z]{3}', ai['currency']), 'AI currency required')
+    require(type(ai['pollMs']) is int and 1000 <= ai['pollMs'] <= 60000, 'Invalid AI poll interval')
+
+
 def validate(m):
-    keys(m, ['schemaVersion', 'releaseId', 'be', 'web', 'proxy', 'configRevision',
-             'bootstrapRevision', 'secretVersions', 'flyway', 'aiEnabled', 'aiImage'])
-    require(type(m['schemaVersion']) is int and m['schemaVersion'] == 3, 'Unsupported schema')
-    require(match(ID, m['releaseId']), 'Invalid release ID')
-    require(m['aiEnabled'] is False and m['aiImage'] is None, 'Initial GCP release must remain AI-off')
+    if ai_enabled(m):
+        keys(m, FIELDS + ['ai'])
+        require(match(ID, m['releaseId']), 'Invalid release ID')
+        require(m['aiEnabled'] is True and match(re.escape(REGISTRY + 'capstone-ai/ai@') + DIGEST, m['aiImage']),
+                'AI release requires the flag and a pinned AI image')
+        validate_ai(m['ai'])
+    else:
+        keys(m, FIELDS)
+        require(type(m['schemaVersion']) is int and m['schemaVersion'] == 3, 'Unsupported schema')
+        require(match(ID, m['releaseId']), 'Invalid release ID')
+        require(m['aiEnabled'] is False and m['aiImage'] is None, 'Initial GCP release must remain AI-off')
     for component, repository in [('be', 'capstone-be'), ('web', 'capstone-web')]:
         keys(m[component], ['sourceSha', 'image'])
         require(match(SHA, m[component]['sourceSha']), 'Invalid source SHA')

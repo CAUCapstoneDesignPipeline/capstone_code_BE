@@ -3,6 +3,8 @@
 import argparse
 import fcntl
 import hashlib
+import http.client
+import ipaddress
 import json
 import os
 from pathlib import Path
@@ -18,7 +20,8 @@ import urllib.request
 import zipfile
 import uuid
 import zlib
-from contract import ReleaseError, canonical, checksum, match, require, validate, validate_request, version, ID
+from contract import (ReleaseError, canonical, checksum, match, require, validate, validate_request, version, ID,
+                      AI_OPERATIONS, AI_TOKEN_SECRET, HASH, SHA)
 from storage import Cloud
 import engine
 
@@ -27,6 +30,27 @@ CONFIG = Path('/etc/capstone-gcp')
 TOOLS = Path('/opt/capstone-gcp')
 RUNTIME = Path('/run/capstone-gcp')
 NGINX = Path('/etc/nginx/conf.d/capstone-gcp.conf')
+
+APP_UID = 10001
+ROOT_UID = 0
+# Container paths of the two read-only AI mounts in compose.json.
+AI_MOUNT = '/run/capstone-ai'
+AI_CONTROL_MOUNT = '/run/capstone-ai-control'
+# Public content files under CONFIG/ai/<sha256><suffix>, copied to RUNTIME/<release>/ai/<name>.
+AI_CONTENT = (('policy.json', 'policySha256', '.policy.json'), ('attestation.json', 'attestationSha256', '.attestation.json'),
+              ('ca.pem', 'caSha256', '.ca.pem'))
+AI_CONFIG = ['baseUrl', 'serverName', 'privateIp', 'serviceTokenSecret']
+AI_PORT = 8443
+# BE AiPipelineConfiguration defaults once the #110 contract sync lands (facts-llm-3, derive-sound-1);
+# manifest ai.profiles overrides them per operation like capstone.ai.pipeline.profiles.<operation>.
+AI_DEFAULT_PROFILES = {'extract': 'extract-det-3', 'embeddings': 'embeddings-bge-m3-1', 'merge': 'merge-det-1',
+                       'bridges': 'bridges-det-1', 'edges': 'edges-det-1', 'explain': 'explain-llm-8',
+                       'verify-explanation': 'explanation-det-3', 'links': 'links-det-1', 'facts': 'facts-llm-3',
+                       'derive': 'derive-sound-1'}
+AI_EMBEDDING = {'profile': 'embeddings-bge-m3-1', 'name': 'BAAI/bge-m3', 'revision': '5617a9f61b028005a4858fdac845db406aefb181'}
+STAMP_LIMITS = {'profileVersion': 80, 'provider': 80, 'model': 120, 'modelRevision': 120, 'promptVersion': 80,
+                'schemaVersion': 3, 'preprocessingVersion': 80}
+CAPABILITIES = ('analysisEnabled', 'graphEnabled', 'discoveriesEnabled')
 
 
 def command(args, *, env=None, data=None):
@@ -40,7 +64,7 @@ def atomic(path, value, mode=0o600):
     fd, temporary = tempfile.mkstemp(dir=path.parent, prefix='.write-')
     try:
         os.fchmod(fd, mode)
-        with os.fdopen(fd, 'w') as handle:
+        with os.fdopen(fd, 'wb' if isinstance(value, bytes) else 'w') as handle:
             handle.write(value)
             handle.flush()
             os.fsync(handle.fileno())
@@ -59,6 +83,172 @@ def trusted(path):
     info = path.lstat()
     require(stat.S_ISREG(info.st_mode) and info.st_uid == 0 and not (info.st_mode & 0o022), 'Untrusted host file')
     return json.loads(path.read_text())
+
+
+def trusted_bytes(path):
+    try:
+        info = path.lstat()
+    except FileNotFoundError:
+        raise ReleaseError('Required host file missing') from None
+    require(stat.S_ISREG(info.st_mode) and info.st_uid == ROOT_UID and not (info.st_mode & 0o022), 'Untrusted host file')
+    return path.read_bytes()
+
+
+def trusted_directory(path):
+    # A missing or redirected control mount would read as "not suspended" (fail-open), so it is exact.
+    try:
+        info = path.lstat()
+    except FileNotFoundError:
+        raise ReleaseError('AI control directory missing') from None
+    require(stat.S_ISDIR(info.st_mode) and info.st_uid == ROOT_UID and info.st_mode & 0o7777 == 0o755, 'Untrusted AI control directory')
+
+
+# --------------------------------------------------------------------- AI (pure checks)
+def ai_profiles(m):
+    """Operation -> profile the BE uses for this manifest (defaults + ai.profiles)."""
+    return dict(AI_DEFAULT_PROFILES, **m['ai']['profiles'])
+
+
+def stamp_problems(stamp, profile):
+    """BE schemas.json ModelStamp (additionalProperties false) plus profileVersion == attestation key."""
+    if not isinstance(stamp, dict) or set(stamp) != set(STAMP_LIMITS):
+        return ['stamp fields']
+    problems = []
+    for field, limit in STAMP_LIMITS.items():
+        value = stamp[field]
+        if field == 'schemaVersion':
+            ok = value == '1.0'
+        elif field == 'promptVersion':
+            ok = value is None or (isinstance(value, str) and len(value) <= limit)
+        else:
+            ok = isinstance(value, str) and 1 <= len(value) <= limit
+        if not ok:
+            problems.append('stamp ' + field)
+    if stamp['profileVersion'] != profile:
+        problems.append('stamp profileVersion differs from key')
+    return problems
+
+
+def expected_stamps(entry):
+    """One stamp, or a list of 1-8 stamps (a profile whose meta depends on the input, e.g. derive-sound-1)."""
+    if isinstance(entry, dict):
+        return [entry]
+    return list(entry) if isinstance(entry, list) and 1 <= len(entry) <= 8 else []
+
+
+def policy_problems(policy):
+    """BE schemas.json Policy and AiPipelineConfiguration rule checks."""
+    if not isinstance(policy, dict) or set(policy) != {'version', 'relationTypes', 'compositionRules'}:
+        return ['policy fields']
+    problems = []
+    if not (isinstance(policy['version'], str) and 1 <= len(policy['version']) <= 80):
+        problems.append('policy version')
+    types, rules = policy['relationTypes'], policy['compositionRules']
+    if not (isinstance(types, list) and 1 <= len(types) <= 32 and isinstance(rules, list) and len(rules) <= 128):
+        return problems + ['policy list sizes']
+    codes = set()
+    for item in types:
+        if not (isinstance(item, dict) and set(item) == {'code', 'label', 'description'}
+                and match(r'[a-z][a-z0-9_]{0,39}', item['code']) and isinstance(item['label'], str)
+                and 1 <= len(item['label']) <= 80 and isinstance(item['description'], str)
+                and 1 <= len(item['description']) <= 1000):
+            problems.append('relation type shape')
+            continue
+        if item['code'] in codes:
+            problems.append('duplicate relation type ' + item['code'])
+        codes.add(item['code'])
+    pairs = set()
+    for rule in rules:
+        if not (isinstance(rule, dict) and set(rule) == {'firstType', 'secondType', 'resultType'}
+                and all(isinstance(v, str) and 1 <= len(v) <= 40 for v in rule.values())):
+            problems.append('composition rule shape')
+            continue
+        if not {rule['firstType'], rule['secondType'], rule['resultType']} <= codes:
+            problems.append('composition rule uses an unknown type')
+        if (rule['firstType'], rule['secondType']) in pairs:
+            problems.append('duplicate composition rule')
+        pairs.add((rule['firstType'], rule['secondType']))
+    return problems
+
+
+def attestation_problems(attestation, m):
+    """AiPipelineConfiguration attestation checks, plus the manifest's own AI image, release and CA pins."""
+    if not isinstance(attestation, dict) or not isinstance(attestation.get('releaseManifest'), dict) \
+            or not isinstance(attestation.get('expectedMeta'), dict):
+        return ['attestation shape']
+    release, expected, ai = attestation['releaseManifest'], attestation['expectedMeta'], m['ai']
+    problems = []
+    if release.get('kind') != 'ai' or not match(r'.+@sha256:[0-9a-f]{64}', release.get('image')):
+        problems.append('release kind/image')
+    if release.get('image') != m['aiImage']:
+        problems.append('release image differs from aiImage')
+    if release.get('releaseId') != ai['release']:
+        problems.append('release id differs from ai.release')
+    idf, tls = release.get('idf'), release.get('tls')
+    if not match(SHA, release.get('sourceSha')) or not (isinstance(idf, dict) and match(HASH, idf.get('sha256'))):
+        problems.append('release sourceSha/idf')
+    model = release.get('model')
+    if not isinstance(model, dict) or any(model.get(k) != v for k, v in AI_EMBEDDING.items()):
+        problems.append('release embedding model')
+    if not isinstance(tls, dict) or tls.get('caSha256') != ai['caSha256']:
+        problems.append('release CA differs from ai.caSha256')
+    used = ai_profiles(m)
+    if used['embeddings'] != AI_EMBEDDING['profile']:
+        problems.append('embeddings profile is fixed')
+    listed = release.get('profiles') if isinstance(release.get('profiles'), list) else []
+    missing = sorted(set(used.values()) - set(listed))
+    if missing:
+        problems.append('release profiles missing ' + ','.join(missing))
+    for profile in sorted(set(used.values())):
+        stamps = expected_stamps(expected.get(profile))
+        if not stamps:
+            problems.append('expectedMeta missing ' + profile)
+        for stamp in stamps:
+            problems += ['%s %s' % (profile, p) for p in stamp_problems(stamp, profile)]
+    for stamp in expected_stamps(expected.get(used['embeddings'])):
+        if isinstance(stamp, dict) and (stamp.get('model'), stamp.get('modelRevision')) != (AI_EMBEDDING['name'], AI_EMBEDDING['revision']):
+            problems.append('embedding stamp differs from release model')
+    return problems
+
+
+def ai_config_problems(config, m):
+    """Host configuration `ai` block: reviewed endpoint and the token secret the manifest version belongs to."""
+    ai = config.get('ai')
+    if not isinstance(ai, dict) or set(ai) != set(AI_CONFIG):
+        return ['host ai block']
+    problems = []
+    name = ai['serverName']
+    if not match(r'[a-z0-9]([a-z0-9-]{0,62}\.)+internal', name):
+        problems.append('serverName')
+    if ai['baseUrl'] != 'https://%s:%d' % (name, AI_PORT):
+        problems.append('baseUrl')
+    try:
+        if not ipaddress.IPv4Address(ai['privateIp']).is_private:
+            problems.append('privateIp')
+    except (ValueError, TypeError):
+        problems.append('privateIp')
+    if ai['serviceTokenSecret'] != AI_TOKEN_SECRET or m['ai']['serviceToken'].rsplit('/versions/', 1)[0] != ai['serviceTokenSecret']:
+        problems.append('service token secret')
+    return problems
+
+
+def compose_ai_host():
+    """The fixed extra_hosts entry of compose.json, as (name, address)."""
+    entries = json.loads((TOOLS / 'compose.json').read_text())['services']['be'].get('extra_hosts') or []
+    require(len(entries) == 1, 'Unexpected compose host entries')
+    name, address = entries[0].rsplit(':', 1)
+    return name, address
+
+
+def render_properties(properties):
+    def escape(value):
+        return str(value).replace('\\', '\\\\').replace('\n', '\\n').replace('\r', '\\r').replace('\t', '\\t').replace(' ', '\\ ')
+    return ''.join(k + '=' + escape(v) + '\n' for k, v in properties.items())
+
+
+def token_ok(token):
+    # AiHttpClient: at least 16 printable ASCII characters (33-126).
+    return isinstance(token, str) and len(token) >= 16 and all(33 <= ord(c) <= 126 for c in token)
 
 
 COLD_DATABASE = 'capstone_live'
@@ -120,9 +310,14 @@ class Host:
         self.scope = release_scope(self.config)
         self.cloud = Cloud(self.config['releaseBucket'], prefix=self.scope)
         self.opening = False
+        self.ai_strict = True
 
     def hold_path(self):
         return ROOT / self.scope / 'maintenance-hold.json'
+
+    def ai_control_dir(self):
+        # Persistent (/var/lib), so an operator suspension survives reboots and redeploys.
+        return ROOT / self.scope / 'ai-control'
 
     def held(self):
         # Only the operator's checked reopen may serve live while a hold exists.
@@ -158,9 +353,14 @@ class Host:
 
     def compose(self, manifest, *args):
         self.configuration(manifest)
+        runtime = RUNTIME / manifest['releaseId']
+        enabled = manifest['aiEnabled'] is True
+        # AI-off mounts its own empty runtime directory as the control directory: no host prerequisite and
+        # no suspension path is configured in be.properties.
         env = dict(os.environ, BE_IMAGE=manifest['be']['image'], WEB_IMAGE=manifest['web']['image'],
                    PROXY_IMAGE=manifest['proxy']['image'], SQL_CONNECTION=self.config['sqlConnection'],
-                   RUNTIME_DIR=str(RUNTIME / manifest['releaseId']))
+                   RUNTIME_DIR=str(runtime), CAPSTONE_AI_ENABLED='true' if enabled else 'false',
+                   AI_CONTROL_DIR=str(self.ai_control_dir() if enabled else runtime / 'ai'))
         return command(['docker', 'compose', '-p', 'capstone-gcp', '-f', str(TOOLS / 'compose.json'), *args], env=env)
 
     def prepare_database(self, manifest):
@@ -204,6 +404,7 @@ class Host:
             with ssl.create_default_context().wrap_socket(connection, server_hostname='capsnote.art'):
                 pass
         self.boundary_check()
+        ai_properties = self.ai_preflight(m, resume)
         token = self.cloud.token()
         with tempfile.TemporaryDirectory(prefix='ar-auth-', dir=RUNTIME) as auth:
             env = dict(os.environ, DOCKER_CONFIG=auth)
@@ -232,13 +433,97 @@ class Host:
                    'googleClientSecret': 'capstone.auth.google.client-secret', 'allowedEmails': 'capstone.auth.allowed-emails'}
         for key, prop in mapping.items():
             properties[prop] = self.cloud.secret(m['secretVersions'][key])
-        def escape(value):
-            return str(value).replace('\\', '\\\\').replace('\n', '\\n').replace('\r', '\\r').replace('\t', '\\t').replace(' ', '\\ ')
+        properties.update(ai_properties)
         path = RUNTIME / m['releaseId'] / 'be.properties'
-        atomic(path, ''.join(k + '=' + escape(v) + '\n' for k, v in properties.items()), 0o400)
+        atomic(path, render_properties(properties), 0o400)
         os.chown(path.parent, 10001, 10001)
         os.chown(path, 10001, 10001)
         self.compose(m, 'config', '--quiet')
+
+    def ai_preflight(self, m, resume):
+        """Before maintenance: AI-off gets an empty mount directory; AI-on is checked end to end here.
+
+        Returns the AI be.properties entries (the service token value stays in memory and in the 0400 file)."""
+        release = RUNTIME / m['releaseId']
+        release.mkdir(mode=0o700, exist_ok=True)
+        directory = release / 'ai'
+        directory.mkdir(mode=0o700, exist_ok=True)
+        require(directory.is_dir() and not directory.is_symlink(), 'Unexpected AI runtime path')
+        self.ai_strict = not resume
+        if m['aiEnabled'] is not True:
+            require(not any(directory.iterdir()), 'Unexpected AI runtime files')
+            os.chown(directory, APP_UID, APP_UID)
+            os.chmod(directory, 0o500)
+            return {}
+        ai = m['ai']
+        require(not ai_config_problems(self.config, m), 'AI host configuration mismatch')
+        require(compose_ai_host() == (self.config['ai']['serverName'], self.config['ai']['privateIp']),
+                'Compose AI host entry differs from host configuration')
+        control = self.ai_control_dir()
+        trusted_directory(control)
+        if not resume:
+            # An AI-on deploy must observe capabilities true; a suspended deploy would only roll back.
+            require(not os.path.lexists(control / 'suspended'), 'AI suspended; turn it off before an AI-on deploy')
+        contents = {}
+        for name, key, suffix in AI_CONTENT:
+            data = trusted_bytes(CONFIG / 'ai' / (ai[key] + suffix))
+            require(hashlib.sha256(data).hexdigest() == ai[key], 'AI content hash mismatch')
+            contents[name] = data
+        try:
+            policy = json.loads(contents['policy.json'].decode('utf-8'))
+            attestation = json.loads(contents['attestation.json'].decode('utf-8'))
+            ca = contents['ca.pem'].decode('ascii')
+        except ValueError:
+            raise ReleaseError('AI content files are not UTF-8 JSON / ASCII PEM') from None
+        require(not policy_problems(policy), 'AI policy rejected')
+        require(not attestation_problems(attestation, m), 'AI attestation rejected')
+        require('-----BEGIN CERTIFICATE-----' in ca and 'PRIVATE KEY' not in ca, 'AI CA must be a public certificate')
+        token = self.cloud.secret(ai['serviceToken'])
+        require(token_ok(token), 'AI service token format rejected')
+        if not resume:
+            self.ai_ready(m, ca, token)
+        for name, data in contents.items():
+            atomic(directory / name, data, 0o400)
+            os.chown(directory / name, APP_UID, APP_UID)
+        os.chown(directory, APP_UID, APP_UID)
+        os.chmod(directory, 0o500)
+        properties = {'capstone.ai.enabled': 'true', 'capstone.ai.runtime.release-authorized': 'true',
+                      'capstone.ai.runtime.suspension-file': AI_CONTROL_MOUNT + '/suspended',
+                      'capstone.ai.pipeline.policy-file': AI_MOUNT + '/policy.json',
+                      'capstone.ai.pipeline.attestation-file': AI_MOUNT + '/attestation.json',
+                      'capstone.ai.pipeline.attestation-sha256': ai['attestationSha256'],
+                      'capstone.ai.pipeline.synthetic-stub': 'false'}
+        for operation in AI_OPERATIONS:
+            if operation in ai['profiles']:
+                properties['capstone.ai.pipeline.profiles.' + operation] = ai['profiles'][operation]
+        properties.update({'capstone.ai.execution.budget-microunits': str(ai['budgetMicrounits']),
+                           'capstone.ai.execution.currency': ai['currency'],
+                           'capstone.ai.execution.poll-ms': str(ai['pollMs']),
+                           'capstone.ai.client.base-url': self.config['ai']['baseUrl'],
+                           'capstone.ai.client.service-token': token,
+                           'capstone.ai.client.ca-certificate': AI_MOUNT + '/ca.pem'})
+        return properties
+
+    def ai_ready(self, m, ca, token):
+        """GET /internal/v1/health/ready from the host with the BE's CA, SNI and token (never printed)."""
+        endpoint = self.config['ai']
+        wanted = set(ai_profiles(m).values())
+        try:
+            context = ssl.create_default_context(cadata=ca)
+            with socket.create_connection((endpoint['privateIp'], AI_PORT), timeout=5) as raw:
+                with context.wrap_socket(raw, server_hostname=endpoint['serverName']) as tls:
+                    head = ['GET /internal/v1/health/ready HTTP/1.1', 'Host: ' + endpoint['serverName'],
+                            'X-Request-Id: ' + str(uuid.uuid4()), 'Accept: application/json',
+                            'Authorization: Bearer ' + token, 'Connection: close']
+                    tls.sendall(('\r\n'.join(head) + '\r\n\r\n').encode())
+                    response = http.client.HTTPResponse(tls, method='GET')
+                    response.begin()
+                    status, body = response.status, response.read(262144)
+            value = json.loads(body)
+            ready = status == 200 and value.get('status') == 'ready' and wanted <= set(value.get('profileVersions') or [])
+        except Exception:
+            raise ReleaseError('AI readiness check failed (details suppressed)') from None
+        require(ready, 'AI not ready for the release profiles')
 
     def check_image_migrations(self, m, history):
         name = 'capstone-inventory-' + uuid.uuid4().hex
@@ -299,9 +584,30 @@ class Host:
 
     def smoke(self, m):
         self.wait_json('http://127.0.0.1:18080/actuator/health', {'status': 'UP'})
-        self.wait_json('http://127.0.0.1:18081/api/capabilities', {'analysisEnabled': False, 'graphEnabled': False, 'discoveriesEnabled': False})
+        if m['aiEnabled'] is True:
+            # Deploy: all three true within 60 s (each call runs one AI readiness), else engine restores previous.
+            # Reboot/resume/reopen: AI being down or suspended must not keep the notes service closed.
+            self.wait_capabilities((True,) if getattr(self, 'ai_strict', True) else (True, False), 60)
+        else:
+            self.wait_json('http://127.0.0.1:18081/api/capabilities', {'analysisEnabled': False, 'graphEnabled': False, 'discoveriesEnabled': False})
         with urllib.request.urlopen('http://127.0.0.1:18081/', timeout=5) as response:
             require(b'<div id="root"></div>' in response.read(), 'Web readiness failed')
+
+    @staticmethod
+    def wait_capabilities(accepted, seconds):
+        deadline = time.monotonic() + seconds
+        while True:
+            try:
+                with urllib.request.urlopen('http://127.0.0.1:18081/api/capabilities', timeout=5) as response:
+                    actual = json.load(response)
+                    values = [actual.get(k) for k in CAPABILITIES]
+                    require(response.status == 200 and all(type(v) is bool for v in values) and len(set(values)) == 1
+                            and values[0] in accepted, 'Capabilities mismatch')
+                return
+            except Exception:
+                if time.monotonic() >= deadline:
+                    raise ReleaseError('Capabilities did not match the release') from None
+                time.sleep(1)
 
     @staticmethod
     def wait_tls_status(expected, seconds=10):
@@ -394,14 +700,66 @@ def operator_maintenance(host, action):
             os.close(fd)
 
 
+def ai_suspend_status(host):
+    control = host.ai_control_dir()
+    path = control / 'suspended'
+    try:
+        trusted_directory(control)
+        directory = 'ok'
+    except ReleaseError:
+        directory = 'untrusted' if os.path.lexists(control) else 'missing'
+    marker = trusted(path) if directory == 'ok' and os.path.lexists(path) else None
+    return {'aiSuspended': directory == 'ok' and os.path.lexists(path), 'since': marker and marker.get('since'),
+            'by': marker and marker.get('by'), 'controlDirectory': directory}
+
+
+def ai_suspend(host, action):
+    """Create or remove ROOT/<scope>/ai-control/suspended. Read by the BE on every gate check (no restart).
+
+    Emergency control: never waits for release.lock and does not touch Nginx, containers or journals."""
+    user = os.environ.get('SUDO_USER')
+    record = {'action': 'ai-suspend-' + action, 'at': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+              'by': user if match(r'[A-Za-z0-9_.-]{1,64}', user) else None, 'result': 'failed'}
+    control = host.ai_control_dir()
+    (ROOT / host.scope).mkdir(mode=0o700, parents=True, exist_ok=True)
+    try:
+        if not os.path.lexists(control):
+            control.mkdir(mode=0o755)
+            os.chmod(control, 0o755)
+        trusted_directory(control)
+        path = control / 'suspended'
+        if action == 'on':
+            if not os.path.lexists(path):
+                atomic(path, canonical({'since': record['at'], 'by': record['by']}), 0o644)
+        else:
+            path.unlink(missing_ok=True)
+        record['result'] = 'ok'
+    finally:
+        fd = os.open(ROOT / host.scope / 'ai-control.log', os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+        try:
+            os.write(fd, (canonical(record) + '\n').encode())
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--operation')
     parser.add_argument('--resume', action='store_true')
     parser.add_argument('--maintenance', choices=['on', 'off', 'status'])
+    parser.add_argument('--ai-suspend', choices=['on', 'off', 'status'])
     args = parser.parse_args()
     if args.maintenance and (args.operation is not None or args.resume):
         parser.error('--maintenance cannot be combined with other operations')
+    if args.ai_suspend and (args.maintenance or args.operation is not None or args.resume):
+        parser.error('--ai-suspend cannot be combined with other operations')
+    if args.ai_suspend:
+        host = Host()
+        if args.ai_suspend != 'status':
+            ai_suspend(host, args.ai_suspend)
+        print(json.dumps(ai_suspend_status(host), sort_keys=True))
+        return
     if args.maintenance == 'status':
         print(json.dumps(maintenance_status(Host()), sort_keys=True))
         return
