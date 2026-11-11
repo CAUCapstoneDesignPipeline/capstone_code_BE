@@ -1,0 +1,112 @@
+{
+  "request": {
+    "context": {
+      "analysisJobId": "6f1c2a40-1d8e-4b7a-9a51-0c3f8e2d1a20",
+      "stageExecutionId": "6f1c2a40-1d8e-4b7a-9a51-0c3f8e2d1a22",
+      "userId": "6f1c2a40-1d8e-4b7a-9a51-0c3f8e2d1a10",
+      "noteId": "6f1c2a40-1d8e-4b7a-9a51-0c3f8e2d1a02",
+      "noteVersion": 1,
+      "inputRevision": 1,
+      "graphRevision": 1,
+      "pipelineVersion": "ai-integration-2026-10-30-adopted.1"
+    },
+    "profileVersion": "facts-llm-3",
+    "note": {
+      "noteId": "6f1c2a40-1d8e-4b7a-9a51-0c3f8e2d1a02",
+      "noteVersion": 1,
+      "inputRevision": 1,
+      "title": "B+ 트리 인덱스",
+      "body": "B+ 트리 인덱스는 조인 인덱스로 쓸 수 있다.\nB+ 트리에서 점 조회는 최악 log n이다.",
+      "bodySha256": "1957bfdefedd46e78ee7e381e62a7576459ce3a31c1187e3b76f46e4792a325f",
+      "topic": {
+        "id": null,
+        "name": "미분류"
+      }
+    },
+    "knownSubjects": [
+      "inlj"
+    ],
+    "knownRoles": [
+      "join_index"
+    ],
+    "knownOps": [
+      "search"
+    ]
+  },
+  "response": {
+    "context": {
+      "analysisJobId": "6f1c2a40-1d8e-4b7a-9a51-0c3f8e2d1a20",
+      "stageExecutionId": "6f1c2a40-1d8e-4b7a-9a51-0c3f8e2d1a22",
+      "userId": "6f1c2a40-1d8e-4b7a-9a51-0c3f8e2d1a10",
+      "noteId": "6f1c2a40-1d8e-4b7a-9a51-0c3f8e2d1a02",
+      "noteVersion": 1,
+      "inputRevision": 1,
+      "graphRevision": 1,
+      "pipelineVersion": "ai-integration-2026-10-30-adopted.1"
+    },
+    "meta": {
+      "profileVersion": "facts-llm-3",
+      "provider": "anthropic",
+      "model": "claude-opus-5-5",
+      "modelRevision": "claude-opus-5-5@f378a4a49ec9",
+      "promptVersion": "facts-llm-3",
+      "schemaVersion": "1.0",
+      "preprocessingVersion": "md-plain-1",
+      "durationMs": 4100
+    },
+    "facts": [
+      {
+        "factId": "f-930aa8e6a2436b11",
+        "kind": "implements",
+        "subject": "B+ 트리 인덱스",
+        "subjectKey": "bplus",
+        "role": "join_index",
+        "op": null,
+        "roleLabel": "조인 인덱스",
+        "opLabel": null,
+        "expr": null,
+        "case": null,
+        "negated": false,
+        "condition": null,
+        "other": null,
+        "otherKey": null,
+        "origin": "extracted",
+        "evidence": {
+          "noteId": "6f1c2a40-1d8e-4b7a-9a51-0c3f8e2d1a02",
+          "noteVersion": 1,
+          "bodySha256": "1957bfdefedd46e78ee7e381e62a7576459ce3a31c1187e3b76f46e4792a325f",
+          "startOffset": 0,
+          "endOffset": 25,
+          "quote": "B+ 트리 인덱스는 조인 인덱스로 쓸 수 있다"
+        }
+      },
+      {
+        "factId": "f-3fd4994da4c4da52",
+        "kind": "op_cost",
+        "subject": "B+ 트리 인덱스",
+        "subjectKey": "bplus",
+        "role": null,
+        "op": "search",
+        "roleLabel": null,
+        "opLabel": "점 조회",
+        "expr": "log n",
+        "case": "worst",
+        "negated": false,
+        "condition": null,
+        "other": null,
+        "otherKey": null,
+        "origin": "extracted",
+        "evidence": {
+          "noteId": "6f1c2a40-1d8e-4b7a-9a51-0c3f8e2d1a02",
+          "noteVersion": 1,
+          "bodySha256": "1957bfdefedd46e78ee7e381e62a7576459ce3a31c1187e3b76f46e4792a325f",
+          "startOffset": 27,
+          "endOffset": 51,
+          "quote": "B+ 트리에서 점 조회는 최악 log n이다"
+        }
+      }
+    ],
+    "dropped": []
+  },
+  "verificationScope": "AI 404dabf facts-llm-3 FactExtractor grounding + fact_out mapping with a fake LLM output (no provider call)"
+}

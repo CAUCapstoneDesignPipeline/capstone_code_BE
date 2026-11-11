@@ -1,0 +1,358 @@
+{
+  "request": {
+    "context": {
+      "analysisJobId": "6f1c2a40-1d8e-4b7a-9a51-0c3f8e2d1a20",
+      "stageExecutionId": "6f1c2a40-1d8e-4b7a-9a51-0c3f8e2d1a23",
+      "userId": "6f1c2a40-1d8e-4b7a-9a51-0c3f8e2d1a10",
+      "noteId": "6f1c2a40-1d8e-4b7a-9a51-0c3f8e2d1a01",
+      "noteVersion": 1,
+      "inputRevision": 1,
+      "graphRevision": 1,
+      "pipelineVersion": "ai-integration-2026-10-30-adopted.1"
+    },
+    "profileVersion": "derive-sound-1",
+    "documents": [
+      {
+        "noteId": "6f1c2a40-1d8e-4b7a-9a51-0c3f8e2d1a01",
+        "noteVersion": 1,
+        "inputRevision": 1,
+        "title": "인덱스 중첩 루프 조인",
+        "body": "인덱스 중첩 루프 조인은 바깥 테이블 R의 행마다 조인 인덱스로 점 조회를 한 번 한다.\n조인 인덱스의 크기는 안쪽 테이블 S의 행 수다.\n바깥 테이블을 한 번 훑는 데 R이 든다.",
+        "bodySha256": "2f8e06a46925dc86fa3baa8f8c5e89beb19ca14a7bd6c1cf738846d2a681ff9c",
+        "topic": {
+          "id": null,
+          "name": "미분류"
+        }
+      },
+      {
+        "noteId": "6f1c2a40-1d8e-4b7a-9a51-0c3f8e2d1a02",
+        "noteVersion": 1,
+        "inputRevision": 1,
+        "title": "B+ 트리 인덱스",
+        "body": "B+ 트리 인덱스는 조인 인덱스로 쓸 수 있다.\nB+ 트리에서 점 조회는 최악 log n이다.",
+        "bodySha256": "1957bfdefedd46e78ee7e381e62a7576459ce3a31c1187e3b76f46e4792a325f",
+        "topic": {
+          "id": null,
+          "name": "미분류"
+        }
+      }
+    ],
+    "facts": [
+      {
+        "factId": "f-9f4a451b9f2e7e2a",
+        "kind": "needs_op",
+        "subject": "인덱스 중첩 루프 조인",
+        "subjectKey": "inlj",
+        "role": "join_index",
+        "op": "search",
+        "roleLabel": "조인 인덱스",
+        "opLabel": "점 조회",
+        "expr": "R",
+        "case": null,
+        "negated": false,
+        "condition": null,
+        "other": null,
+        "otherKey": null,
+        "origin": "extracted",
+        "evidence": {
+          "noteId": "6f1c2a40-1d8e-4b7a-9a51-0c3f8e2d1a01",
+          "noteVersion": 1,
+          "bodySha256": "2f8e06a46925dc86fa3baa8f8c5e89beb19ca14a7bd6c1cf738846d2a681ff9c",
+          "startOffset": 14,
+          "endOffset": 48,
+          "quote": "바깥 테이블 R의 행마다 조인 인덱스로 점 조회를 한 번 한다"
+        }
+      },
+      {
+        "factId": "f-3802939143d36cca",
+        "kind": "size_bound",
+        "subject": "인덱스 중첩 루프 조인",
+        "subjectKey": "inlj",
+        "role": "join_index",
+        "op": null,
+        "roleLabel": "조인 인덱스",
+        "opLabel": null,
+        "expr": "S",
+        "case": null,
+        "negated": false,
+        "condition": null,
+        "other": null,
+        "otherKey": null,
+        "origin": "extracted",
+        "evidence": {
+          "noteId": "6f1c2a40-1d8e-4b7a-9a51-0c3f8e2d1a01",
+          "noteVersion": 1,
+          "bodySha256": "2f8e06a46925dc86fa3baa8f8c5e89beb19ca14a7bd6c1cf738846d2a681ff9c",
+          "startOffset": 50,
+          "endOffset": 76,
+          "quote": "조인 인덱스의 크기는 안쪽 테이블 S의 행 수다"
+        }
+      },
+      {
+        "factId": "f-323ff4c34ff264fe",
+        "kind": "extra_cost",
+        "subject": "인덱스 중첩 루프 조인",
+        "subjectKey": "inlj",
+        "role": "join_index",
+        "op": null,
+        "roleLabel": "조인 인덱스",
+        "opLabel": null,
+        "expr": "R",
+        "case": null,
+        "negated": false,
+        "condition": null,
+        "other": null,
+        "otherKey": null,
+        "origin": "extracted",
+        "evidence": {
+          "noteId": "6f1c2a40-1d8e-4b7a-9a51-0c3f8e2d1a01",
+          "noteVersion": 1,
+          "bodySha256": "2f8e06a46925dc86fa3baa8f8c5e89beb19ca14a7bd6c1cf738846d2a681ff9c",
+          "startOffset": 78,
+          "endOffset": 100,
+          "quote": "바깥 테이블을 한 번 훑는 데 R이 든다"
+        }
+      },
+      {
+        "factId": "f-930aa8e6a2436b11",
+        "kind": "implements",
+        "subject": "B+ 트리 인덱스",
+        "subjectKey": "bplus",
+        "role": "join_index",
+        "op": null,
+        "roleLabel": "조인 인덱스",
+        "opLabel": null,
+        "expr": null,
+        "case": null,
+        "negated": false,
+        "condition": null,
+        "other": null,
+        "otherKey": null,
+        "origin": "extracted",
+        "evidence": {
+          "noteId": "6f1c2a40-1d8e-4b7a-9a51-0c3f8e2d1a02",
+          "noteVersion": 1,
+          "bodySha256": "1957bfdefedd46e78ee7e381e62a7576459ce3a31c1187e3b76f46e4792a325f",
+          "startOffset": 0,
+          "endOffset": 25,
+          "quote": "B+ 트리 인덱스는 조인 인덱스로 쓸 수 있다"
+        }
+      },
+      {
+        "factId": "f-3fd4994da4c4da52",
+        "kind": "op_cost",
+        "subject": "B+ 트리 인덱스",
+        "subjectKey": "bplus",
+        "role": null,
+        "op": "search",
+        "roleLabel": null,
+        "opLabel": "점 조회",
+        "expr": "log n",
+        "case": "worst",
+        "negated": false,
+        "condition": null,
+        "other": null,
+        "otherKey": null,
+        "origin": "extracted",
+        "evidence": {
+          "noteId": "6f1c2a40-1d8e-4b7a-9a51-0c3f8e2d1a02",
+          "noteVersion": 1,
+          "bodySha256": "1957bfdefedd46e78ee7e381e62a7576459ce3a31c1187e3b76f46e4792a325f",
+          "startOffset": 27,
+          "endOffset": 51,
+          "quote": "B+ 트리에서 점 조회는 최악 log n이다"
+        }
+      }
+    ],
+    "generationProvenance": [
+      {
+        "profileVersion": "facts-llm-3",
+        "provider": "anthropic",
+        "model": "claude-opus-5-5",
+        "modelRevision": "claude-opus-5-5@f378a4a49ec9",
+        "promptVersion": "facts-llm-3",
+        "schemaVersion": "1.0",
+        "preprocessingVersion": "md-plain-1"
+      }
+    ]
+  },
+  "response": {
+    "context": {
+      "analysisJobId": "6f1c2a40-1d8e-4b7a-9a51-0c3f8e2d1a20",
+      "stageExecutionId": "6f1c2a40-1d8e-4b7a-9a51-0c3f8e2d1a23",
+      "userId": "6f1c2a40-1d8e-4b7a-9a51-0c3f8e2d1a10",
+      "noteId": "6f1c2a40-1d8e-4b7a-9a51-0c3f8e2d1a01",
+      "noteVersion": 1,
+      "inputRevision": 1,
+      "graphRevision": 1,
+      "pipelineVersion": "ai-integration-2026-10-30-adopted.1"
+    },
+    "meta": {
+      "profileVersion": "derive-sound-1",
+      "provider": "local+anthropic",
+      "model": "claude-opus-5-5",
+      "modelRevision": "claude-opus-5-5@92984930785c",
+      "promptVersion": "derive-sound-1",
+      "schemaVersion": "1.0",
+      "preprocessingVersion": "md-plain-1",
+      "durationMs": 3
+    },
+    "derivations": [
+      {
+        "derivationId": "d-493ae645ead7b69b",
+        "rule": "R1",
+        "ruleVersion": "r1-implementation-1",
+        "status": "conclusion",
+        "reasons": [
+          "두 노트의 전제로 규칙 R1 을 통과했어요"
+        ],
+        "algorithm": {
+          "key": "inlj",
+          "label": "인덱스 중첩 루프 조인"
+        },
+        "structure": {
+          "key": "bplus",
+          "label": "B+ 트리 인덱스"
+        },
+        "role": "join_index",
+        "roleLabel": "조인 인덱스",
+        "conclusion": "B+ 트리 인덱스로 인덱스 중첩 루프 조인의 조인 인덱스를 구현할 수 있어요",
+        "result": null,
+        "case": null,
+        "conditions": [],
+        "steps": [
+          {
+            "text": "인덱스 중첩 루프 조인은 조인 인덱스에서 점 조회 연산을 써요 (노트 「인덱스 중첩 루프 조인」)",
+            "factIds": [
+              "f-9f4a451b9f2e7e2a"
+            ],
+            "expr": null
+          },
+          {
+            "text": "B+ 트리 인덱스는 점 조회 연산을 모두 제공해요 (노트 「B+ 트리 인덱스」)",
+            "factIds": [
+              "f-3fd4994da4c4da52"
+            ],
+            "expr": null
+          },
+          {
+            "text": "그래서 B+ 트리 인덱스로 인덱스 중첩 루프 조인의 조인 인덱스를 구현할 수 있어요. 가장 빠르거나 가장 좋은 구현이라는 뜻은 아니에요.",
+            "factIds": [],
+            "expr": null
+          }
+        ],
+        "premiseFactIds": [
+          "f-3fd4994da4c4da52",
+          "f-930aa8e6a2436b11",
+          "f-9f4a451b9f2e7e2a"
+        ],
+        "noteIds": [
+          "6f1c2a40-1d8e-4b7a-9a51-0c3f8e2d1a01",
+          "6f1c2a40-1d8e-4b7a-9a51-0c3f8e2d1a02"
+        ],
+        "missing": [],
+        "dependsOn": null,
+        "duplicateOfFactIds": [],
+        "automation": "extracted",
+        "explanation": "B+ 트리 인덱스로 인덱스 중첩 루프 조인의 조인 인덱스를 구현할 수 있어요. 쉽게 말하면, 인덱스 중첩 루프 조인의 조인 인덱스 자리에 B+ 트리 인덱스를 그대로 끼워 쓸 수 있다는 뜻이에요.\n\n먼저 나오는 말부터 짧게 풀어 볼게요.\n- 점 조회는 원하는 원소가 있는지 찾는 일이에요\n\n왜 그런지 차근차근 볼게요.\n1. 인덱스 중첩 루프 조인은 조인 인덱스에서 점 조회 연산을 써요 (노트 「인덱스 중첩 루프 조인」)\n2. B+ 트리 인덱스는 점 조회 연산을 모두 제공해요 (노트 「B+ 트리 인덱스」)\n3. 그래서 B+ 트리 인덱스로 인덱스 중첩 루프 조인의 조인 인덱스를 구현할 수 있어요. 가장 빠르거나 가장 좋은 구현이라는 뜻은 아니에요.\n\n한 번 더 검사했는데 맞는 결론이었어요. 전제가 원문과 맞고 결론이 따라 나옵니다.",
+        "soundness": {
+          "verdict": "sound",
+          "reason": "전제가 원문과 맞고 결론이 따라 나옵니다.",
+          "unfaithfulFactIds": []
+        }
+      },
+      {
+        "derivationId": "d-4c5e2436d374e146",
+        "rule": "R2",
+        "ruleVersion": "r2-cost-1",
+        "status": "conclusion",
+        "reasons": [
+          "두 노트의 전제로 규칙 R2 를 통과했어요"
+        ],
+        "algorithm": {
+          "key": "inlj",
+          "label": "인덱스 중첩 루프 조인"
+        },
+        "structure": {
+          "key": "bplus",
+          "label": "B+ 트리 인덱스"
+        },
+        "role": "join_index",
+        "roleLabel": "조인 인덱스",
+        "conclusion": "B+ 트리 인덱스로 구현한 인덱스 중첩 루프 조인의 시간은 O(R log S) 이하예요",
+        "result": "O(R log S)",
+        "case": "worst",
+        "conditions": [
+          {
+            "text": "상한이에요. 실제 실행이 이보다 빠를 수 있고, 가장 빠른 구현이라는 뜻은 아니에요",
+            "factId": null
+          }
+        ],
+        "steps": [
+          {
+            "text": "인덱스 중첩 루프 조인은 조인 인덱스에서 점 조회를 최대 R번 해요 (노트 「인덱스 중첩 루프 조인」)",
+            "factIds": [
+              "f-9f4a451b9f2e7e2a"
+            ],
+            "expr": null
+          },
+          {
+            "text": "B+ 트리 인덱스에서 점 조회는 O(log n)이에요 (n 은 조인 인덱스 크기) (노트 「B+ 트리 인덱스」)",
+            "factIds": [
+              "f-3fd4994da4c4da52"
+            ],
+            "expr": null
+          },
+          {
+            "text": "조인 인덱스 크기 n 은 최대 S라서 (n ≤ S) 각 연산의 비용에 넣으면 점 조회 O(log S)예요 (노트 「인덱스 중첩 루프 조인」)",
+            "factIds": [
+              "f-3802939143d36cca"
+            ],
+            "expr": "O(log S)"
+          },
+          {
+            "text": "횟수와 비용을 곱해 더하면 O(R log S) = O(R log S)예요",
+            "factIds": [],
+            "expr": "O(R log S)"
+          },
+          {
+            "text": "조인 인덱스 밖의 일에는 O(R)이 들어요 (노트 「인덱스 중첩 루프 조인」). 모두 더하면 O(R log S)예요",
+            "factIds": [
+              "f-323ff4c34ff264fe"
+            ],
+            "expr": "O(R log S)"
+          }
+        ],
+        "premiseFactIds": [
+          "f-323ff4c34ff264fe",
+          "f-3802939143d36cca",
+          "f-3fd4994da4c4da52",
+          "f-930aa8e6a2436b11",
+          "f-9f4a451b9f2e7e2a"
+        ],
+        "noteIds": [
+          "6f1c2a40-1d8e-4b7a-9a51-0c3f8e2d1a01",
+          "6f1c2a40-1d8e-4b7a-9a51-0c3f8e2d1a02"
+        ],
+        "missing": [],
+        "dependsOn": "d-493ae645ead7b69b",
+        "duplicateOfFactIds": [],
+        "automation": "extracted",
+        "explanation": "B+ 트리 인덱스로 구현한 인덱스 중첩 루프 조인의 시간은 O(R log S) 이하예요. 쉽게 말하면, 노트에 적힌 횟수와 비용을 모두 더했더니 걸리는 시간이 O(R log S)를 넘지 않는다는 뜻이에요.\n\n먼저 나오는 말부터 짧게 풀어 볼게요.\n- 점 조회는 원하는 원소가 있는지 찾는 일이에요\n- O(log n)이라는 건 n이 아주 커져도 아주 천천히만 늘어난다는 뜻이에요\n- O(R log S) 안의 R, S는 노트가 크기를 나타내려고 쓴 문자예요\n\n왜 그런지 차근차근 볼게요.\n1. 인덱스 중첩 루프 조인은 조인 인덱스에서 점 조회를 최대 R번 해요 (노트 「인덱스 중첩 루프 조인」)\n2. B+ 트리 인덱스에서 점 조회는 O(log n)이에요 (n 은 조인 인덱스 크기) (노트 「B+ 트리 인덱스」)\n3. 조인 인덱스 크기 n 은 최대 S라서 (n ≤ S) 각 연산의 비용에 넣으면 점 조회 O(log S)예요 (노트 「인덱스 중첩 루프 조인」)\n4. 횟수와 비용을 곱해 더하면 O(R log S) = O(R log S)예요\n5. 조인 인덱스 밖의 일에는 O(R)이 들어요 (노트 「인덱스 중첩 루프 조인」). 모두 더하면 O(R log S)예요\n\n한 번 더 검사했는데 맞는 결론이었어요. 전제가 원문과 맞고 결론이 따라 나옵니다.\n\n이 결론이 성립하는 조건이에요.\n- 상한이에요. 실제 실행이 이보다 빠를 수 있고, 가장 빠른 구현이라는 뜻은 아니에요",
+        "soundness": {
+          "verdict": "sound",
+          "reason": "전제가 원문과 맞고 결론이 따라 나옵니다.",
+          "unfaithfulFactIds": []
+        }
+      }
+    ],
+    "unusedFacts": [],
+    "noveltyScope": {
+      "noteIds": [
+        "6f1c2a40-1d8e-4b7a-9a51-0c3f8e2d1a01",
+        "6f1c2a40-1d8e-4b7a-9a51-0c3f8e2d1a02"
+      ]
+    }
+  },
+  "verificationScope": "AI 404dabf derive-sound-1 with conclusions: rules.derive + SoundnessJudge(fake LLM) + apply + derivation_out; meta provider local+anthropic"
+}

@@ -57,4 +57,6 @@ with tempfile.TemporaryDirectory(prefix='capstone-migration-test-') as directory
     try:m.inventory(client,'target')
     except m.MigrationError:pass
     else:raise AssertionError('Orphan data accepted')
+    client.sql('target',"DELETE FROM note WHERE user_id='00000000-0000-0000-0000-000000009999';")
+    m.compare(before,m.inventory(client,'target'))
     print('PostgreSQL16 Testcontainers: dump/empty restore, full table and sequence hashes, two users, OAuth identities, refresh hashes, Flyway history, nonempty target and corruption rejection PASS')
