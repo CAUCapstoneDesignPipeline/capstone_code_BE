@@ -187,6 +187,40 @@ class RecommendationApiIntegrationTest extends ApiIntegrationSupport {
         assertEquals("RECOMMENDATION_STALE",json(call("POST","/api/recommendations/"+current.path("id").asString()+"/feedback","{\"action\":\"understood\"}").andExpect(status().isConflict())).path("error").path("code").asString());
         assertEquals("unreviewed",reviewStatus(current.path("id").asString()));
     }
+    @Test void chatStreamsAnswerUsingCardAsBackgroundWithoutStoringConversation() throws Exception {
+        UUID a=note("재시도 정책",null,"클라이언트는 응답 시간이 초과되면 요청을 재전송한다."),b=note("멱등성",null,"멱등한 연산은 여러 번 실행해도 결과가 같다.");
+        String card=run(a,w->List.of(result(w,List.of(a,b),"쓰기 요청을 멱등하게 설계해야 한다.",false))).get(0).path("id").asString();
+        server.enqueue(new ScriptedAiServer.Reply(200,"event: start\ndata: {\"model\":\"m\"}\n\nevent: thinking\ndata: {}\n\nevent: delta\ndata: {\"text\":\"쉽게 말하면\"}\n\nevent: done\ndata: {\"stopReason\":\"end_turn\",\"usage\":{\"inputTokens\":3}}\n\n",Map.of("Content-Type","text/event-stream")));
+        String conversation=UUID.randomUUID().toString();
+        var started=call("POST","/api/recommendations/"+card+"/chat","{\"conversationId\":\""+conversation+"\",\"messages\":[{\"role\":\"user\",\"content\":\"무슨 뜻이야?\"}]}")
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.request().asyncStarted()).andReturn();
+        started.getAsyncResult(10000);
+        String stream=started.getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8);
+        assertTrue(stream.contains("event:delta"));assertTrue(stream.contains("쉽게 말하면"));assertTrue(stream.contains("event:done"));assertTrue(stream.contains(conversation));
+        assertFalse(stream.contains("thinking"));assertFalse(stream.contains("inputTokens"));assertFalse(stream.contains("\"model\""));
+        assertEquals("no",started.getResponse().getHeader("X-Accel-Buffering"));
+        var sent=chatRequest(conversation);assertNull(sent.attemptId());
+        JsonNode body=mapper.readTree(sent.body());
+        assertEquals("쓰기 요청을 멱등하게 설계해야 한다.",body.path("knowledge").path("conclusion").asString());
+        assertEquals("재시도 정책",body.path("knowledge").path("evidence").get(0).path("note").asString());
+        assertEquals("멱등한 연산은 여러 번 실행해도 결과가 같다.",body.path("knowledge").path("evidence").get(1).path("text").asString());
+        assertEquals("무슨 뜻이야?",body.path("messages").get(0).path("content").asString());assertTrue(body.path("stream").asBoolean());
+    }
+    @Test void chatRejectsForeignInvalidOversizedAndDisabledRequests() throws Exception {
+        UUID a=note("a",null,"요청 노트 문장이다."),b=note("b",null,"다른 노트 문장이다.");
+        String card=run(a,w->List.of(result(w,List.of(a,b),"결론",false))).get(0).path("id").asString(),ask="{\"messages\":[{\"role\":\"user\",\"content\":\"질문\"}]}";
+        call("POST","/api/recommendations/"+card+"/chat",ask,otherBearer).andExpect(status().isNotFound());
+        call("POST","/api/recommendations/"+card+"/chat","{\"messages\":[{\"role\":\"assistant\",\"content\":\"먼저 말함\"}]}").andExpect(status().isBadRequest());
+        call("POST","/api/recommendations/"+card+"/chat","{\"messages\":[]}").andExpect(status().isBadRequest());
+        server.enqueue(new ScriptedAiServer.Reply(413,"{\"error\":{\"code\":\"INPUT_TOO_LARGE\"}}",Map.of()));
+        assertEquals("CHAT_INPUT_TOO_LARGE",json(call("POST","/api/recommendations/"+card+"/chat",ask).andExpect(status().isPayloadTooLarge())).path("error").path("code").asString());
+        server.enqueue(new ScriptedAiServer.Reply(503,"{\"error\":{\"code\":\"SERVICE_UNAVAILABLE\"}}",Map.of()));
+        JsonNode off=json(call("POST","/api/recommendations/"+card+"/chat",ask).andExpect(status().isServiceUnavailable()));
+        assertEquals("AI_UNAVAILABLE",off.path("error").path("code").asString());assertEquals("CHAT_DISABLED",off.path("error").path("details").path("reason").asString());
+    }
+    private ScriptedAiServer.RecordedRequest chatRequest(String conversation) throws InterruptedException {
+        while(true) { var request=server.takeRequest(java.time.Duration.ofSeconds(5));if(request.path().endsWith("/chat") && new String(request.body(),java.nio.charset.StandardCharsets.UTF_8).contains(conversation)) return request; }
+    }
     private JsonNode run(UUID note,Function<Work,List<JsonNode>> results) throws Exception {
         action.set(w->new PipelineOutput(List.of(),List.of(),results.apply(w)));
         String job=request(note).path("id").asString();ready();assertTrue(worker.runOne());
