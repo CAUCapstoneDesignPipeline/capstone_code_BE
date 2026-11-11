@@ -25,7 +25,7 @@ public class AiPipelineConfiguration {
     private volatile boolean rejected;
     public AiPipelineConfiguration(AiProperties flags,AiPipelineProperties config,AiClientProperties client,ObjectMapper mapper,AiSchemaValidator schemas,Environment environment) {
         profiles.put(AiOperation.EXTRACT,"extract-det-3");profiles.put(AiOperation.EMBEDDINGS,"embeddings-bge-m3-1");profiles.put(AiOperation.MERGE,"merge-det-1");profiles.put(AiOperation.BRIDGES,"bridges-det-1");
-        profiles.put(AiOperation.EDGES,"edges-det-1");profiles.put(AiOperation.EXPLAIN,"explain-llm-8");profiles.put(AiOperation.VERIFY_EXPLANATION,"explanation-det-3");profiles.put(AiOperation.LINKS,"links-det-1");profiles.put(AiOperation.FACTS,"facts-llm-1");profiles.put(AiOperation.DERIVE,"derive-sound-1");
+        profiles.put(AiOperation.EDGES,"edges-det-1");profiles.put(AiOperation.EXPLAIN,"explain-llm-8");profiles.put(AiOperation.VERIFY_EXPLANATION,"explanation-det-3");profiles.put(AiOperation.LINKS,"links-det-1");profiles.put(AiOperation.FACTS,"facts-llm-3");profiles.put(AiOperation.DERIVE,"derive-sound-1");
         boolean development=environment.matchesProfiles("test","local") && !environment.matchesProfiles("prod");
         synthetic=development && config.syntheticStub();
         if(!flags.enabled()) return;
@@ -51,9 +51,9 @@ public class AiPipelineConfiguration {
                 AiResponseValidator.require(profile(AiOperation.EMBEDDINGS).equals("embeddings-bge-m3-1") && release.path("model").path("profile").asString().equals("embeddings-bge-m3-1")
                     && release.path("model").path("name").asString().equals("BAAI/bge-m3") && release.path("model").path("revision").asString().equals("5617a9f61b028005a4858fdac845db406aefb181"));
                 var manifestProfiles=new java.util.HashSet<String>();release.path("profiles").forEach(p->manifestProfiles.add(p.asString()));AiResponseValidator.require(manifestProfiles.containsAll(profiles.values()));
-                for(String profile:profiles.values()) { JsonNode meta=attestation.path("expectedMeta").path(profile);schemas.validate("ModelStamp",meta);AiResponseValidator.require(meta.path("profileVersion").asString().equals(profile)); }
-                JsonNode embedding=attestation.path("expectedMeta").path(profile(AiOperation.EMBEDDINGS));
-                AiResponseValidator.require(embedding.path("model").equals(release.path("model").path("name")) && embedding.path("modelRevision").equals(release.path("model").path("revision")));
+                for(String profile:profiles.values()) for(JsonNode meta:stamps(attestation.path("expectedMeta").path(profile))) { schemas.validate("ModelStamp",meta);AiResponseValidator.require(meta.path("profileVersion").asString().equals(profile)); }
+                for(JsonNode embedding:stamps(attestation.path("expectedMeta").path(profile(AiOperation.EMBEDDINGS))))
+                    AiResponseValidator.require(embedding.path("model").equals(release.path("model").path("name")) && embedding.path("modelRevision").equals(release.path("model").path("revision")));
                 if(Files.size(Path.of(client.caCertificate()))>2*1024*1024) { rejected=true;return; }
                 AiResponseValidator.require(AiResponseValidator.hash(Files.readString(Path.of(client.caCertificate()))).equals(release.path("tls").path("caSha256").asString()));
             }
@@ -74,9 +74,24 @@ public class AiPipelineConfiguration {
             if(!Set.of("synthetic","fixture","test").contains(meta.path("provider").asString())) reject();
             return;
         }
-        JsonNode expected=attestation.path("expectedMeta").path(profile(operation));
-        for(String field:new String[]{"profileVersion","provider","model","modelRevision","promptVersion","schemaVersion","preprocessingVersion"}) if(!expected.path(field).equals(meta.path(field))) reject();
+        for(JsonNode expected:stamps(attestation.path("expectedMeta").path(profile(operation)))) if(matches(expected,meta)) return;
+        reject();
     }
+    /**
+     * expectedMeta.&lt;profile&gt;은 stamp 하나 또는 stamp 배열(1~8개)이다. 배열은 같은 profile이 요청에 따라 다른 meta를 내는 경우
+     * (derive-sound-1: 판정할 결론이 있으면 LLM 판정 meta, 없으면 규칙 meta)에 쓰고, 그중 하나와 7개 필드가 모두 같으면 통과한다.
+     */
+    private static java.util.List<JsonNode> stamps(JsonNode expected) {
+        if(expected.isObject()) return java.util.List.of(expected);
+        AiResponseValidator.require(expected.isArray() && !expected.isEmpty() && expected.size()<=8);
+        var values=new java.util.ArrayList<JsonNode>();expected.forEach(values::add);return values;
+    }
+    private static boolean matches(JsonNode expected,JsonNode meta) {
+        for(String field:new String[]{"profileVersion","provider","model","modelRevision","promptVersion","schemaVersion","preprocessingVersion"}) if(!expected.path(field).equals(meta.path(field))) return false;
+        return true;
+    }
+    /** 응답 meta 불일치·422 UNSUPPORTED_PROFILE로 격리됐거나 운영 설정이 거부된 상태. 재시작으로만 풀린다. */
+    public boolean quarantined() { return rejected; }
     public void quarantine() { rejected=true; }
     private void reject() { rejected=true;throw new AiCallException(AiCallException.Reason.PROFILE); }
 }

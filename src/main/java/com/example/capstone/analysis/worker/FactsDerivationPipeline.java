@@ -34,12 +34,14 @@ public class FactsDerivationPipeline {
         this.mapper=mapper;this.stages=stages;this.jobs=jobs;this.configuration=configuration;this.schemas=schemas;this.validator=validator;
     }
     public PipelineOutput run(Work work) {
-        var known=new TreeSet<String>();var facts=new LinkedHashMap<String,JsonNode>();var rows=new ArrayList<JsonNode>();var stamps=new LinkedHashMap<String,JsonNode>();var documents=new LinkedHashMap<String,JsonNode>();
+        var known=new TreeSet<String>();var knownRoles=new TreeSet<String>();var knownOps=new TreeSet<String>();var facts=new LinkedHashMap<String,JsonNode>();var rows=new ArrayList<JsonNode>();var stamps=new LinkedHashMap<String,JsonNode>();var documents=new LinkedHashMap<String,JsonNode>();
         work.documents().forEach(doc->documents.put(doc.path("noteId").asString(),doc));var cache=mapper.createArrayNode();
         var ordered=work.documents().stream().sorted(java.util.Comparator.comparing((JsonNode doc)->!doc.path("noteId").asString().equals(work.noteId().toString())).thenComparing(doc->doc.path("noteId").asString())).toList();
         for(var doc:ordered) {
             ObjectNode request=request(work,doc,AiOperation.FACTS);request.set("note",wire(doc));request.set("knownSubjects",mapper.valueToTree(known.stream().limit(500).toList()));
-            String domainKey=AiResponseValidator.hash(configuration.fingerprint()+":"+request.path("profileVersion")+":"+AiResponseValidator.canonicalJson(request.path("note"))+":"+request.path("knownSubjects"));
+            // 앞 노트에서 쓰인 역할·연산 key를 넘겨 노트 사이 같은 대상이 같은 key를 쓰게 한다(AI 404dabf facts-llm-3).
+            request.set("knownRoles",mapper.valueToTree(knownRoles.stream().limit(200).toList()));request.set("knownOps",mapper.valueToTree(knownOps.stream().limit(200).toList()));
+            String domainKey=AiResponseValidator.hash(configuration.fingerprint()+":"+request.path("profileVersion")+":"+AiResponseValidator.canonicalJson(request.path("note"))+":"+request.path("knownSubjects")+":"+request.path("knownRoles")+":"+request.path("knownOps"));
             String key="facts:"+domainKey;JsonNode response=jobs.cachedFacts(work,key,UUID.fromString(doc.path("noteId").asString()));boolean hit=response!=null;
             if(hit) validateCached(work,doc,response);else response=stages.execute(work,key,AiOperation.FACTS,request);
             JsonNode meta=response.path("meta");ObjectNode stamp=(ObjectNode)meta.deepCopy();stamp.remove("durationMs");stamps.put(AiResponseValidator.canonicalJson(stamp),stamp);
@@ -51,6 +53,7 @@ public class FactsDerivationPipeline {
                 String rowId=id("fact-row:"+work.id()+":"+alias);var row=mapper.createObjectNode().put("id",rowId);row.set("snapshotId",doc.path("snapshotId"));row.set("fact",fact);row.set("meta",meta);
                 var provenance=row.putObject("provenance");provenance.set("meta",meta);provenance.set("sourceFactId",source.path("factId"));provenance.set("sourceContext",response.path("context"));provenance.put("domainKey",domainKey);provenance.put("cacheHit",hit);provenance.put("wireAlias",alias);rows.add(row);
                 known.add(fact.path("subjectKey").asString());if(!fact.path("otherKey").isNull())known.add(fact.path("otherKey").asString());
+                if(fact.path("role").isString())knownRoles.add(fact.path("role").asString());if(fact.path("op").isString())knownOps.add(fact.path("op").asString());
             }
             if(facts.size()>400) throw new AiCallException(AiCallException.Reason.INPUT_LIMIT);
         }

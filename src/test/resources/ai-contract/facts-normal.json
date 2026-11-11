@@ -10,7 +10,7 @@
       "graphRevision": 1,
       "pipelineVersion": "ai-integration-2026-10-30-adopted.1"
     },
-    "profileVersion": "facts-llm-1",
+    "profileVersion": "facts-llm-3",
     "note": {
       "noteId": "00000000-0000-4000-8000-000000000001",
       "noteVersion": 1,
@@ -39,7 +39,7 @@
       "pipelineVersion": "ai-integration-2026-10-30-adopted.1"
     },
     "meta": {
-      "profileVersion": "facts-llm-1",
+      "profileVersion": "facts-llm-3",
       "provider": "synthetic",
       "model": "fixture",
       "modelRevision": "fixture-1",
@@ -56,6 +56,8 @@
         "subjectKey": "algorithm_a",
         "role": "queue",
         "op": "enqueue",
+        "roleLabel": null,
+        "opLabel": null,
         "expr": null,
         "case": null,
         "negated": false,

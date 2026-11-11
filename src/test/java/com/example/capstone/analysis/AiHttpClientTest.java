@@ -104,6 +104,25 @@ class AiHttpClientTest {
                     () -> client(server, TOKEN, Duration.ofSeconds(1)).ready(Set.of("embeddings-bge-m3-1"))).reason());
         }
     }
+    @Test void readinessDoesNotCompeteForTheAnalysisCallPermit() throws Exception {
+        var f = fixture();
+        try (var server = new ScriptedAiServer(TOKEN, AiHttpClient.REQUEST_LIMIT);
+             var executor = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor()) {
+            var env = new MockEnvironment(); env.setActiveProfiles("test");
+            var single = new AiHttpClient(new AiClientProperties(server.baseUri().toString(), TOKEN, null,
+                    Duration.ofSeconds(1), Duration.ofSeconds(5), Duration.ofSeconds(5), 1, 1, Duration.ZERO), mapper, schemas, validator, env);
+            var held = ScriptedAiServer.Reply.gated(200, f.path("response").toString()); server.enqueue(held);
+            var call = executor.submit(() -> single.call(AiOperation.FACTS, f.path("request"), Instant.now().plusSeconds(5)));
+            server.takeRequest(Duration.ofSeconds(2));
+            // 분석 호출이 유일한 자리를 쓰는 동안에도 readiness는 AI에 물을 수 있다.
+            server.enqueue(new ScriptedAiServer.Reply(200, "{\"status\":\"ready\",\"schemaVersion\":\"1.0\",\"profileVersions\":[\"facts-llm-3\"]}", Map.of()));
+            single.ready(Set.of("facts-llm-3"));
+            // 자리는 여전히 분석 호출 하나로 제한된다.
+            assertEquals(AiCallException.Reason.UNAVAILABLE, assertThrows(AiCallException.class,
+                    () -> single.call(AiOperation.FACTS, f.path("request"), Instant.now().plusSeconds(5))).reason());
+            held.release(); assertEquals(f.path("response"), call.get(5, java.util.concurrent.TimeUnit.SECONDS).body());
+        }
+    }
     @Test void deadlineCoversResponseBodyAndMalformedSuccessNeverRetries() throws Exception {
         try (var server = new ScriptedAiServer(TOKEN, AiHttpClient.REQUEST_LIMIT)) {
             var reply = ScriptedAiServer.Reply.gated(200, "{}"); server.enqueue(reply);

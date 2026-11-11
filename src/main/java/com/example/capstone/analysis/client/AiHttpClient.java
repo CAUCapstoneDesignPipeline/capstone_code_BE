@@ -84,8 +84,9 @@ public final class AiHttpClient {
     }
     private record Transport(URI base,HttpClient client) { }
     public boolean configured() { return http != null; }
+    /** readiness는 분석 호출의 동시 실행 자리를 쓰지 않는다. 호출 빈도는 AiActivationService의 짧은 캐시가 줄인다. */
     public void ready(Set<String> requiredProfiles) {
-        var response = exchange("health/ready", null, UUID.randomUUID().toString(), Duration.ofSeconds(3), Instant.now().plusSeconds(3), () -> { });
+        var response = exchange("health/ready", null, UUID.randomUUID().toString(), Duration.ofSeconds(3), Instant.now().plusSeconds(3), () -> { }, false);
         schemas.validate("Readiness", response.body());
         Set<String> actual = new HashSet<>(); response.body().path("profileVersions").forEach(n -> actual.add(n.asString()));
         if (!actual.containsAll(requiredProfiles)) throw new AiCallException(AiCallException.Reason.PROFILE);
@@ -105,13 +106,13 @@ public final class AiHttpClient {
         Duration callLimit=operation == AiOperation.EMBEDDINGS ? config.embeddingTimeout() : config.callTimeout();
         Duration readCeiling=Duration.ofSeconds(operation == AiOperation.EMBEDDINGS ? 35 : 125);
         var result = exchange(operation.path(), body, requestId,
-                callLimit.compareTo(readCeiling)<0?callLimit:readCeiling, deadline,reserveAttempt);
+                callLimit.compareTo(readCeiling)<0?callLimit:readCeiling, deadline,reserveAttempt,true);
         validator.validate(operation, payload, result.body());
         return result;
     }
-    private CallResult exchange(String path, byte[] body, String requestId, Duration timeout, Instant deadline,Runnable reserveAttempt) {
+    private CallResult exchange(String path, byte[] body, String requestId, Duration timeout, Instant deadline,Runnable reserveAttempt,boolean limited) {
         if (!configured()) throw configuration();
-        if (!permits.tryAcquire()) throw new AiCallException(AiCallException.Reason.UNAVAILABLE);
+        if (limited && !permits.tryAcquire()) throw new AiCallException(AiCallException.Reason.UNAVAILABLE);
         long started = System.nanoTime();
         try {
             AiCallException last = new AiCallException(AiCallException.Reason.UNAVAILABLE);
@@ -171,7 +172,7 @@ public final class AiHttpClient {
                 }
             }
             throw last;
-        } finally { permits.release(); }
+        } finally { if (limited) permits.release(); }
     }
     /**
      * 챗봇 SSE를 연다. 되돌릴 수 없는 스트림이라 재시도하지 않고 X-Attempt-Id·Idempotency-Key를 보내지 않는다.

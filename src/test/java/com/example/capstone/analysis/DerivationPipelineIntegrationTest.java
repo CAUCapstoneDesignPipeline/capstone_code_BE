@@ -39,7 +39,7 @@ class DerivationPipelineIntegrationTest extends ApiIntegrationSupport {
     @Autowired AnalysisWorkService work;
     @Autowired GraphAnalysisPipeline pipeline;
     @Autowired AnalysisWorker worker;
-    @BeforeEach void reset() { server.mode="normal";server.calculation=true;server.calculationState="sound";server.requests.clear(); }
+    @BeforeEach void reset() { server.mode="normal";server.calculation=true;server.calculationState="sound";server.roleLabel=null;server.requests.clear(); }
     UUID submit(UUID note) throws Exception { return UUID.fromString(json(call("POST","/api/notes/"+note+"/analysis",null).andExpect(status().isAccepted())).path("id").asString()); }
     UUID execute(UUID note) throws Exception { UUID id=submit(note);var job=work.claim();assertEquals(id,job.id());work.complete(job,pipeline.run(job));assertEquals("succeeded",jdbc.queryForObject("select status from analysis_job where id=?",String.class,id));return id; }
     String body(int i) { return server.derivationFixture.path("request").path("documents").get(i).path("body").asString(); }
@@ -99,6 +99,19 @@ class DerivationPipelineIntegrationTest extends ApiIntegrationSupport {
         assertEquals(2,jdbc.queryForObject("select count(distinct s.original_note_id) from analysis_result_evidence e join analysis_snapshot s on s.id=e.snapshot_id where e.job_id=?",Integer.class,job));
         assertEquals(1,jdbc.queryForObject("select count(distinct s.original_note_id) from analysis_result_evidence e join analysis_snapshot s on s.id=e.snapshot_id where e.job_id=? and e.claim_ref='premise'",Integer.class,job));
         assertEquals(0,json(call("GET","/api/candidates",null)).path("results").size());assertEquals(2,json(call("GET","/api/candidates?view=history",null)).path("results").size());
+    }
+    @Test void roleLabelsSurviveStorageAndDerivationRequestAndKnownKeysAreForwarded() throws Exception {
+        server.roleLabel="합성 역할 이름";UUID primary=note("알고리즘",null,body(0));note("구현",null,body(1));UUID job=execute(primary);
+        var facts=server.requests.stream().filter(r->r.has("knownSubjects")).toList();assertEquals(2,facts.size());
+        assertTrue(facts.getFirst().path("knownRoles").isEmpty() && facts.getFirst().path("knownOps").isEmpty());
+        assertEquals("[\"priority_queue\"]",facts.get(1).path("knownRoles").toString());assertTrue(facts.get(1).path("knownOps").toString().contains("decrease_key"));
+        var derive=server.requests.stream().filter(r->r.has("facts")).findFirst().orElseThrow();
+        assertTrue(derive.path("facts").valueStream().allMatch(f->f.has("roleLabel") && f.has("opLabel")));
+        assertTrue(derive.path("facts").valueStream().filter(f->f.path("role").isString()).allMatch(f->f.path("roleLabel").asString().equals("합성 역할 이름")));
+        int labelled=(int)derive.path("facts").valueStream().filter(f->f.path("role").isString()).count();assertTrue(labelled>0);
+        assertEquals(labelled,jdbc.queryForObject("select count(*) from analysis_fact where job_id=? and value->>'roleLabel'='합성 역할 이름'",Integer.class,job));
+        assertEquals(11,jdbc.queryForObject("select count(*) from analysis_fact where job_id=? and jsonb_exists(value,'opLabel')",Integer.class,job));
+        assertEquals(2,jdbc.queryForObject("select count(*) from analysis_result where job_id=? and detail->'derivation'->>'roleLabel'='우선순위 큐'",Integer.class,job));
     }
     @Test void moreThan400FactsFailsExplicitlyAndDoesNotPublishPartialSuccess() throws Exception {
         UUID primary=note("알고리즘",null,body(0));note("구현",null,body(1));server.mode="overflow";UUID job=submit(primary);worker.runOne();

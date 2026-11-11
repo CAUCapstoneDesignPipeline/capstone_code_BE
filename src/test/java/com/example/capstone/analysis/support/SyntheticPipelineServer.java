@@ -25,6 +25,31 @@ public final class SyntheticPipelineServer implements AutoCloseable {
     public volatile boolean calculation;
     public volatile String calculationState="sound";
     public final JsonNode derivationFixture=fixture();
+    /** true면 합성 meta 대신 AI 404dabf 모양의 meta(ATTESTED_META)로 답한다. derive-sound-1은 판정 유무에 따라 둘 중 하나다. */
+    public volatile boolean attested;
+    /** null이 아니면 /facts의 역할 있는 사실에 이 roleLabel을 붙인다(새 역할 key의 한국어 이름). */
+    public volatile String roleLabel;
+    /** AI 404dabf에서 각 profile이 내는 meta. 결정적 profile의 modelRevision은 404dabf 소스의 code_revision 값이고 extract·embeddings는 합성 값이다. */
+    public static final java.util.Map<String,List<java.util.Map<String,String>>> ATTESTED_META=attestedMeta();
+    private static java.util.Map<String,List<java.util.Map<String,String>>> attestedMeta() {
+        var m=new java.util.LinkedHashMap<String,List<java.util.Map<String,String>>>();
+        m.put("extract-det-3",List.of(stamp("extract-det-3","local","kiwi-tfidf-markdown","cfg-synthetic+idf-synthetic","rules-synthetic","md-mask-synthetic")));
+        m.put("embeddings-bge-m3-1",List.of(stamp("embeddings-bge-m3-1","local","BAAI/bge-m3","5617a9f61b028005a4858fdac845db406aefb181",null,"synthetic-preprocessing")));
+        m.put("merge-det-1",List.of(stamp("merge-det-1","local","rules-identity","2bae18113165","merge-rules-1","md-plain-1")));
+        m.put("bridges-det-1",List.of(stamp("bridges-det-1","local","rules-identity","2bae18113165","bridges-rules-1","md-plain-1")));
+        m.put("edges-det-1",List.of(stamp("edges-det-1","local","rules-entailment-cues","01eac41d61ae","edges-cues-1","md-plain-1")));
+        m.put("explain-llm-8",List.of(stamp("explain-llm-8","anthropic","claude-opus-5-5","claude-opus-5-5@6eaae9687edc","explain-llm-8","md-plain-1")));
+        m.put("explanation-det-3",List.of(stamp("explanation-det-3","local","rules-explanation-check","0b664d58ae63","explanation-rules-2","md-plain-1")));
+        m.put("links-det-1",List.of(stamp("links-det-1","local","kiwi-tfidf-adamic-adar","75b71bb053e0","links-det-1","md-plain-1")));
+        m.put("facts-llm-3",List.of(stamp("facts-llm-3","anthropic","claude-opus-5-5","claude-opus-5-5@f378a4a49ec9","facts-llm-3","md-plain-1")));
+        m.put("derive-sound-1",List.of(stamp("derive-sound-1","local+anthropic","claude-opus-5-5","claude-opus-5-5@92984930785c","derive-sound-1","md-plain-1"),
+                stamp("derive-sound-1","local","llm","92984930785c","derive-sound-1","md-plain-1")));
+        return java.util.Collections.unmodifiableMap(m);
+    }
+    private static java.util.Map<String,String> stamp(String profile,String provider,String model,String revision,String prompt,String preprocessing) {
+        var s=new java.util.LinkedHashMap<String,String>();s.put("profileVersion",profile);s.put("provider",provider);s.put("model",model);s.put("modelRevision",revision);
+        s.put("promptVersion",prompt);s.put("schemaVersion","1.0");s.put("preprocessingVersion",preprocessing);return java.util.Collections.unmodifiableMap(s);
+    }
     private JsonNode fixture() { try(var input=getClass().getResourceAsStream("/ai-contract/operations/derive.json")) { return mapper.readTree(input); } catch(Exception e) { throw new IllegalStateException(e); } }
     public SyntheticPipelineServer() {
         try {
@@ -36,7 +61,7 @@ public final class SyntheticPipelineServer implements AutoCloseable {
                     if(path.equals("/health/ready")) {
                         if(readiness.equals("timeout"))Thread.sleep(4000);
                         if(readiness.equals("unavailable")) { exchange.sendResponseHeaders(503,-1);return; }
-                        var ready=mapper.createObjectNode().put("status","ready").put("schemaVersion","1.0");ready.set("profileVersions",mapper.valueToTree(List.of("extract-det-3","embeddings-bge-m3-1","merge-det-1","bridges-det-1","edges-det-1","explain-llm-8","explanation-det-3","links-det-1","facts-llm-1","derive-sound-1")));if(readiness.equals("missing"))((ArrayNode)ready.path("profileVersions")).remove(8);response=ready;
+                        var ready=mapper.createObjectNode().put("status","ready").put("schemaVersion","1.0");ready.set("profileVersions",mapper.valueToTree(List.of("extract-det-3","embeddings-bge-m3-1","merge-det-1","bridges-det-1","edges-det-1","explain-llm-8","explanation-det-3","links-det-1","facts-llm-3","derive-sound-1")));if(readiness.equals("missing"))((ArrayNode)ready.path("profileVersions")).remove(8);response=ready;
                     } else {
                         byte[] bytes=exchange.getRequestBody().readNBytes(2097153);if(bytes.length>2097152) { exchange.sendResponseHeaders(413,-1);return; }
                         JsonNode request=mapper.readTree(bytes);requests.add(request);if(mode.equals("blocked") && path.equals("/explanations")) { entered.countDown();release.await(10,java.util.concurrent.TimeUnit.SECONDS); }response=respond(path,request);
@@ -95,9 +120,10 @@ public final class SyntheticPipelineServer implements AutoCloseable {
                 }
                 if(body.startsWith("기존 결론")) {
                     var f=facts.addObject().put("factId","stated#1").put("kind","stated_result").put("subject","다익스트라").put("subjectKey","dijkstra").put("role","priority_queue").put("expr","O((V+E)*log(V))").put("case","worst").put("negated",false).put("origin","extracted");
-                    for(String field:List.of("op","condition","other","otherKey"))f.putNull(field);
+                    for(String field:List.of("op","roleLabel","opLabel","condition","other","otherKey"))f.putNull(field);
                     var e=f.putObject("evidence").put("startOffset",0).put("endOffset",body.length()).put("quote",body);for(String field:List.of("noteId","noteVersion","bodySha256"))e.set(field,doc.path(field));
                 }
+                if(roleLabel!=null) for(var f:facts) if(f.path("role").isString())((ObjectNode)f).put("roleLabel",roleLabel);
                 if(mode.equals("known-change") && body.contains("dijkstra")) for(var f:facts)((ObjectNode)f).put("subjectKey","changed_subject");
                 if(mode.equals("overflow") && !facts.isEmpty()) { JsonNode template=facts.get(0).deepCopy();facts.removeAll();for(int i=0;i<300;i++) { ObjectNode fact=(ObjectNode)template.deepCopy();fact.put("factId","synthetic#"+i);facts.add(fact); } }
             }
@@ -136,6 +162,13 @@ public final class SyntheticPipelineServer implements AutoCloseable {
                 r.put("overall","pass");r.putArray("gaps");var verdicts=r.putArray("claimVerdicts");for(var claim:q.path("explanation").path("claims")) { var v=verdicts.addObject().put("claimRef",claim.path("claimRef").asString()).put("outcome","pass").put("reason","합성 검증");v.set("evidenceIds",claim.path("evidenceIds")); }
             }
             default -> throw new IllegalArgumentException("Unsupported synthetic operation "+path);
+        }
+        if(attested && !mode.equals("profile-mismatch")) {
+            var choices=ATTESTED_META.get(q.path("profileVersion").asString());
+            // AI는 판정할 결론이 있을 때만 LLM 판정을 부르고 그때만 LLM meta를 낸다(app/api/v1/derive.py).
+            boolean judged=r.path("derivations").valueStream().anyMatch(d->!d.path("soundness").isNull());
+            var chosen=path.equals("/derivations") && !judged?choices.getLast():choices.getFirst();
+            var meta=(ObjectNode)r.path("meta");chosen.forEach(meta::put);
         }
         return r;
     }
