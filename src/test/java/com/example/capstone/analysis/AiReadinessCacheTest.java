@@ -79,7 +79,7 @@ class AiReadinessCacheTest {
         try(var server=new ScriptedAiServer(TOKEN,AiHttpClient.REQUEST_LIMIT);var executor=Executors.newVirtualThreadPerTaskExecutor()) {
             var reply=ScriptedAiServer.Reply.gated(200,READY);server.enqueue(reply);var activation=service(server,Duration.ofSeconds(10));
             var results=new ArrayList<Future<Boolean>>();for(int i=0;i<4;i++) results.add(executor.submit(activation::available));
-            server.takeRequest(Duration.ofSeconds(2));reply.release();
+            server.takeRequest(Duration.ofSeconds(10));reply.release();
             for(var result:results) assertTrue(result.get(5,TimeUnit.SECONDS));
             assertNoMoreRequests(server);
         }

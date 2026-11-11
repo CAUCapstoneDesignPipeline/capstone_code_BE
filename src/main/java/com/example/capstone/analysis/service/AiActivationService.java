@@ -22,7 +22,8 @@ public class AiActivationService {
     private final AiHttpClient client;
     private final ObjectProvider<AnalysisPipeline> pipeline;
     private final com.example.capstone.analysis.config.AiFeatureGate gate;
-    private final Object readinessLock=new Object();
+    // synchronized 대신 ReentrantLock: 가상 스레드가 잠금 안에서 HTTP 응답을 기다리거나 잠금을 기다릴 때 carrier를 붙잡지(pin) 않는다.
+    private final java.util.concurrent.locks.ReentrantLock readinessLock=new java.util.concurrent.locks.ReentrantLock();
     private volatile Readiness readiness;
     /** 마지막 readiness 결과. failure가 null이면 준비됨. expiresAt은 System.nanoTime 기준이다. */
     private record Readiness(java.util.Set<String> profiles,long expiresAt,AiCallException.Reason failure) { }
@@ -55,13 +56,16 @@ public class AiActivationService {
         long ttl=execution.readinessCacheTtl().toNanos();
         if(ttl<=0) { client.ready(required);return; }
         var cached=readiness;
-        if(!fresh(cached,required)) synchronized(readinessLock) {
-            cached=readiness;
-            if(!fresh(cached,required)) {
-                AiCallException.Reason failure=null;
-                try { client.ready(required); } catch(AiCallException unavailable) { failure=unavailable.reason(); }
-                cached=new Readiness(java.util.Set.copyOf(required),System.nanoTime()+ttl,failure);readiness=cached;
-            }
+        if(!fresh(cached,required)) {
+            readinessLock.lock();
+            try {
+                cached=readiness;
+                if(!fresh(cached,required)) {
+                    AiCallException.Reason failure=null;
+                    try { client.ready(required); } catch(AiCallException unavailable) { failure=unavailable.reason(); }
+                    cached=new Readiness(java.util.Set.copyOf(required),System.nanoTime()+ttl,failure);readiness=cached;
+                }
+            } finally { readinessLock.unlock(); }
         }
         if(cached.failure()!=null) throw new AiCallException(cached.failure());
     }
