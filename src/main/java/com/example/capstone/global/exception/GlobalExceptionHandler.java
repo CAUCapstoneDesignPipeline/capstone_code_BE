@@ -65,6 +65,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         if (status.is5xxServerError()) {
             return ErrorResponse.of(ErrorCode.INTERNAL, INTERNAL_ERROR, Map.of());
         }
+        if (status.value() == 413) { return ErrorResponse.of(ErrorCode.UPLOAD_LIMIT_EXCEEDED,"파일 처리 한도를 초과했습니다.",Map.of()); }
         if (status.value() == 404) {
             return ErrorResponse.of(ErrorCode.NOT_FOUND, "요청한 대상을 찾을 수 없습니다.", Map.of());
         }

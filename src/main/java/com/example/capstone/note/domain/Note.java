@@ -19,6 +19,7 @@ public class Note {
     @Column(nullable = false, columnDefinition = "text") private String title;
     @Column(nullable = false, columnDefinition = "text") private String body;
     @Version @Column(nullable = false) private int version;
+    @Column(name = "input_revision", nullable = false) private long inputRevision;
     @Column(name = "created_at", nullable = false) private Instant createdAt;
     @Column(name = "updated_at", nullable = false) private Instant updatedAt;
     protected Note() { }
@@ -31,6 +32,8 @@ public class Note {
         // Even a same-content save is a versioned operation.
         this.updatedAt=now.isAfter(updatedAt)?now:updatedAt.plusNanos(1000);
     }
+    public long getInputRevision() { return inputRevision; }
+    public UUID getUserId() { return userId; }
     public UUID getId() { return id; }
     public UUID getTopicId() { return topicId; }
     public String getTitle() { return title; }

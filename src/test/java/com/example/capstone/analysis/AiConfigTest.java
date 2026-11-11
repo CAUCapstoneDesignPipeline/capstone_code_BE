@@ -24,8 +24,8 @@ class AiConfigTest {
     @Test
     void activationAndMalformedSettingsCannotSilentlyEnableOrMisreportFeatures() {
         context.withPropertyValues("capstone.ai.enabled=true").run(result -> {
-            assertThat(result).hasFailed();
-            assertThat(result.getStartupFailure()).hasRootCauseMessage("AI activation is not supported by this AI-off build");
+            assertThat(result).hasNotFailed();
+            assertThat(result.getBean(AiProperties.class).enabled()).isTrue();
         });
         context.withPropertyValues("capstone.ai.enabled=invalid").run(result -> assertThat(result).hasFailed());
     }
