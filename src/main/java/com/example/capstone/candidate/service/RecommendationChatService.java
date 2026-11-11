@@ -11,6 +11,8 @@ import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.ObjectNode;
 import com.example.capstone.analysis.client.AiCallException;
 import com.example.capstone.analysis.client.AiHttpClient;
+import com.example.capstone.analysis.config.AiFeatureGate;
+import com.example.capstone.analysis.config.AiPipelineConfiguration;
 import com.example.capstone.analysis.repository.RecommendationRepository;
 import com.example.capstone.candidate.dto.request.RecommendationChatRequest;
 import com.example.capstone.global.exception.ApiException;
@@ -28,13 +30,17 @@ public class RecommendationChatService {
     private final AiHttpClient client;
     private final ObjectMapper mapper;
     private final ChatRelay relay;
-    public RecommendationChatService(RecommendationRepository repository,AiHttpClient client,ObjectMapper mapper) {
-        this.repository=repository;this.client=client;this.mapper=mapper;this.relay=new ChatRelay(mapper);
+    private final AiFeatureGate gate;
+    private final AiPipelineConfiguration configuration;
+    public RecommendationChatService(RecommendationRepository repository,AiHttpClient client,ObjectMapper mapper,AiFeatureGate gate,AiPipelineConfiguration configuration) {
+        this.repository=repository;this.client=client;this.mapper=mapper;this.relay=new ChatRelay(mapper);this.gate=gate;this.configuration=configuration;
     }
     public SseEmitter chat(UUID user,UUID recommendation,RecommendationChatRequest request) {
         JsonNode card=repository.chatCard(user,recommendation);
         if(card==null) throw new ApiException(ErrorCode.NOT_FOUND,"추천을 찾을 수 없습니다.");
         if(!client.configured()) throw unavailable("NOT_DEPLOYED");
+        // 분석과 같은 끄기 수단(release 승인·suspension 파일·응답 불일치 격리)을 따른다.
+        if(!gate.allowed() || configuration.quarantined()) throw unavailable("MISCONFIGURED");
         AiHttpClient.ChatResponse response;
         try { response=client.chat(payload(card,request)); }
         catch(AiCallException failure) { throw failure.reason()==AiCallException.Reason.INPUT_LIMIT?tooLarge():unavailable(failure.reason()==AiCallException.Reason.TIMEOUT?"TIMEOUT":"UNAVAILABLE"); }
