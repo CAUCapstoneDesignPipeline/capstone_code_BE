@@ -41,7 +41,6 @@ capstone:
       ca-certificate: ${CAPSTONE_AI_CA_CERTIFICATE:}
   auth:
     app-url: ${CAPSTONE_APP_URL:http://localhost:5173}
-    allowed-emails: ${CAPSTONE_ALLOWED_EMAILS:}
     google:
       enabled: ${CAPSTONE_GOOGLE_ENABLED:false}
       client-id: ${CAPSTONE_GOOGLE_CLIENT_ID:}

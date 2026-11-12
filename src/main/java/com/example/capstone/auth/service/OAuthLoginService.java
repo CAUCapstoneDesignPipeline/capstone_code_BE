@@ -1,12 +1,7 @@
 package com.example.capstone.auth.service;
 
-import java.util.Arrays;
-import java.util.Locale;
-import java.util.Set;
 import java.util.UUID;
-import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
-import com.example.capstone.auth.config.AuthProperties;
 import com.example.capstone.global.exception.ApiException;
 import com.example.capstone.global.exception.ErrorCode;
 
@@ -16,12 +11,9 @@ public class OAuthLoginService {
     private final OAuthAttemptService attempts;
     private final IdentityLoginService identities;
     private final RefreshTokenService refresh;
-    private final Set<String> allowedEmails;
     public OAuthLoginService(GoogleOAuthClient google, OAuthAttemptService attempts, IdentityLoginService identities,
-            RefreshTokenService refresh, AuthProperties properties) {
+            RefreshTokenService refresh) {
         this.google = google; this.attempts = attempts; this.identities = identities; this.refresh = refresh;
-        this.allowedEmails = Arrays.stream((properties.allowedEmails() == null ? "" : properties.allowedEmails()).split(","))
-                .map(String::trim).map(s -> s.toLowerCase(Locale.ROOT)).filter(s -> !s.isEmpty()).collect(Collectors.toUnmodifiableSet());
     }
     public void requireProvider(String provider) {
         if (!"google".equals(provider) || !google.enabled()) {
@@ -36,11 +28,12 @@ public class OAuthLoginService {
         try {
             var profile = google.exchange(code, attempt.getCodeVerifier(), attempt.getNonce());
             verified = profile.emailVerified();
+            // Anyone with a provider-verified email may sign up; existing identities always log in.
             UUID id = identities.login("google", profile.subject(), profile.email(), verified, profile.name(),
-                    verified && profile.email() != null && allowedEmails.contains(profile.email().toLowerCase(Locale.ROOT)));
+                    verified && profile.email() != null);
             return new Result(refresh.issue(id), attempt.getReturnTo(), null);
         } catch (IdentityLoginService.SignupNotAllowedException exception) {
-            return Result.failed(verified ? "signup_not_allowed" : "email_not_verified");
+            return Result.failed("email_not_verified");
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt(); return Result.failed("oauth_failed");
         } catch (Exception exception) { return Result.failed("oauth_failed"); }
