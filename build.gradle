@@ -18,8 +18,35 @@ repositories {
 
 configurations { uploadValidation }
 
+// Spring AI 2.0.2 POMs declare Boot 4.1.2, Spring Framework 7.0.10, Jackson 3.1.7 and Micrometer 1.17.2.
+// Keep those version-aligned families on the Boot 4.1.1 BOM so no family ends up with mixed patch versions.
+def bootVersion = org.springframework.boot.gradle.plugin.SpringBootPlugin.package.implementationVersion
+def bootBomFile = configurations.detachedConfiguration(
+        dependencies.create("org.springframework.boot:spring-boot-dependencies:${bootVersion}@pom")).singleFile
+def bootBom = new groovy.xml.XmlSlurper().parse(bootBomFile).properties
+def alignedFamilies = [
+        'org.springframework.boot': bootVersion,
+        'org.springframework': bootBom.'spring-framework.version'.text(),
+        'tools.jackson.core': bootBom.'jackson-bom.version'.text(),
+        'tools.jackson.dataformat': bootBom.'jackson-bom.version'.text(),
+        'tools.jackson': bootBom.'jackson-bom.version'.text(),
+        'io.micrometer': bootBom.'micrometer.version'.text(),
+]
+configurations.configureEach {
+    resolutionStrategy.eachDependency { details ->
+        def version = alignedFamilies[details.requested.group]
+        boolean micrometerModule = details.requested.group != 'io.micrometer' || details.requested.name.startsWith('micrometer-')
+        if (version && micrometerModule && details.requested.name != 'spring-boot-dependencies') {
+            details.useVersion(version)
+            details.because('keep Spring AI transitive versions on the Spring Boot BOM')
+        }
+    }
+}
+
 dependencies {
     implementation platform(org.springframework.boot.gradle.plugin.SpringBootPlugin.BOM_COORDINATES)
+    // Spring AI 2.0.x supports Boot 4.0.x/4.1.x; not managed by the Boot BOM. Used only for the MCP server.
+    implementation platform('org.springframework.ai:spring-ai-bom:2.0.2')
     implementation 'org.apache.pdfbox:pdfbox:3.0.8'
     uploadValidation 'org.apache.pdfbox:pdfbox:3.0.8'
     implementation 'org.springframework.boot:spring-boot-starter-webmvc'
@@ -28,6 +55,7 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
     implementation 'org.springframework.boot:spring-boot-starter-flyway'
     implementation 'org.springframework.boot:spring-boot-starter-security-oauth2-resource-server'
+    implementation 'org.springframework.ai:spring-ai-starter-mcp-server-webmvc'
     // Spring Boot 4 support; springdoc is not managed by the Boot BOM.
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.1.1'
     runtimeOnly 'org.flywaydb:flyway-database-postgresql'
