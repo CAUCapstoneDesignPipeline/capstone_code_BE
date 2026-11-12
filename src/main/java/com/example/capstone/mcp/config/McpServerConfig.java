@@ -20,7 +20,9 @@ import io.modelcontextprotocol.server.McpStatelessServerFeatures.SyncToolSpecifi
 import tools.jackson.databind.json.JsonMapper;
 
 import com.example.capstone.mcp.tool.McpToolSupport;
+import com.example.capstone.mcp.tool.NoteReadTools;
 import com.example.capstone.mcp.tool.TopicTools;
+import org.springframework.ai.mcp.customizer.McpStatelessSyncServerCustomizer;
 
 @Configuration
 @EnableConfigurationProperties(McpProperties.class)
@@ -48,8 +50,18 @@ public class McpServerConfig {
                 .build();
     }
 
+    /**
+     * SDK 기본 입력 검사는 오류 모양이 설계안 2.6과 다르고 실패한 인자 값을 경고 로그에 남긴다.
+     * 끄고 McpArguments가 VALIDATION_FAILED로 검사한다.
+     */
     @Bean
-    List<SyncToolSpecification> capstoneMcpTools(TopicTools topicTools) {
-        return List.of(topicTools.listTopics());
+    McpStatelessSyncServerCustomizer capstoneMcpInputValidation() {
+        return server -> server.validateToolInputs(false);
+    }
+
+    /** 도구 목록 순서는 설계안 2.3 요약표 순서를 따른다. */
+    @Bean
+    List<SyncToolSpecification> capstoneMcpTools(TopicTools topicTools, NoteReadTools noteReadTools) {
+        return List.of(topicTools.listTopics(), noteReadTools.searchNotes(), noteReadTools.getNote());
     }
 }
