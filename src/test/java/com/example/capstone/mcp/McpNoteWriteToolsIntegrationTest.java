@@ -45,7 +45,7 @@ class McpNoteWriteToolsIntegrationTest extends McpIntegrationSupport {
         List<String> names = new ArrayList<>();
         tools.forEach(tool -> names.add(tool.path("name").asString()));
         assertThat(names).containsExactly("list_topics", "search_notes", "get_note",
-                "create_note", "update_note", "rename_note");
+                "create_note", "update_note", "rename_note", "create_topic", "move_notes");
 
         JsonNode create = tool(tools, "create_note");
         assertThat(create.path("description").asString()).isEqualTo("새 노트를 만든다. 사용자가 저장을 요청했을 때만 쓴다. "

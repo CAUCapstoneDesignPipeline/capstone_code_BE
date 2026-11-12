@@ -82,7 +82,9 @@ class McpServerSpikeIntegrationTest extends McpIntegrationSupport {
             String expected = requested.equals("2026-07-28") ? "2025-11-25" : requested;
             assertThat(result.path("protocolVersion").asString()).isEqualTo(expected);
             assertThat(result.path("serverInfo").path("name").asString()).isEqualTo("capstone-notes");
+            assertThat(result.toString()).doesNotContain(":null");
         }
+        assertThat(rpc(bearer, "tools/list", Map.of()).toString()).doesNotContain(":null");
     }
 
     @Test
