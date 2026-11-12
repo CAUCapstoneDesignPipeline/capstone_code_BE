@@ -91,7 +91,7 @@ class GoogleLoginIntegrationTest {
                             .issueTime(Date.from(Instant.now().minusSeconds(10)))
                             .expirationTime(Date.from(Instant.now().plusSeconds(mode.equals("expired") ? -1 : 300)))
                             .claim("nonce", mode.equals("nonce") ? "wrong" : grant.nonce())
-                            .claim("email",mode.equals("notallowed") ? "outside@example.com" : "allowed@example.com")
+                            .claim("email",mode.equals("outside") ? "outside@example.com" : "allowed@example.com")
                             .claim("email_verified",!mode.equals("unverified")).claim("name","테스트 사용자").build();
                     var signed = new SignedJWT(new JWSHeader.Builder(JWSAlgorithm.RS256).keyID("fixture").type(JOSEObjectType.JWT).build(),claims);
                     signed.sign(new RSASSASigner(mode.equals("signature") ? new RSAKeyGenerator(2048).generate() : key));
@@ -112,7 +112,6 @@ class GoogleLoginIntegrationTest {
         registry.add("capstone.auth.google.authorization-uri",() -> base + "/authorize");
         registry.add("capstone.auth.google.token-uri",() -> base + "/token");
         registry.add("capstone.auth.google.jwks-uri",() -> base + "/jwks");
-        registry.add("capstone.auth.allowed-emails",() -> "allowed@example.com");
     }
     @AfterAll static void stop() { provider.stop(0); }
     @Autowired private MockMvc mvc;
@@ -144,9 +143,9 @@ class GoogleLoginIntegrationTest {
     @Test
     void rejectsProviderClaimsEmailsAndInvalidReturnPathsWithoutCreatingUsers() throws Exception {
         long before = jdbc.queryForObject("select count(*) from app_user",Long.class);
-        for (String mode : List.of("nonce","issuer","audience","expired","signature","notallowed","unverified")) {
+        for (String mode : List.of("nonce","issuer","audience","expired","signature","unverified")) {
             var result = finish(start("/"), UUID.randomUUID().toString(), mode);
-            String error = mode.equals("notallowed") ? "signup_not_allowed" : mode.equals("unverified") ? "email_not_verified" : "oauth_failed";
+            String error = mode.equals("unverified") ? "email_not_verified" : "oauth_failed";
             assertThat(result.getResponse().getHeader("Location")).endsWith("error=" + error);
             assertThat(result.getResponse().getHeaders("Set-Cookie")).noneMatch(s -> s.startsWith("CAPSTONE_REFRESH="));
         }
@@ -157,8 +156,18 @@ class GoogleLoginIntegrationTest {
         assertThat(jdbc.queryForObject("select count(*) from app_user",Long.class)).isEqualTo(before);
         // Enabling an incomplete configuration must fail, rather than advertise unusable login.
         var incomplete = new AuthProperties(properties.appUrl(),properties.jwt(),
-                new AuthProperties.Google(true,"","",properties.google().redirectUri(),properties.google().authorizationUri(),properties.google().tokenUri(),properties.google().jwksUri()),"");
+                new AuthProperties.Google(true,"","",properties.google().redirectUri(),properties.google().authorizationUri(),properties.google().tokenUri(),properties.google().jwksUri()));
         assertThatThrownBy(() -> new GoogleOAuthClient(incomplete,json,environment,java.time.Clock.systemUTC())).isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void anyProviderVerifiedEmailCanSignUp() throws Exception {
+        String subject = UUID.randomUUID().toString();
+        var result = finish(start("/"), subject, "outside");
+        assertThat(result.getResponse().getHeader("Location")).contains("/auth/callback");
+        assertThat(result.getResponse().getHeaders("Set-Cookie")).anyMatch(s -> s.startsWith("CAPSTONE_REFRESH="));
+        assertThat(jdbc.queryForObject("select u.email from app_user u join user_identity i on i.user_id=u.id where i.provider='google' and i.provider_subject=?",
+                String.class, subject)).isEqualTo("outside@example.com");
     }
 
     @Test
