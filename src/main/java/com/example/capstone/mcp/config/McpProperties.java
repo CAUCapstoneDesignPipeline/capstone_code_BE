@@ -16,6 +16,7 @@ public record McpProperties(boolean enabled, boolean writeEnabled, @DefaultValue
             @DefaultValue("30000") int noteMaxChars,
             @DefaultValue("20") int searchDefaultLimit,
             @DefaultValue("50") int searchMaxLimit,
-            @DefaultValue("100") int searchQueryMaxChars) {
+            @DefaultValue("100") int searchQueryMaxChars,
+            @DefaultValue("50") int moveMaxNotes) {
     }
 }
