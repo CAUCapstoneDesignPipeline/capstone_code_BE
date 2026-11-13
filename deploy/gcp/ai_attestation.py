@@ -78,10 +78,11 @@ def table(text, variable, constructor):
 
 
 class Source:
-    """AI repository files at one commit, as a mapping path -> bytes reader (a checkout or git show)."""
+    """AI repository files at one commit: `read(path) -> bytes`, and `tree(path) -> git tree id` of a directory."""
 
-    def __init__(self, read):
+    def __init__(self, read, tree=None):
         self.read = read
+        self.tree = tree
 
     def profiles(self):
         config = self.read('app/core/config.py').decode()

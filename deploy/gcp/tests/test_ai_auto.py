@@ -44,6 +44,9 @@ class FakeSource:
     def code_revision(self, files):
         return sha(self.code)[:12]
 
+    def tree(self, path):
+        return 'concepts-tree-1' if not getattr(self, 'concepts', None) else self.concepts
+
 
 def ai_release(name='ai-fixture-v3', image=AI_IMAGE, source='b' * 40):
     return {'schemaVersion': 1, 'kind': 'ai', 'releaseId': name, 'image': image, 'sourceSha': source,
@@ -97,7 +100,8 @@ class AiAutoTest(unittest.TestCase):
         target = bundle['target']
         self.assertEqual((target['releaseId'], target['sourceSha'], target['image'].split('@')[1]),
                          ('cd-ai-20261114234640-9999999', '9' * 40, DIGEST))
-        self.assertEqual({k for k in release if release[k] != target[k]}, {'releaseId', 'sourceSha', 'image'})
+        self.assertEqual({k for k in release if release[k] != target[k]}, {'releaseId', 'sourceSha', 'image', 'idf'})
+        self.assertEqual(target['idf'], dict(release['idf'], sourceSha='9' * 40))
         widen, narrow = bundle['widen'], bundle['narrow']
         self.assertEqual(widen['releaseManifest'], release)
         self.assertEqual(narrow['releaseManifest'], target)
@@ -122,6 +126,8 @@ class AiAutoTest(unittest.TestCase):
         be = {'Derivation': {'properties': {'a': {'type': 'string'}}, 'required': ['a']}}
         newer = {'Derivation': {'properties': {'a': {'type': 'string'}, 'b': {'type': 'string'}}, 'required': ['a', 'b']}}
         relaxed = {'Derivation': {'properties': {'a': {'type': 'string'}, 'b': {'type': 'string'}}, 'required': ['a']}}
+        changed = FakeSource(b'v2', ['extract-hybrid-1'])
+        changed.concepts = 'concepts-tree-2'
         self.assertTrue(plan(state, ai_state, release, installed, sources, relaxed, newer)['narrow'])
         for name, change in [
                 ('schema', lambda: plan(state, ai_state, release, installed, sources, be, newer)),
@@ -129,7 +135,8 @@ class AiAutoTest(unittest.TestCase):
                 ('wrong stamps', lambda: plan(state, ai_state, release, installed, dict(sources, **{'b' * 40: FakeSource(b'other')}))),
                 ('dropped profile', lambda: plan(state, ai_state, release, installed, dict(sources, **{'9' * 40: FakeSource(b'v2')}))),
                 ('records disagree', lambda: plan(state, dict(ai_state, current='ai-other'), dict(release, releaseId='ai-other'), installed, sources)),
-                ('no previous', lambda: plan(state, ai_state, release, installed, sources, operation='rollback'))]:
+                ('no previous', lambda: plan(state, ai_state, release, installed, sources, operation='rollback')),
+                ('concepts changed', lambda: plan(state, ai_state, release, installed, dict(sources, **{'9' * 40: changed})))]:
             with self.subTest(name), self.assertRaises(ReleaseError):
                 change()
         self.assertEqual(att.schema_problems(be, newer), ['/Derivation/properties/b'])
@@ -190,6 +197,16 @@ class AiAutoTest(unittest.TestCase):
         cloud.objects['state.json'] = {'current': 'ai-elsewhere', 'previous': None}
         with self.assertRaises(ReleaseError):
             ai_auto.ai_step({}, cloud, bundle, ssh, sleep=lambda s: None)
+        cloud = Cloud()
+        rejected = []
+
+        def silent(command, check=True):
+            rejected.append(command)
+            return b'inactive\n' if command.startswith('systemctl') else (None if command.startswith('sudo cat') else b'')
+
+        with self.assertRaises(ReleaseError):
+            ai_auto.ai_step({}, cloud, bundle, silent, sleep=lambda s: None)
+        self.assertLess(len(rejected), 6)
         failed = json.dumps({'requestHash': ai_auto.ai_digest(request), 'phase': 'reverted'}).encode()
         cloud = Cloud()
         with self.assertRaises(ReleaseError):

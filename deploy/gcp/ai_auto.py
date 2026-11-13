@@ -43,6 +43,9 @@ WORKFLOW = REPOSITORY + '/.github/workflows/gcp-cd.yml@' + REF
 AI_BUCKET = 'capsnote-169516793433-ai-releases'
 AI_IMAGE = re.escape('asia-northeast3-docker.pkg.dev/capsnote/capstone-ai/ai@') + DIGEST
 AI_CONTENT = '/etc/capstone-gcp/ai/'
+# The pinned IDF object is reused while the concept extraction code that reads it is unchanged
+# (AI manifest.py requires idf.sourceSha == sourceSha; the AI server also refuses an IDF config mismatch).
+IDF_CODE = 'app/services/concepts'
 STEPS = ('validate', 'plan', 'widen', 'ai', 'narrow')
 
 
@@ -77,6 +80,7 @@ def derive_ai(base, source, digest, now):
     target['sourceSha'] = source
     if (target['image'], target['sourceSha']) == (base['image'], base['sourceSha']):
         return None
+    target['idf'] = dict(base['idf'], sourceSha=source)
     target['releaseId'] = ai_release_id(source, now)
     require(match(AI_IMAGE, target['image']) and match(ID, target['releaseId']), 'Invalid AI target')
     return target
@@ -141,6 +145,10 @@ def plan(app, ai_state, ai_current, ai_previous, installed, sources, be_schemas,
             return {'noop': True}
     tsource = sources[target['sourceSha']]
     require(set(target['profiles']) <= att.listed(tsource), 'Target AI source no longer serves a listed profile')
+    if operation == 'deploy':
+        old = sources[ai_current['sourceSha']]
+        require(old.tree(IDF_CODE) == tsource.tree(IDF_CODE) and old.profiles()[1] == tsource.profiles()[1],
+                'Concept extraction changed; the pinned IDF needs a reviewed rebuild (manual release)')
     if exported is None:
         # A rollback returns to an AI that already served this BE contract line; there is no export job for it.
         require(operation == 'rollback', 'Schema export required')
@@ -250,8 +258,13 @@ def ai_step(env, cloud, bundle, ssh, sleep=time.sleep):
     operation = request['operationId']
     ssh(f'sudo systemd-run --unit=capstone-ai-{operation} --collect --property=Type=exec --property=UMask=0077 '
         f'--property=TimeoutStartSec=1800 /usr/bin/python3 /opt/capstone-ai/release.py run --operation-id {operation}', check=False)
-    for _ in range(90):
+    for attempt in range(90):
         journal = ssh(f'sudo cat /var/lib/capstone-ai/operations/{operation}.json', check=False)
+        if journal is None and attempt:
+            # The coordinator writes its journal before any change; no journal and no running unit = rejected input.
+            state_text = ssh(f'systemctl is-active capstone-ai-{operation}', check=False)
+            require(state_text is not None and state_text.strip() in (b'active', b'activating'),
+                    'AI host rejected the request before starting; the current AI keeps running')
         if journal is not None:
             record = json.loads(journal)
             require(record.get('requestHash') == ai_digest(request), 'AI host operation mismatch')
@@ -272,7 +285,8 @@ def token():
 def git_reader(repo):
     def source(sha):
         require(match(SHA, sha), 'Invalid AI source')
-        return att.Source(lambda path: subprocess.check_output(['git', '-C', repo, 'show', '%s:%s' % (sha, path)]))
+        return att.Source(lambda path: subprocess.check_output(['git', '-C', repo, 'show', '%s:%s' % (sha, path)]),
+                          lambda path: subprocess.check_output(['git', '-C', repo, 'rev-parse', '%s:%s' % (sha, path)], text=True).strip())
     return source
 
 
