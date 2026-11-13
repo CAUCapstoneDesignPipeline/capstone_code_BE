@@ -1,0 +1,38 @@
+name: Automatic GCP release
+'on':
+  push:
+    branches:
+    - main
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: deploy publishes and releases this commit; rollback restores the previous release
+        type: choice
+        options: [deploy, rollback]
+        default: deploy
+        required: true
+permissions:
+  contents: read
+concurrency:
+  group: gcp-cd-be
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.repository == 'CAUCapstoneDesignPipeline/capstone_code_BE' && github.ref == 'refs/heads/main' && vars.GCP_DEPLOY_ENABLED == 'true' && (github.event_name == 'push' || inputs.operation == 'deploy')
+    uses: ./.github/workflows/gcp-publish-image.yml
+    permissions:
+      contents: read
+      id-token: write
+  release:
+    needs: publish
+    if: always() && github.repository == 'CAUCapstoneDesignPipeline/capstone_code_BE' && github.ref == 'refs/heads/main' && vars.GCP_DEPLOY_ENABLED == 'true' && (needs.publish.result == 'success' || (needs.publish.result == 'skipped' && inputs.operation == 'rollback'))
+    uses: CAUCapstoneDesignPipeline/capstone_code_BE/.github/workflows/gcp-cd-reusable.yml@c6495dbf0379be1b8665298a31f8bbcf682d7b91
+    permissions:
+      contents: read
+      id-token: write
+    with:
+      component: be
+      operation: ${{ inputs.operation || 'deploy' }}
+      source_sha: ${{ github.sha }}
+      image_digest: ${{ needs.publish.outputs.digest }}
+      deploy_tool_sha: c6495dbf0379be1b8665298a31f8bbcf682d7b91
