@@ -1,0 +1,233 @@
+name: Automatic GCP AI release
+'on':
+  workflow_call:
+    inputs:
+      operation: {required: true, type: string}
+      source_sha: {required: true, type: string}
+      image_digest: {required: true, type: string}
+      deploy_tool_sha: {required: true, type: string}
+permissions:
+  contents: read
+env:
+  OPERATION: ${{ inputs.operation }}
+  SOURCE_SHA: ${{ inputs.source_sha }}
+  IMAGE_DIGEST: ${{ inputs.image_digest }}
+  DEPLOY_TOOL_SHA: ${{ inputs.deploy_tool_sha }}
+jobs:
+  # Runs AI code (imports app.schemas) with no cloud credential; only its exported JSON leaves the job.
+  schema:
+    if: github.ref == 'refs/heads/develop' && vars.GCP_DEPLOY_ENABLED == 'true' && inputs.operation == 'deploy'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      export: ${{ steps.export.outputs.export }}
+    steps:
+    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      with:
+        repository: CAUCapstoneDesignPipeline/capstone_code_BE
+        ref: ${{ inputs.deploy_tool_sha }}
+        path: tool
+        persist-credentials: false
+    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      with:
+        ref: ${{ inputs.source_sha }}
+        path: ai
+        persist-credentials: false
+    - name: Export the AI response schemas BE pins
+      id: export
+      run: |-
+        version=$(python3 -c "import re;print(re.search(r'\[\[package\]\]\nname = \"pydantic\"\nversion = \"([0-9.]+)\"',open('ai/uv.lock').read()).group(1))")
+        python3 -m venv "$RUNNER_TEMP/schema"
+        "$RUNNER_TEMP/schema/bin/pip" install --quiet --disable-pip-version-check "pydantic==$version"
+        "$RUNNER_TEMP/schema/bin/python" tool/deploy/gcp/ai_schema_export.py ai tool/src/main/resources/ai/schemas.json export.json
+        python3 -c "import base64,gzip,json;print('export='+base64.b64encode(gzip.compress(json.dumps(json.load(open('export.json')),sort_keys=True,separators=(',',':')).encode())).decode())" >> "$GITHUB_OUTPUT"
+  plan:
+    needs: schema
+    if: always() && github.ref == 'refs/heads/develop' && vars.GCP_DEPLOY_ENABLED == 'true' && (needs.schema.result == 'success' || (needs.schema.result == 'skipped' && inputs.operation == 'rollback'))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: production
+    concurrency:
+      group: gcp-app-release
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      bundle: ${{ steps.plan.outputs.bundle }}
+      noop: ${{ steps.plan.outputs.noop }}
+      widen: ${{ steps.plan.outputs.widen }}
+    env:
+      GCP_DEPLOY_ENABLED: ${{ vars.GCP_DEPLOY_ENABLED }}
+      GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      GCP_ZONE: ${{ vars.GCP_ZONE }}
+      GCP_VM_NAME: ${{ vars.GCP_VM_NAME }}
+      APPROVED_TOOL_SHA: ${{ vars.GCP_CD_TOOL_SHA }}
+    steps:
+    - name: Validate approved tool pin before checkout
+      run: |-
+        python3 - <<'PYCODE'
+        import os,re
+        expected=os.environ['APPROVED_TOOL_SHA']
+        if not re.fullmatch('[a-f0-9]{40}',expected) or expected!=os.environ['DEPLOY_TOOL_SHA']:
+            raise SystemExit('Tool SHA must match the environment pin')
+        PYCODE
+    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      with:
+        repository: CAUCapstoneDesignPipeline/capstone_code_BE
+        ref: ${{ inputs.deploy_tool_sha }}
+        fetch-depth: 0
+        persist-credentials: false
+    - name: Check out AI history (read with git show only)
+      uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      with:
+        path: ai-source
+        fetch-depth: 0
+        persist-credentials: false
+    - name: Validate canonical caller and inputs before cloud authentication
+      run: python3 deploy/gcp/ai_auto.py validate
+    - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
+      with:
+        workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+        service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+        create_credentials_file: true
+    - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db
+    - name: Plan from the recorded app and AI releases
+      id: plan
+      env:
+        SCHEMA_EXPORT: ${{ needs.schema.outputs.export }}
+      run: python3 deploy/gcp/ai_auto.py plan
+  widen:
+    needs: plan
+    if: needs.plan.outputs.widen == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    environment: production
+    concurrency:
+      group: gcp-app-release
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      GCP_DEPLOY_ENABLED: ${{ vars.GCP_DEPLOY_ENABLED }}
+      GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      GCP_ZONE: ${{ vars.GCP_ZONE }}
+      GCP_VM_NAME: ${{ vars.GCP_VM_NAME }}
+      APPROVED_TOOL_SHA: ${{ vars.GCP_CD_TOOL_SHA }}
+    steps:
+    - name: Validate approved tool pin before checkout
+      run: |-
+        python3 - <<'PYCODE'
+        import os,re
+        expected=os.environ['APPROVED_TOOL_SHA']
+        if not re.fullmatch('[a-f0-9]{40}',expected) or expected!=os.environ['DEPLOY_TOOL_SHA']:
+            raise SystemExit('Tool SHA must match the environment pin')
+        PYCODE
+    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      with:
+        repository: CAUCapstoneDesignPipeline/capstone_code_BE
+        ref: ${{ inputs.deploy_tool_sha }}
+        persist-credentials: false
+    - name: Validate canonical caller and inputs before cloud authentication
+      run: python3 deploy/gcp/ai_auto.py validate
+    - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
+      with:
+        workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+        service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+        create_credentials_file: true
+    - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db
+    - name: Release the app accepting both the current and the target AI
+      env:
+        BUNDLE: ${{ needs.plan.outputs.bundle }}
+      run: python3 deploy/gcp/ai_auto.py widen
+  ai:
+    needs: [plan, widen]
+    if: always() && needs.plan.result == 'success' && needs.plan.outputs.noop == 'false' && (needs.widen.result == 'success' || needs.widen.result == 'skipped')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    environment: ai-production
+    concurrency:
+      group: gcp-ai-release
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      GCP_DEPLOY_ENABLED: ${{ vars.GCP_DEPLOY_ENABLED }}
+      GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      GCP_ZONE: ${{ vars.GCP_ZONE }}
+      GCP_VM_NAME: ${{ vars.GCP_VM_NAME }}
+      APPROVED_TOOL_SHA: ${{ vars.GCP_CD_TOOL_SHA }}
+    steps:
+    - name: Validate approved tool pin before checkout
+      run: |-
+        python3 - <<'PYCODE'
+        import os,re
+        expected=os.environ['APPROVED_TOOL_SHA']
+        if not re.fullmatch('[a-f0-9]{40}',expected) or expected!=os.environ['DEPLOY_TOOL_SHA']:
+            raise SystemExit('Tool SHA must match the environment pin')
+        PYCODE
+    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      with:
+        repository: CAUCapstoneDesignPipeline/capstone_code_BE
+        ref: ${{ inputs.deploy_tool_sha }}
+        persist-credentials: false
+    - name: Validate canonical caller and inputs before cloud authentication
+      run: python3 deploy/gcp/ai_auto.py validate
+    - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
+      with:
+        workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+        service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+        create_credentials_file: true
+    - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db
+    - name: Switch the AI host
+      env:
+        BUNDLE: ${{ needs.plan.outputs.bundle }}
+      run: python3 deploy/gcp/ai_auto.py ai
+  narrow:
+    needs: [plan, ai]
+    if: always() && needs.ai.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    environment: production
+    concurrency:
+      group: gcp-app-release
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      GCP_DEPLOY_ENABLED: ${{ vars.GCP_DEPLOY_ENABLED }}
+      GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      GCP_ZONE: ${{ vars.GCP_ZONE }}
+      GCP_VM_NAME: ${{ vars.GCP_VM_NAME }}
+      APPROVED_TOOL_SHA: ${{ vars.GCP_CD_TOOL_SHA }}
+    steps:
+    - name: Validate approved tool pin before checkout
+      run: |-
+        python3 - <<'PYCODE'
+        import os,re
+        expected=os.environ['APPROVED_TOOL_SHA']
+        if not re.fullmatch('[a-f0-9]{40}',expected) or expected!=os.environ['DEPLOY_TOOL_SHA']:
+            raise SystemExit('Tool SHA must match the environment pin')
+        PYCODE
+    - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      with:
+        repository: CAUCapstoneDesignPipeline/capstone_code_BE
+        ref: ${{ inputs.deploy_tool_sha }}
+        persist-credentials: false
+    - name: Validate canonical caller and inputs before cloud authentication
+      run: python3 deploy/gcp/ai_auto.py validate
+    - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
+      with:
+        workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+        service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+        create_credentials_file: true
+    - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db
+    - name: Release the app pinning the target AI only
+      env:
+        BUNDLE: ${{ needs.plan.outputs.bundle }}
+      run: python3 deploy/gcp/ai_auto.py narrow

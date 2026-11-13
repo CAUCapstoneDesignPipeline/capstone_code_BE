@@ -91,7 +91,9 @@ locals {
   deploy_workflow = "${local.github_owner}/capstone_code_BE/.github/workflows/gcp-deploy-reusable.yml@${var.app_deploy_workflow_sha}"
   # Automatic image-only release (gcp-cd.yml on a main push). UNCONFIGURED never matches a job_workflow_ref.
   cd_workflow = "${local.github_owner}/capstone_code_BE/.github/workflows/gcp-cd-reusable.yml@${var.app_cd_workflow_sha}"
-  secret_ids  = toset(["db-password", "jwt-secret", "google-client-secret", "allowed-emails"])
+  # Automatic AI release (AI gcp-cd.yml on a develop push). UNCONFIGURED never matches.
+  ai_cd_workflow = "${local.github_owner}/capstone_code_BE/.github/workflows/gcp-ai-cd-reusable.yml@${var.ai_cd_workflow_sha}"
+  secret_ids     = toset(["db-password", "jwt-secret", "google-client-secret", "allowed-emails"])
 }
 
 variable "app_deploy_workflow_sha" {
@@ -106,6 +108,15 @@ variable "app_cd_workflow_sha" {
   validation {
     condition     = var.app_cd_workflow_sha == "UNCONFIGURED" || can(regex("^[a-f0-9]{40}$", var.app_cd_workflow_sha))
     error_message = "Automatic release pin must be a full commit SHA or UNCONFIGURED."
+  }
+}
+variable "ai_cd_workflow_sha" {
+  description = "Reviewed immutable BE commit of gcp-ai-cd-reusable.yml for the automatic AI release; UNCONFIGURED disables it."
+  type        = string
+  default     = "UNCONFIGURED"
+  validation {
+    condition     = var.ai_cd_workflow_sha == "UNCONFIGURED" || can(regex("^[a-f0-9]{40}$", var.ai_cd_workflow_sha))
+    error_message = "Automatic AI release pin must be a full commit SHA or UNCONFIGURED."
   }
 }
 variable "ai_deploy_workflow_sha" {
