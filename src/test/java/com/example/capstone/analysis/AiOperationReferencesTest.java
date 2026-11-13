@@ -78,6 +78,24 @@ class AiOperationReferencesTest {
         ObjectNode deriveRequest=(ObjectNode)derive.path("request").deepCopy();object(deriveRequest,"facts",0).remove("opLabel");
         assertThrows(AiCallException.class,()->schemas.validate("DeriveRequest",deriveRequest));
     }
+    @Test void newerAiHashFieldsAreAcceptedButNotRequired() throws Exception {
+        // AI develop(404dabf 이후): Derivation.fingerprint·basisHash, FactsResponse.factsHash, Fact.contentHash.
+        // 운영 AI가 바뀌는 동안 옛 응답(필드 없음)과 새 응답(필드 있음)을 모두 받아야 한다.
+        String hash="a".repeat(64);
+        var derive=fixture("derive-sound-judged");ObjectNode deriveResponse=(ObjectNode)derive.path("response").deepCopy();
+        for(var row:deriveResponse.path("derivations")) ((ObjectNode)row).put("fingerprint",hash).put("basisHash",hash);
+        validator.validate(AiOperation.DERIVE,derive.path("request"),deriveResponse);
+        ObjectNode deriveRequest=(ObjectNode)derive.path("request").deepCopy();object(deriveRequest,"facts",0).put("contentHash",hash);
+        schemas.validate("DeriveRequest",deriveRequest);
+        var facts=fixture(AiOperation.FACTS);ObjectNode factsResponse=(ObjectNode)facts.path("response").deepCopy();
+        factsResponse.put("factsHash",hash);object(factsResponse,"facts",0).put("contentHash",hash);
+        validator.validate(AiOperation.FACTS,facts.path("request"),factsResponse);
+        validator.validate(AiOperation.FACTS,facts.path("request"),facts.path("response"));
+        object(deriveResponse,"derivations",0).put("fingerprint","A".repeat(64));
+        assertThrows(AiCallException.class,()->validator.validate(AiOperation.DERIVE,derive.path("request"),deriveResponse));
+        factsResponse.put("factsHash","short");
+        assertThrows(AiCallException.class,()->validator.validate(AiOperation.FACTS,facts.path("request"),factsResponse));
+    }
     private JsonNode fixture(AiOperation operation) throws Exception { return fixture(operation.name().toLowerCase()); }
     private JsonNode fixture(String name) throws Exception {
         try(var in=getClass().getResourceAsStream("/ai-contract/operations/"+name+".json")) { return mapper.readTree(in); }
