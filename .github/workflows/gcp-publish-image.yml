@@ -1,6 +1,11 @@
 name: Publish BE image to GCP
 'on':
   workflow_dispatch: {}
+  # gcp-cd.yml publishes the pushed commit before the automatic release.
+  workflow_call:
+    outputs:
+      digest:
+        value: ${{ jobs.publish.outputs.digest }}
 permissions:
   contents: read
 concurrency:

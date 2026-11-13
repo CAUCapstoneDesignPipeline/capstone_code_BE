@@ -89,13 +89,24 @@ locals {
   }
   # These paths are the planned GCP workflows, deliberately separate from existing AWS workflows.
   deploy_workflow = "${local.github_owner}/capstone_code_BE/.github/workflows/gcp-deploy-reusable.yml@${var.app_deploy_workflow_sha}"
-  secret_ids      = toset(["db-password", "jwt-secret", "google-client-secret", "allowed-emails"])
+  # Automatic image-only release (gcp-cd.yml on a main push). UNCONFIGURED never matches a job_workflow_ref.
+  cd_workflow = "${local.github_owner}/capstone_code_BE/.github/workflows/gcp-cd-reusable.yml@${var.app_cd_workflow_sha}"
+  secret_ids  = toset(["db-password", "jwt-secret", "google-client-secret", "allowed-emails"])
 }
 
 variable "app_deploy_workflow_sha" {
   description = "Reviewed immutable BE reusable workflow commit, remotely reachable before federation activation."
   type        = string
   default     = "UNCONFIGURED"
+}
+variable "app_cd_workflow_sha" {
+  description = "Reviewed immutable BE commit of gcp-cd-reusable.yml for the automatic release; UNCONFIGURED disables it."
+  type        = string
+  default     = "UNCONFIGURED"
+  validation {
+    condition     = var.app_cd_workflow_sha == "UNCONFIGURED" || can(regex("^[a-f0-9]{40}$", var.app_cd_workflow_sha))
+    error_message = "Automatic release pin must be a full commit SHA or UNCONFIGURED."
+  }
 }
 variable "ai_deploy_workflow_sha" {
   description = "Reviewed immutable AI reusable workflow commit."
