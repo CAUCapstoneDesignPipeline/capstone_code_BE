@@ -14,6 +14,10 @@ REPOSITORY_ID = '1397266620'
 OWNER_ID = '324880339'
 SHA = r'[0-9a-f]{40}'
 DIGEST = r'sha256:[0-9a-f]{64}'
+# Manual publication, or the automatic release (gcp-cd.yml calls gcp-publish-image.yml) on a main push or dispatch.
+CALLERS = {('workflow_dispatch', REPOSITORY + '/.github/workflows/gcp-publish-image.yml@refs/heads/main'),
+           ('push', REPOSITORY + '/.github/workflows/gcp-cd.yml@refs/heads/main'),
+           ('workflow_dispatch', REPOSITORY + '/.github/workflows/gcp-cd.yml@refs/heads/main')}
 
 
 def require(pattern, value, message):
@@ -27,10 +31,9 @@ def configuration(env):
             or env.get('GITHUB_REPOSITORY_ID') != REPOSITORY_ID
             or env.get('GITHUB_REPOSITORY_OWNER_ID') != OWNER_ID
             or env.get('GITHUB_REF') != 'refs/heads/main'
-            or env.get('GITHUB_EVENT_NAME') != 'workflow_dispatch'
-            or env.get('GITHUB_WORKFLOW_REF') != REPOSITORY + '/.github/workflows/gcp-publish-image.yml@refs/heads/main'
+            or (env.get('GITHUB_EVENT_NAME'), env.get('GITHUB_WORKFLOW_REF')) not in CALLERS
             or env.get('GCP_IMAGE_PUBLISH_ENABLED') != 'true'):
-        raise ValueError('Publication requires the enabled canonical main workflow_dispatch')
+        raise ValueError('Publication requires the enabled canonical main workflow')
     sha = require(SHA, env.get('GITHUB_SHA', ''), 'Invalid source SHA')
     project = require(r'[a-z][a-z0-9-]{4,28}[a-z0-9]', env.get('GCP_PROJECT_ID', ''), 'Invalid project')
     if env.get('GCP_REGION') != 'asia-northeast3' or env.get('AR_REPOSITORY') != 'capstone-be':

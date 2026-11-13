@@ -35,5 +35,10 @@ class PipelineTest(unittest.TestCase):
              'GCP_REGION':'asia-northeast3','AR_REPOSITORY':'capstone-be','GCP_WIF_PROVIDER':'projects/169516793433/locations/global/workloadIdentityPools/capsnote-github/providers/github',
              'GCP_IMAGE_SERVICE_ACCOUNT':'capsnote-prod-publish-be@capsnote.iam.gserviceaccount.com'}
         self.assertTrue(publish_image.configuration(env)['image'].endswith('/capstone-be/be'))
+        cd=publish_image.REPOSITORY+'/.github/workflows/gcp-cd.yml@refs/heads/main'
+        for event in ('push','workflow_dispatch'):
+            self.assertTrue(publish_image.configuration(dict(env,GITHUB_EVENT_NAME=event,GITHUB_WORKFLOW_REF=cd))['image'].endswith('/capstone-be/be'))
+        for event,ref in [('push',env['GITHUB_WORKFLOW_REF']),('pull_request',cd),('push',publish_image.REPOSITORY+'/.github/workflows/ci.yml@refs/heads/main')]:
+            with self.assertRaises(ValueError):publish_image.configuration(dict(env,GITHUB_EVENT_NAME=event,GITHUB_WORKFLOW_REF=ref))
         for key,value in [('GITHUB_REF','refs/heads/develop'),('AR_REPOSITORY','capstone-web'),('GITHUB_EVENT_NAME','pull_request'),('GITHUB_REPOSITORY_ID','1397258129')]:
             with self.assertRaises(ValueError):publish_image.configuration(dict(env,**{key:value}))

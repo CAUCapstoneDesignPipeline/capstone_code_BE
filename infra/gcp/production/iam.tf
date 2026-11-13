@@ -163,12 +163,15 @@ locals {
        assertion.ref == 'refs/heads/main' &&
        (
          (assertion.environment == 'image-publish' &&
-           ((assertion.repository_id == '${local.github_repos.be.id}' && assertion.workflow_ref == '${local.github_owner}/${local.github_repos.be.name}/.github/workflows/gcp-publish-image.yml@refs/heads/main') ||
-            (assertion.repository_id == '${local.github_repos.web.id}' && assertion.workflow_ref == '${local.github_owner}/${local.github_repos.web.name}/.github/workflows/gcp-publish-image.yml@refs/heads/main'))) ||
+           ((assertion.repository_id == '${local.github_repos.be.id}' && assertion.workflow_ref in ['${local.github_owner}/${local.github_repos.be.name}/.github/workflows/gcp-publish-image.yml@refs/heads/main', '${local.github_owner}/${local.github_repos.be.name}/.github/workflows/gcp-cd.yml@refs/heads/main']) ||
+            (assertion.repository_id == '${local.github_repos.web.id}' && assertion.workflow_ref in ['${local.github_owner}/${local.github_repos.web.name}/.github/workflows/gcp-publish-image.yml@refs/heads/main', '${local.github_owner}/${local.github_repos.web.name}/.github/workflows/gcp-cd.yml@refs/heads/main']))) ||
          (assertion.environment == 'production' && 'job_workflow_ref' in assertion &&
-           assertion.job_workflow_ref == '${local.deploy_workflow}' &&
-           ((assertion.repository_id == '${local.github_repos.be.id}' && assertion.workflow_ref == '${local.github_owner}/${local.github_repos.be.name}/.github/workflows/gcp-deploy.yml@refs/heads/main') ||
-            (assertion.repository_id == '${local.github_repos.web.id}' && assertion.workflow_ref == '${local.github_owner}/${local.github_repos.web.name}/.github/workflows/gcp-deploy.yml@refs/heads/main')))
+           ((assertion.job_workflow_ref == '${local.deploy_workflow}' &&
+             ((assertion.repository_id == '${local.github_repos.be.id}' && assertion.workflow_ref == '${local.github_owner}/${local.github_repos.be.name}/.github/workflows/gcp-deploy.yml@refs/heads/main') ||
+              (assertion.repository_id == '${local.github_repos.web.id}' && assertion.workflow_ref == '${local.github_owner}/${local.github_repos.web.name}/.github/workflows/gcp-deploy.yml@refs/heads/main'))) ||
+            (assertion.job_workflow_ref == '${local.cd_workflow}' &&
+             ((assertion.repository_id == '${local.github_repos.be.id}' && assertion.workflow_ref == '${local.github_owner}/${local.github_repos.be.name}/.github/workflows/gcp-cd.yml@refs/heads/main') ||
+              (assertion.repository_id == '${local.github_repos.web.id}' && assertion.workflow_ref == '${local.github_owner}/${local.github_repos.web.name}/.github/workflows/gcp-cd.yml@refs/heads/main')))))
        )) ||
       (assertion.repository_id == '${local.ai_repo_id}' && assertion.ref == '${local.ai_release_ref}' &&
        (
