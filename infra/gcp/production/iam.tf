@@ -176,10 +176,15 @@ locals {
       (assertion.repository_id == '${local.ai_repo_id}' && assertion.ref == '${local.ai_release_ref}' &&
        (
          (assertion.environment == 'image-publish' &&
-           assertion.workflow_ref == '${local.ai_repo}/.github/workflows/gcp-publish-image.yml@${local.ai_release_ref}') ||
+           assertion.workflow_ref in ['${local.ai_repo}/.github/workflows/gcp-publish-image.yml@${local.ai_release_ref}', '${local.ai_repo}/.github/workflows/gcp-cd.yml@${local.ai_release_ref}']) ||
          (assertion.environment == 'ai-production' && 'job_workflow_ref' in assertion &&
-           assertion.job_workflow_ref == '${local.ai_repo}/.github/workflows/gcp-deploy-reusable.yml@${var.ai_deploy_workflow_sha}' &&
-           assertion.workflow_ref == '${local.ai_repo}/.github/workflows/gcp-deploy.yml@${local.ai_release_ref}')
+           ((assertion.job_workflow_ref == '${local.ai_repo}/.github/workflows/gcp-deploy-reusable.yml@${var.ai_deploy_workflow_sha}' &&
+             assertion.workflow_ref == '${local.ai_repo}/.github/workflows/gcp-deploy.yml@${local.ai_release_ref}') ||
+            (assertion.job_workflow_ref == '${local.ai_cd_workflow}' &&
+             assertion.workflow_ref == '${local.ai_repo}/.github/workflows/gcp-cd.yml@${local.ai_release_ref}'))) ||
+         (assertion.environment == 'production' && 'job_workflow_ref' in assertion &&
+           assertion.job_workflow_ref == '${local.ai_cd_workflow}' &&
+           assertion.workflow_ref == '${local.ai_repo}/.github/workflows/gcp-cd.yml@${local.ai_release_ref}')
        ))
     )
   CEL
@@ -197,4 +202,19 @@ resource "google_service_account_iam_member" "deployer_federation" {
   service_account_id = google_service_account.deployer.name
   role               = "roles/iam.workloadIdentityUser"
   member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.job_scope/${each.value.id}_production"
+}
+
+# The AI automatic release (gcp-ai-cd-reusable.yml, pinned by ai_cd_workflow_sha) widens and narrows the app's AI
+# attestation as the app deployer from the AI repository's own production environment.
+resource "google_service_account_iam_member" "deployer_federation_ai" {
+  service_account_id = google_service_account.deployer.name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.job_scope/${local.ai_repo_id}_production"
+}
+
+# Planning reads the recorded AI release (state.json, releases/<id>.json) next to the app state.
+resource "google_storage_bucket_iam_member" "deployer_ai_releases" {
+  bucket = google_storage_bucket.ai["releases"].name
+  role   = "roles/storage.objectViewer"
+  member = "serviceAccount:${google_service_account.deployer.email}"
 }
