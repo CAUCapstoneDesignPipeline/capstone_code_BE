@@ -5,8 +5,9 @@ import org.springframework.stereotype.Component;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
-/** Closed, bounded schemas exported from AI 404dabf6cbe12621f4c86b84dc4dbda5b9750d5c (pydantic model_json_schema of app/schemas;
- * e270c9e 대비 Fact.roleLabel·opLabel, Derivation.roleLabel, 열린 role·op key 패턴, FactsRequest.knownRoles·knownOps가 바뀌었다).
+/** Closed, bounded schemas exported from AI develop 4df46989ce87bf1053f3e1f42ffd4bfe1c06786f (pydantic model_json_schema of app/schemas), 404dabf 기준에서
+ * Derivation.fingerprint·basisHash, FactsResponse.factsHash, Fact.contentHash가 늘었다. 새 필드는 required에서 빼서
+ * 404dabf 응답(필드 없음)도 계속 받는다.
  * Implements only the keywords in that pinned schema set; no remote reference resolution. */
 @Component
 public final class AiSchemaValidator {

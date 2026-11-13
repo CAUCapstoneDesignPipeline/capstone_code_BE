@@ -404,6 +404,13 @@
         "title": "Automation",
         "type": "string"
       },
+      "basisHash": {
+        "maxLength": 64,
+        "minLength": 64,
+        "pattern": "^[0-9a-f]{64}$",
+        "title": "Basishash",
+        "type": "string"
+      },
       "case": {
         "anyOf": [
           {
@@ -465,6 +472,13 @@
         "maxLength": 8000,
         "minLength": 1,
         "title": "Explanation",
+        "type": "string"
+      },
+      "fingerprint": {
+        "maxLength": 64,
+        "minLength": 64,
+        "pattern": "^[0-9a-f]{64}$",
+        "title": "Fingerprint",
         "type": "string"
       },
       "missing": {
@@ -693,6 +707,21 @@
               }
             ],
             "title": "Condition"
+          },
+          "contentHash": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 64,
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Contenthash"
           },
           "evidence": {
             "$ref": "#/$defs/FactEvidence"
@@ -1158,6 +1187,13 @@
             "title": "Automation",
             "type": "string"
           },
+          "basisHash": {
+            "maxLength": 64,
+            "minLength": 64,
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Basishash",
+            "type": "string"
+          },
           "case": {
             "anyOf": [
               {
@@ -1219,6 +1255,13 @@
             "maxLength": 8000,
             "minLength": 1,
             "title": "Explanation",
+            "type": "string"
+          },
+          "fingerprint": {
+            "maxLength": 64,
+            "minLength": 64,
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Fingerprint",
             "type": "string"
           },
           "missing": {
@@ -3627,6 +3670,21 @@
         ],
         "title": "Condition"
       },
+      "contentHash": {
+        "anyOf": [
+          {
+            "maxLength": 64,
+            "minLength": 64,
+            "pattern": "^[0-9a-f]{64}$",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Contenthash"
+      },
       "evidence": {
         "$ref": "#/$defs/FactEvidence"
       },
@@ -4102,6 +4160,21 @@
             ],
             "title": "Condition"
           },
+          "contentHash": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 64,
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Contenthash"
+          },
           "evidence": {
             "$ref": "#/$defs/FactEvidence"
           },
@@ -4407,6 +4480,13 @@
         "maxItems": 300,
         "title": "Facts",
         "type": "array"
+      },
+      "factsHash": {
+        "maxLength": 64,
+        "minLength": 64,
+        "pattern": "^[0-9a-f]{64}$",
+        "title": "Factshash",
+        "type": "string"
       },
       "meta": {
         "$ref": "#/$defs/ResponseMeta"
