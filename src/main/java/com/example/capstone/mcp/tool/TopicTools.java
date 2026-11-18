@@ -1,5 +1,6 @@
 package com.example.capstone.mcp.tool;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBooleanProperty;
 import org.springframework.stereotype.Component;
 
 import io.modelcontextprotocol.server.McpStatelessServerFeatures.SyncToolSpecification;
@@ -8,6 +9,7 @@ import io.modelcontextprotocol.spec.McpSchema;
 import com.example.capstone.topic.service.TopicService;
 
 @Component
+@ConditionalOnBooleanProperty("capstone.mcp.enabled")
 public class TopicTools {
 
     private static final String LIST_TOPICS_OUTPUT = """

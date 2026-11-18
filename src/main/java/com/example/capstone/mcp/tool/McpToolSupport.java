@@ -1,13 +1,14 @@
 package com.example.capstone.mcp.tool;
 
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBooleanProperty;
 import org.springframework.stereotype.Component;
 
 import io.modelcontextprotocol.common.McpTransportContext;
@@ -21,10 +22,11 @@ import com.example.capstone.global.exception.ApiException;
 import com.example.capstone.global.exception.ErrorCode;
 
 /**
- * 도구 공통 처리: 사용자 식별, 결과 직렬화, 업무 오류를 isError 결과로 바꾸기.
+ * 도구 공통 처리: 사용자 식별, 입력 검사, 결과 직렬화, 업무 오류를 isError 결과로 바꾸기.
  * 도구 인자와 결과 내용은 로그에 남기지 않는다.
  */
 @Component
+@ConditionalOnBooleanProperty("capstone.mcp.enabled")
 public class McpToolSupport {
 
     public static final String USER_ID = "capstone.userId";
@@ -37,10 +39,16 @@ public class McpToolSupport {
     }
 
     public SyncToolSpecification tool(McpSchema.Tool tool, Function<Call, Object> handler) {
+        Set<String> allowed = properties(tool.inputSchema());
         return SyncToolSpecification.builder().tool(tool).callHandler((context, request) -> {
             try {
-                Call call = new Call(userId(context), request.arguments() == null ? Map.of() : request.arguments());
-                return success(handler.apply(call));
+                Map<String, Object> raw = request.arguments() == null ? Map.of() : request.arguments();
+                Call call = new Call(userId(context), new McpArguments(raw, allowed));
+                Object value = handler.apply(call);
+                if (value instanceof Failure failure) {
+                    return result(failure.content(), true);
+                }
+                return result(value, false);
             } catch (ApiException exception) {
                 return error(exception.errorCode(), exception.getMessage(), exception.details());
             } catch (RuntimeException exception) {
@@ -55,28 +63,26 @@ public class McpToolSupport {
                 .idempotentHint(idempotent).openWorldHint(false).build();
     }
 
+    @SuppressWarnings("unchecked")
     public Map<String, Object> schema(String json) {
         return mapper.readValue(json, Map.class);
     }
 
-    private CallToolResult success(Object value) {
+    private CallToolResult result(Object value, boolean isError) {
         JsonNode structured = mapper.valueToTree(value);
         return CallToolResult.builder().structuredContent(structured)
                 .content(List.of(new McpSchema.TextContent(mapper.writeValueAsString(structured))))
-                .isError(false).build();
+                .isError(isError).build();
     }
 
     private CallToolResult error(ErrorCode code, String message, Map<String, ?> details) {
-        Map<String, Object> error = new LinkedHashMap<>();
-        error.put("code", code.name());
-        error.put("message", message);
-        if (details != null && !details.isEmpty()) {
-            error.put("details", details);
-        }
-        JsonNode structured = mapper.valueToTree(Map.of("error", error));
-        return CallToolResult.builder().structuredContent(structured)
-                .content(List.of(new McpSchema.TextContent(mapper.writeValueAsString(structured))))
-                .isError(true).build();
+        return result(Map.of("error", McpErrors.error(code, message, details)), true);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Set<String> properties(Map<String, Object> inputSchema) {
+        Object properties = inputSchema == null ? null : inputSchema.get("properties");
+        return properties instanceof Map<?, ?> map ? ((Map<String, Object>) map).keySet() : Set.of();
     }
 
     private static UUID userId(McpTransportContext context) {
@@ -87,6 +93,10 @@ public class McpToolSupport {
         return UUID.fromString(value.toString());
     }
 
-    public record Call(UUID userId, Map<String, Object> arguments) {
+    public record Call(UUID userId, McpArguments arguments) {
+    }
+
+    /** 도구가 업무 결과 모양 그대로 isError: true로 돌려줘야 할 때 쓴다(예: move_notes 전부 실패). */
+    public record Failure(Object content) {
     }
 }
