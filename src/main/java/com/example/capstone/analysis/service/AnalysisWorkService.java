@@ -22,7 +22,8 @@ public class AnalysisWorkService {
     private final AppUserRepository users;
     private final AnalysisInvalidationService invalidation;
     private final com.example.capstone.analysis.repository.AnalysisResultRepository results;
-    public AnalysisWorkService(AnalysisWorkRepository repository,AppUserRepository users,com.example.capstone.analysis.repository.AnalysisResultRepository results,AnalysisInvalidationService invalidation,com.example.capstone.analysis.config.AiFeatureGate gate,com.example.capstone.analysis.config.AiPipelineConfiguration configuration) { this.repository=repository;this.users=users;this.results=results;this.invalidation=invalidation;this.gate=gate;this.configuration=configuration; }
+    private final ExternalKnowledgeService externalKnowledge;
+    public AnalysisWorkService(AnalysisWorkRepository repository,AppUserRepository users,com.example.capstone.analysis.repository.AnalysisResultRepository results,AnalysisInvalidationService invalidation,com.example.capstone.analysis.config.AiFeatureGate gate,com.example.capstone.analysis.config.AiPipelineConfiguration configuration,ExternalKnowledgeService externalKnowledge) { this.repository=repository;this.users=users;this.results=results;this.invalidation=invalidation;this.gate=gate;this.configuration=configuration;this.externalKnowledge=externalKnowledge; }
     @Transactional
     public JsonNode submit(UUID user,UUID note) { return submit(user,note,null); }
     @Transactional
@@ -119,6 +120,7 @@ public class AnalysisWorkService {
         invalidation.newerAnalysisSucceeded(work.userId(),work.noteId(),work.id());
         if(!repository.finish(work.id(),work.leaseToken(),"succeeded",null)) throw new LeaseLostException();
         repository.succeeded(work.userId(),work.noteId());
+        externalKnowledge.enqueue(work.userId(),work.id(),work.noteId());
     }
     @Transactional public void retireDisabled(Work work) {
         users.lockById(work.userId()).orElseThrow();

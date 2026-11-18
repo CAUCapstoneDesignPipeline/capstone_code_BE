@@ -27,7 +27,7 @@ import com.example.capstone.user.repository.AppUserRepository;
 @Service
 public class RecommendationService {
     /** 한 작업이 돌려주는 추천 수 상한. */
-    public static final int LIMIT=5;
+    public static final int LIMIT=RecommendationRepository.CARD_LIMIT;
     public static final String RECOMMENDED="RECOMMENDED",NONE="NO_RECOMMENDATIONS",FAILED="RECOMMENDATION_FAILED";
     private final AnalysisService analysis;
     private final RecommendationRepository repository;
@@ -83,7 +83,9 @@ public class RecommendationService {
         repository.feedback(user,resultId,action);
     }
     private RecommendationResponse card(JsonNode row) {
-        return new RecommendationResponse(UUID.fromString(row.path("id").asString()),row.path("revision").asInt(),row.path("freshness").asString(),evidence(row.path("evidenceA")),evidence(row.path("evidenceB")),null,
+        JsonNode external=row.path("externalKnowledge");
+        var knowledge=external.isObject()?new RecommendationResponse.ExternalKnowledge(external.path("summary").asString(),external.path("sourceUrl").asString()):null;
+        return new RecommendationResponse(UUID.fromString(row.path("id").asString()),row.path("revision").asInt(),row.path("freshness").asString(),evidence(row.path("evidenceA")),evidence(row.path("evidenceB")),knowledge,
                 row.path("conclusion").asString(),mapper.treeToValue(row.path("relatedKeywords"),mapper.getTypeFactory().constructCollectionType(List.class,String.class)));
     }
     private RecommendationResponse.Evidence evidence(JsonNode e) {

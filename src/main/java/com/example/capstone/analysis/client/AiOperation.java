@@ -10,7 +10,8 @@ public enum AiOperation {
     VERIFY_EXPLANATION("verifications/explanations", "VerifyExplanationRequest", "VerifyExplanationResponse"),
     LINKS("note-links", "LinksRequest", "LinksResponse"),
     FACTS("facts", "FactsRequest", "FactsResponse"),
-    DERIVE("derivations", "DeriveRequest", "DeriveResponse");
+    DERIVE("derivations", "DeriveRequest", "DeriveResponse"),
+    EXTERNAL_KNOWLEDGE("external-knowledge", "ExternalKnowledgeRequest", "ExternalKnowledgeResponse");
 
     private final String path;
     private final String requestSchema;

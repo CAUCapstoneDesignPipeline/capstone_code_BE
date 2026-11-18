@@ -11,18 +11,20 @@ import org.springframework.stereotype.Component;
 import com.example.capstone.analysis.client.AiCallException;
 import com.example.capstone.analysis.service.AnalysisWorkService;
 import com.example.capstone.analysis.service.AiActivationService;
+import com.example.capstone.analysis.service.ExternalKnowledgeService;
 
 @Component
 public class AnalysisWorker {
     private final AnalysisWorkService work;
     private final AiActivationService activation;
     private final ObjectProvider<AnalysisPipeline> pipeline;
+    private final ExternalKnowledgeService externalKnowledge;
     private volatile long disabledRevision=-1;
     private final AtomicBoolean closing=new AtomicBoolean();
     private final AtomicBoolean busy=new AtomicBoolean();
     private final ScheduledExecutorService heartbeats=Executors.newSingleThreadScheduledExecutor(Thread.ofPlatform().daemon(true).name("analysis-heartbeat").factory());
-    public AnalysisWorker(AnalysisWorkService work,AiActivationService activation,ObjectProvider<AnalysisPipeline> pipeline) {
-        this.work=work;this.activation=activation;this.pipeline=pipeline;
+    public AnalysisWorker(AnalysisWorkService work,AiActivationService activation,ObjectProvider<AnalysisPipeline> pipeline,ExternalKnowledgeService externalKnowledge) {
+        this.work=work;this.activation=activation;this.pipeline=pipeline;this.externalKnowledge=externalKnowledge;
     }
     @Scheduled(fixedDelayString="${capstone.ai.execution.poll-ms:1000}",initialDelayString="${capstone.ai.execution.poll-ms:1000}")
     public void tick() {
@@ -38,7 +40,8 @@ public class AnalysisWorker {
             var queued=work.claim();
             // 대기 작업이 없을 때만 대체된 명시 요청을 이어 실행한다.
             final var claimed=queued!=null?queued:work.resume(pipeline.getObject().policyFingerprint())?work.claim():null;
-            if(claimed==null) return false;
+            // 분석할 작업이 없을 때만 카드 외부 지식을 하나 채운다. AI의 처리 자리를 분석과 나눠 쓰지 않는다.
+            if(claimed==null) return externalKnowledge.runOne();
             AtomicBoolean lost=new AtomicBoolean();
             var heartbeat=heartbeats.scheduleAtFixedRate(()->{
                 try { if(!work.heartbeat(claimed)) lost.set(true); } catch(RuntimeException failure) { lost.set(true); }
