@@ -45,6 +45,7 @@ capstone:
       search-default-limit: 20
       search-max-limit: 50
       search-query-max-chars: 100
+      move-max-notes: 50
   conversion:
     enabled: ${CAPSTONE_CONVERSION_ENABLED:false}
     storage-root: ${CAPSTONE_CONVERSION_STORAGE_ROOT:}

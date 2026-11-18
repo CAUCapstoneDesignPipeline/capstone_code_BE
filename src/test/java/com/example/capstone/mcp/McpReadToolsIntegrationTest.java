@@ -22,7 +22,7 @@ import tools.jackson.databind.JsonNode;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /** M3 읽기 도구(list_topics, search_notes, get_note)와 오류 변환. 설계안 2.3·2.6·2.8(I2~I6). */
-@SpringBootTest(properties = "capstone.mcp.enabled=true")
+@SpringBootTest(properties = {"capstone.mcp.enabled=true", "capstone.mcp.write-enabled=false"})
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 @Testcontainers
