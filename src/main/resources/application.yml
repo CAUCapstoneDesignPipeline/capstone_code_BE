@@ -10,8 +10,28 @@ spring:
     hibernate:
       ddl-auto: validate
     open-in-view: false
+  # MCP 서버(/api/mcp). capstone.mcp.enabled가 꺼져 있으면 서버 자동 구성도 만들지 않는다.
+  ai:
+    mcp:
+      server:
+        enabled: ${capstone.mcp.enabled}
+        protocol: STATELESS
+        type: SYNC
+        name: capstone-notes
+        version: 0.1.0
+        streamable-http:
+          mcp-endpoint: /api/mcp
+        annotation-scanner:
+          enabled: false
+        tool-callback-converter: false
+        capabilities:
+          resource: false
+          prompt: false
+          completion: false
 
 capstone:
+  mcp:
+    enabled: ${CAPSTONE_MCP_ENABLED:false}
   conversion:
     enabled: ${CAPSTONE_CONVERSION_ENABLED:false}
     storage-root: ${CAPSTONE_CONVERSION_STORAGE_ROOT:}
