@@ -2856,6 +2856,357 @@
     "title": "Explanation",
     "type": "object"
   },
+  "ExternalKnowledgeRequest": {
+    "$defs": {
+      "Context": {
+        "additionalProperties": false,
+        "properties": {
+          "analysisJobId": {
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "title": "Analysisjobid",
+            "type": "string"
+          },
+          "graphRevision": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "title": "Graphrevision",
+            "type": "integer"
+          },
+          "inputRevision": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "title": "Inputrevision",
+            "type": "integer"
+          },
+          "noteId": {
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "title": "Noteid",
+            "type": "string"
+          },
+          "noteVersion": {
+            "maximum": 2147483647,
+            "minimum": 0,
+            "title": "Noteversion",
+            "type": "integer"
+          },
+          "pipelineVersion": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Pipelineversion",
+            "type": "string"
+          },
+          "stageExecutionId": {
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "title": "Stageexecutionid",
+            "type": "string"
+          },
+          "userId": {
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "title": "Userid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "analysisJobId",
+          "stageExecutionId",
+          "userId",
+          "noteId",
+          "noteVersion",
+          "inputRevision",
+          "graphRevision",
+          "pipelineVersion"
+        ],
+        "title": "Context",
+        "type": "object"
+      },
+      "ExternalClaim": {
+        "additionalProperties": false,
+        "properties": {
+          "conclusion": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Conclusion",
+            "type": "string"
+          },
+          "evidence": {
+            "items": {
+              "$ref": "#/$defs/ExternalEvidence"
+            },
+            "maxItems": 4,
+            "minItems": 1,
+            "title": "Evidence",
+            "type": "array"
+          }
+        },
+        "required": [
+          "conclusion",
+          "evidence"
+        ],
+        "title": "ExternalClaim",
+        "type": "object"
+      },
+      "ExternalEvidence": {
+        "additionalProperties": false,
+        "properties": {
+          "keyword": {
+            "maxLength": 200,
+            "title": "Keyword",
+            "type": "string"
+          },
+          "label": {
+            "enum": [
+              "A",
+              "B"
+            ],
+            "title": "Label",
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "keyword",
+          "text"
+        ],
+        "title": "ExternalEvidence",
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "claim": {
+        "$ref": "#/$defs/ExternalClaim"
+      },
+      "context": {
+        "$ref": "#/$defs/Context"
+      },
+      "maxSources": {
+        "default": 1,
+        "maximum": 3,
+        "minimum": 1,
+        "title": "Maxsources",
+        "type": "integer"
+      },
+      "profileVersion": {
+        "maxLength": 80,
+        "minLength": 1,
+        "title": "Profileversion",
+        "type": "string"
+      }
+    },
+    "required": [
+      "context",
+      "profileVersion",
+      "claim"
+    ],
+    "title": "ExternalKnowledgeRequest",
+    "type": "object"
+  },
+  "ExternalKnowledgeResponse": {
+    "$defs": {
+      "ExternalKnowledgeItem": {
+        "additionalProperties": false,
+        "properties": {
+          "retrievedAt": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$",
+            "title": "Retrievedat",
+            "type": "string"
+          },
+          "sourceUrl": {
+            "maxLength": 2048,
+            "pattern": "^https?://\\S+$",
+            "title": "Sourceurl",
+            "type": "string"
+          },
+          "summary": {
+            "maxLength": 300,
+            "minLength": 1,
+            "title": "Summary",
+            "type": "string"
+          },
+          "support": {
+            "enum": [
+              "yes",
+              "partly"
+            ],
+            "title": "Support",
+            "type": "string"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "required": [
+          "summary",
+          "sourceUrl",
+          "title",
+          "retrievedAt",
+          "support"
+        ],
+        "title": "ExternalKnowledgeItem",
+        "type": "object"
+      },
+      "ExternalKnowledgeUsage": {
+        "additionalProperties": false,
+        "properties": {
+          "inputTokens": {
+            "minimum": 0,
+            "title": "Inputtokens",
+            "type": "integer"
+          },
+          "outputTokens": {
+            "minimum": 0,
+            "title": "Outputtokens",
+            "type": "integer"
+          },
+          "searches": {
+            "maximum": 3,
+            "minimum": 0,
+            "title": "Searches",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "searches",
+          "inputTokens",
+          "outputTokens"
+        ],
+        "title": "ExternalKnowledgeUsage",
+        "type": "object"
+      },
+      "ResponseMeta": {
+        "additionalProperties": false,
+        "properties": {
+          "durationMs": {
+            "maximum": 120000,
+            "minimum": 0,
+            "title": "Durationms",
+            "type": "integer"
+          },
+          "model": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Model",
+            "type": "string"
+          },
+          "modelRevision": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Modelrevision",
+            "type": "string"
+          },
+          "preprocessingVersion": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Preprocessingversion",
+            "type": "string"
+          },
+          "profileVersion": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Profileversion",
+            "type": "string"
+          },
+          "promptVersion": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Promptversion"
+          },
+          "provider": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Provider",
+            "type": "string"
+          },
+          "schemaVersion": {
+            "const": "1.0",
+            "title": "Schemaversion",
+            "type": "string"
+          }
+        },
+        "required": [
+          "profileVersion",
+          "provider",
+          "model",
+          "modelRevision",
+          "promptVersion",
+          "schemaVersion",
+          "preprocessingVersion",
+          "durationMs"
+        ],
+        "title": "ResponseMeta",
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "context": {
+        "additionalProperties": true,
+        "title": "Context",
+        "type": "object"
+      },
+      "externalKnowledge": {
+        "items": {
+          "$ref": "#/$defs/ExternalKnowledgeItem"
+        },
+        "maxItems": 3,
+        "title": "Externalknowledge",
+        "type": "array"
+      },
+      "meta": {
+        "$ref": "#/$defs/ResponseMeta"
+      },
+      "status": {
+        "enum": [
+          "found",
+          "none"
+        ],
+        "title": "Status",
+        "type": "string"
+      },
+      "usage": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/ExternalKnowledgeUsage"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      }
+    },
+    "required": [
+      "context",
+      "meta",
+      "status",
+      "externalKnowledge"
+    ],
+    "title": "ExternalKnowledgeResponse",
+    "type": "object"
+  },
   "ExtractRequest": {
     "$defs": {
       "CompositionRule": {

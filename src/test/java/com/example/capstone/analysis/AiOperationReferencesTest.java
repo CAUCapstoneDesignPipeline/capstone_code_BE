@@ -27,6 +27,7 @@ class AiOperationReferencesTest {
                 case LINKS -> object(response,"links",0).put("noteId","00000000-0000-4000-8000-000000000099");
                 case DERIVE -> { for(var d:response.path("derivations")) if(d.path("rule").asString().equals("R2")) ((ObjectNode)d).putNull("dependsOn"); }
                 case FACTS -> ((ObjectNode)object(response,"facts",0).path("evidence")).put("noteId","00000000-0000-4000-8000-000000000099");
+                case EXTERNAL_KNOWLEDGE -> response.put("status","none");
                 default -> fail();
             }
             assertThrows(AiCallException.class,()->validator.validate(operation,request,response),operation.name());
@@ -95,6 +96,23 @@ class AiOperationReferencesTest {
         assertThrows(AiCallException.class,()->validator.validate(AiOperation.DERIVE,derive.path("request"),deriveResponse));
         factsResponse.put("factsHash","short");
         assertThrows(AiCallException.class,()->validator.validate(AiOperation.FACTS,facts.path("request"),factsResponse));
+    }
+    @Test void externalKnowledgeRejectsUnsafeDuplicateOrMisorderedSources() throws Exception {
+        var fixture=fixture(AiOperation.EXTERNAL_KNOWLEDGE);
+        ObjectNode request=(ObjectNode)fixture.path("request").deepCopy();request.put("maxSources",3);
+        validator.validate(AiOperation.EXTERNAL_KNOWLEDGE,request,fixture.path("response"));
+        for(String url:new String[]{"http://localhost/a","https://10.1.2.3/a","http://[::1]/a","https://user:pw@example.com/a","http://169.254.169.254/latest","https://metadata.google.internal/a","http://intranet/a","ftp://example.com/a"}) {
+            ObjectNode response=(ObjectNode)fixture.path("response").deepCopy();object(response,"externalKnowledge",0).put("sourceUrl",url);
+            assertThrows(AiCallException.class,()->validator.validate(AiOperation.EXTERNAL_KNOWLEDGE,request,response),url);
+        }
+        ObjectNode duplicate=(ObjectNode)fixture.path("response").deepCopy();duplicate.withArray("externalKnowledge").add(object(duplicate,"externalKnowledge",0).deepCopy());
+        assertThrows(AiCallException.class,()->validator.validate(AiOperation.EXTERNAL_KNOWLEDGE,request,duplicate));
+        ObjectNode tooMany=(ObjectNode)duplicate.deepCopy();object(tooMany,"externalKnowledge",1).put("sourceUrl","https://example.org/other");
+        assertThrows(AiCallException.class,()->validator.validate(AiOperation.EXTERNAL_KNOWLEDGE,fixture.path("request"),tooMany),"maxSources 1");
+        ObjectNode misordered=(ObjectNode)tooMany.deepCopy();object(misordered,"externalKnowledge",0).put("support","partly");
+        assertThrows(AiCallException.class,()->validator.validate(AiOperation.EXTERNAL_KNOWLEDGE,request,misordered));
+        ObjectNode ordered=(ObjectNode)tooMany.deepCopy();object(ordered,"externalKnowledge",1).put("support","partly");
+        validator.validate(AiOperation.EXTERNAL_KNOWLEDGE,request,ordered);
     }
     private JsonNode fixture(AiOperation operation) throws Exception { return fixture(operation.name().toLowerCase()); }
     private JsonNode fixture(String name) throws Exception {

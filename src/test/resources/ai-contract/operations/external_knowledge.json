@@ -1,0 +1,68 @@
+{
+  "request": {
+    "context": {
+      "analysisJobId": "d551b3d2-8825-5ae9-8e0e-96c4f63b5021",
+      "stageExecutionId": "81738c89-df53-57b7-9a06-320a4deb50c8",
+      "userId": "c49bdcd3-9f13-5186-93c2-28eccf386140",
+      "noteId": "10f77e94-6b1f-5e82-b8cd-f6847b0e5479",
+      "noteVersion": 3,
+      "inputRevision": 4,
+      "graphRevision": 7,
+      "pipelineVersion": "pipeline-fixture-1"
+    },
+    "profileVersion": "external-knowledge-fixture-1",
+    "claim": {
+      "conclusion": "DB 와 OS 가 둘 다 페이지를 캐시해서 같은 데이터가 메모리에 두 번 올라갈 수 있어요.",
+      "evidence": [
+        {
+          "label": "A",
+          "keyword": "디스크",
+          "text": "DB는 buffer pool에 페이지를 올려놓고 거기서 수정한다."
+        },
+        {
+          "label": "B",
+          "keyword": "페이지 캐싱",
+          "text": "디스크에서 읽은 데이터를 RAM에 저장해 재사용하는 것을 페이지 캐싱이라고 한다."
+        }
+      ]
+    },
+    "maxSources": 1
+  },
+  "response": {
+    "context": {
+      "analysisJobId": "d551b3d2-8825-5ae9-8e0e-96c4f63b5021",
+      "stageExecutionId": "81738c89-df53-57b7-9a06-320a4deb50c8",
+      "userId": "c49bdcd3-9f13-5186-93c2-28eccf386140",
+      "noteId": "10f77e94-6b1f-5e82-b8cd-f6847b0e5479",
+      "noteVersion": 3,
+      "inputRevision": 4,
+      "graphRevision": 7,
+      "pipelineVersion": "pipeline-fixture-1"
+    },
+    "meta": {
+      "profileVersion": "external-knowledge-fixture-1",
+      "provider": "fixture",
+      "model": "external-model",
+      "modelRevision": "fixture-revision-1",
+      "promptVersion": "external-prompt-1",
+      "schemaVersion": "1.0",
+      "preprocessingVersion": "markdown-source-map-1",
+      "durationMs": 16000
+    },
+    "status": "found",
+    "externalKnowledge": [
+      {
+        "summary": "MySQL InnoDB 는 O_DIRECT 로 파일을 열어 OS 페이지 캐시를 거치지 않아서 같은 데이터가 두 번 캐시되는 것을 피한다.",
+        "sourceUrl": "https://example.com/innodb-o-direct",
+        "title": "InnoDB O_DIRECT",
+        "retrievedAt": "2026-11-11T07:00:00Z",
+        "support": "yes"
+      }
+    ],
+    "usage": {
+      "searches": 1,
+      "inputTokens": 4300,
+      "outputTokens": 1100
+    }
+  }
+}

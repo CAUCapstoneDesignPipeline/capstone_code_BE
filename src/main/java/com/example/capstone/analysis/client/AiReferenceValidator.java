@@ -36,6 +36,7 @@ final class AiReferenceValidator {
             case DERIVE -> derivations(request,response);
             case LINKS -> links(request,response);
             case EMBEDDINGS -> ids(request.path("items"),"itemId");
+            case EXTERNAL_KNOWLEDGE -> external(request,response);
         }
         // 생성과 검증의 모델·프롬프트가 모두 같은 경우 독립 검증으로 승격하지 않는다.
         for(var generation:request.path("generationProvenance")) require(!generation.path("model").equals(response.path("meta").path("model"))
@@ -128,6 +129,34 @@ final class AiReferenceValidator {
                 require(expected==null?path.path("proposedTypeCode").isNull():expected.equals(path.path("proposedTypeCode").asString()));
             }
         }
+    }
+    /** found면 1~maxSources개, none이면 없음. URL은 중복이 없고 안전하며, yes가 partly보다 앞선다. */
+    private static void external(JsonNode request,JsonNode response) {
+        JsonNode items=response.path("externalKnowledge");
+        require("found".equals(response.path("status").asString())==!items.isEmpty());
+        require(items.size()<=request.path("maxSources").asInt(1));
+        Set<String> urls=new HashSet<>();boolean partly=false;
+        for(var item:items) {
+            String url=item.path("sourceUrl").asString();require(safeUrl(url) && urls.add(url));
+            boolean yes="yes".equals(item.path("support").asString());require(!(yes && partly));partly|=!yes;
+        }
+    }
+    /** http·https, 사용자 정보 없음, localhost·내부 이름·사설·링크 로컬 주소가 아닌 URL만 카드에 보인다. */
+    static boolean safeUrl(String value) {
+        try {
+            var uri=new java.net.URI(value);String host=uri.getHost();
+            if(!Set.of("http","https").contains(uri.getScheme()) || host==null || uri.getRawUserInfo()!=null) return false;
+            host=host.toLowerCase(java.util.Locale.ROOT).replaceAll("\\.$","");
+            if(host.equals("localhost") || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal") || !host.contains(".") && !host.startsWith("[")) return false;
+            if(host.matches("[0-9.]+") && !host.matches("\\d{1,3}(\\.\\d{1,3}){3}")) return false;
+            // 숫자 주소만 해석한다. 이름은 DNS를 조회하지 않는다.
+            if(host.matches("[0-9.]+") || host.startsWith("[")) {
+                var address=java.net.InetAddress.getByName(host);
+                return !(address.isLoopbackAddress() || address.isSiteLocalAddress() || address.isLinkLocalAddress() || address.isAnyLocalAddress()
+                        || address.isMulticastAddress() || address instanceof java.net.Inet6Address v6 && (v6.getAddress()[0]&0xfe)==0xfc);
+            }
+            return true;
+        } catch(java.net.URISyntaxException | java.net.UnknownHostException invalid) { return false; }
     }
     static Set<String> ids(JsonNode array,String key) {
         Set<String> result=new HashSet<>(); for(var item:array) require(result.add(item.path(key).asString())); return result;

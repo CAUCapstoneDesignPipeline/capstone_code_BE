@@ -35,6 +35,8 @@ capstone:
       worker-enabled: ${CAPSTONE_AI_WORKER_ENABLED:true}
       budget-microunits: ${CAPSTONE_AI_BUDGET_MICROUNITS:0}
       currency: ${CAPSTONE_AI_CURRENCY:}
+    external-knowledge:
+      enabled: ${CAPSTONE_AI_EXTERNAL_KNOWLEDGE_ENABLED:false}
     client:
       base-url: ${CAPSTONE_AI_BASE_URL:}
       service-token: ${CAPSTONE_AI_SERVICE_TOKEN:}
