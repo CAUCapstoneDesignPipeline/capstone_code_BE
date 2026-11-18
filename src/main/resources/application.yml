@@ -35,6 +35,8 @@ spring:
 capstone:
   mcp:
     enabled: ${CAPSTONE_MCP_ENABLED:false}
+    # 꺼져 있으면 쓰기 도구를 tools/list에 넣지 않고 호출도 받지 않는다(없는 도구 오류).
+    write-enabled: ${CAPSTONE_MCP_WRITE_ENABLED:false}
     # 도구 응답 크기 제한(설계안 2.6의 [가정] 수치). 길이는 코드 포인트 기준이다.
     limits:
       note-default-chars: 10000

@@ -21,6 +21,7 @@ import tools.jackson.databind.json.JsonMapper;
 
 import com.example.capstone.mcp.tool.McpToolSupport;
 import com.example.capstone.mcp.tool.NoteReadTools;
+import com.example.capstone.mcp.tool.NoteWriteTools;
 import com.example.capstone.mcp.tool.TopicTools;
 import org.springframework.ai.mcp.customizer.McpStatelessSyncServerCustomizer;
 
@@ -61,7 +62,13 @@ public class McpServerConfig {
 
     /** 도구 목록 순서는 설계안 2.3 요약표 순서를 따른다. */
     @Bean
-    List<SyncToolSpecification> capstoneMcpTools(TopicTools topicTools, NoteReadTools noteReadTools) {
-        return List.of(topicTools.listTopics(), noteReadTools.searchNotes(), noteReadTools.getNote());
+    List<SyncToolSpecification> capstoneMcpTools(McpProperties properties, TopicTools topicTools,
+            NoteReadTools noteReadTools, NoteWriteTools noteWriteTools) {
+        List<SyncToolSpecification> tools = new java.util.ArrayList<>(
+                List.of(topicTools.listTopics(), noteReadTools.searchNotes(), noteReadTools.getNote()));
+        if (properties.writeEnabled()) {
+            tools.addAll(List.of(noteWriteTools.createNote(), noteWriteTools.updateNote(), noteWriteTools.renameNote()));
+        }
+        return List.copyOf(tools);
     }
 }
