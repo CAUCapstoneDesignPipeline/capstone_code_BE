@@ -27,6 +27,7 @@ import com.example.capstone.mcp.tool.McpToolSupport;
 import com.example.capstone.mcp.tool.NoteReadTools;
 import com.example.capstone.mcp.tool.NoteWriteTools;
 import com.example.capstone.mcp.tool.OrganizeTools;
+import com.example.capstone.mcp.tool.RecommendationTools;
 import com.example.capstone.mcp.tool.TopicTools;
 import org.springframework.ai.mcp.customizer.McpStatelessSyncServerCustomizer;
 
@@ -84,13 +85,15 @@ public class McpServerConfig {
     /** 도구 목록 순서는 설계안 2.3 요약표 순서를 따른다. */
     @Bean
     List<SyncToolSpecification> capstoneMcpTools(McpProperties properties, TopicTools topicTools,
-            NoteReadTools noteReadTools, NoteWriteTools noteWriteTools, OrganizeTools organizeTools) {
+            NoteReadTools noteReadTools, NoteWriteTools noteWriteTools, OrganizeTools organizeTools,
+            RecommendationTools recommendationTools) {
         List<SyncToolSpecification> tools = new java.util.ArrayList<>(
                 List.of(topicTools.listTopics(), noteReadTools.searchNotes(), noteReadTools.getNote()));
         if (properties.writeEnabled()) {
             tools.addAll(List.of(noteWriteTools.createNote(), noteWriteTools.updateNote(), noteWriteTools.renameNote(),
-                    organizeTools.createTopic(), organizeTools.moveNotes()));
+                    organizeTools.createTopic(), organizeTools.moveNotes(), recommendationTools.requestRecommendations()));
         }
+        tools.add(recommendationTools.getRecommendations());
         return List.copyOf(tools);
     }
 }

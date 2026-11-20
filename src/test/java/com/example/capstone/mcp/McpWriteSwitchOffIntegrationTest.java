@@ -27,8 +27,9 @@ class McpWriteSwitchOffIntegrationTest extends McpIntegrationSupport {
     @Test
     void writeToolsAreHiddenAndRejected() throws Exception {
         JsonNode tools = rpc(bearer, "tools/list", Map.of()).path("result").path("tools");
-        assertThat(tools.toString()).contains("list_topics", "search_notes", "get_note")
-                .doesNotContain("create_note", "update_note", "rename_note", "create_topic", "move_notes");
+        assertThat(tools.toString()).contains("list_topics", "search_notes", "get_note", "get_recommendations")
+                .doesNotContain("create_note", "update_note", "rename_note", "create_topic", "move_notes",
+                        "request_recommendations");
 
         JsonNode response = rpc(bearer, "tools/call", Map.of("name", "create_note", "arguments", Map.of("title", "몰래 저장")));
         assertThat(response.path("error").path("code").asInt()).isEqualTo(-32602);
