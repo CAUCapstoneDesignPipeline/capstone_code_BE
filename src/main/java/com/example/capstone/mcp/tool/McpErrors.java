@@ -28,6 +28,17 @@ public final class McpErrors {
         return error;
     }
 
+    /** MCP 계층 전용 RATE_LIMITED(설계안 2.6, G10). 공개 REST 오류 코드에는 넣지 않는다. */
+    public static Map<String, Object> rateLimited(long retryAfterSeconds) {
+        Map<String, Object> error = new LinkedHashMap<>();
+        error.put("code", "RATE_LIMITED");
+        error.put("message", "호출이 너무 많습니다. " + retryAfterSeconds + "초 뒤에 다시 시도하세요.");
+        error.put("retryable", true);
+        error.put("nextStep", "details.retryAfterSeconds초 뒤에 다시 부른다. 그 전에는 같은 종류의 도구를 부르지 않는다.");
+        error.put("details", Map.of("retryAfterSeconds", retryAfterSeconds));
+        return error;
+    }
+
     static boolean retryable(ErrorCode code) {
         return switch (code) {
             case VALIDATION_FAILED, NOTE_TITLE_TAKEN, TOPIC_ORDER_CONFLICT, INTERNAL -> true;

@@ -46,6 +46,12 @@ capstone:
       search-max-limit: 50
       search-query-max-chars: 100
       move-max-notes: 50
+    # 사용자별 호출 횟수 제한(설계안 2.6의 [가정] 수치). 넘으면 RATE_LIMITED와 retryAfterSeconds를 돌려준다.
+    rate-limits:
+      read-per-minute: 60
+      write-per-minute: 20
+      move-per-minute: 6
+      recommendation-per-ten-minutes: 5
   conversion:
     enabled: ${CAPSTONE_CONVERSION_ENABLED:false}
     storage-root: ${CAPSTONE_CONVERSION_STORAGE_ROOT:}

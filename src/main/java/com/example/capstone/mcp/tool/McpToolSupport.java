@@ -32,30 +32,86 @@ public class McpToolSupport {
     public static final String USER_ID = "capstone.userId";
     private static final Logger log = LoggerFactory.getLogger(McpToolSupport.class);
 
-    private final ObjectMapper mapper;
+    private static final java.util.regex.Pattern UUID_TEXT =
+            java.util.regex.Pattern.compile("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$");
 
-    public McpToolSupport(ObjectMapper mapper) {
+    private final ObjectMapper mapper;
+    private final McpRateLimiter limiter;
+
+    public McpToolSupport(ObjectMapper mapper, McpRateLimiter limiter) {
         this.mapper = mapper;
+        this.limiter = limiter;
     }
 
     public SyncToolSpecification tool(McpSchema.Tool tool, Function<Call, Object> handler) {
         Set<String> allowed = properties(tool.inputSchema());
+        boolean readOnly = tool.annotations() != null && Boolean.TRUE.equals(tool.annotations().readOnlyHint());
         return SyncToolSpecification.builder().tool(tool).callHandler((context, request) -> {
+            long started = System.nanoTime();
+            UUID user = null;
+            Map<String, Object> raw = request.arguments() == null ? Map.of() : request.arguments();
+            Outcome outcome;
             try {
-                Map<String, Object> raw = request.arguments() == null ? Map.of() : request.arguments();
-                Call call = new Call(userId(context), new McpArguments(raw, allowed));
-                Object value = handler.apply(call);
-                if (value instanceof Failure failure) {
-                    return result(failure.content(), true);
+                user = userId(context);
+                long retryAfter = limiter.acquire(user, tool.name(), readOnly);
+                if (retryAfter > 0) {
+                    outcome = new Outcome(result(Map.of("error", McpErrors.rateLimited(retryAfter)), true), "RATE_LIMITED");
+                } else {
+                    Object value = handler.apply(new Call(user, new McpArguments(raw, allowed)));
+                    outcome = value instanceof Failure failure
+                            ? new Outcome(result(failure.content(), true), "ALL_FAILED")
+                            : new Outcome(result(value, false), "OK");
                 }
-                return result(value, false);
             } catch (ApiException exception) {
-                return error(exception.errorCode(), exception.getMessage(), exception.details());
+                outcome = new Outcome(error(exception.errorCode(), exception.getMessage(), exception.details()),
+                        exception.errorCode().name());
             } catch (RuntimeException exception) {
                 log.warn("MCP tool {} failed: {}", tool.name(), exception.getClass().getName());
-                return error(ErrorCode.INTERNAL, "일시적인 오류가 발생했습니다. 잠시 후 다시 시도하세요.", Map.of());
+                outcome = new Outcome(error(ErrorCode.INTERNAL, "일시적인 오류가 발생했습니다. 잠시 후 다시 시도하세요.", Map.of()),
+                        ErrorCode.INTERNAL.name());
             }
+            record(tool.name(), readOnly, user, raw, outcome, started);
+            return outcome.result();
         }).build();
+    }
+
+    /**
+     * 설계안 2.6 기록: requestId, 사용자 id, 도구 이름, 결과 코드, 걸린 시간, 응답 크기.
+     * 쓰기 도구는 인자 중 UUID 형식의 대상 id와 건수만 더한다. 인자 값(제목·본문·검색어)과 토큰은 남기지 않는다.
+     */
+    private void record(String tool, boolean readOnly, UUID user, Map<String, Object> raw, Outcome outcome, long started) {
+        long millis = (System.nanoTime() - started) / 1_000_000;
+        int bytes = outcome.result().content().stream()
+                .mapToInt(content -> content instanceof McpSchema.TextContent text
+                        ? text.text().getBytes(java.nio.charset.StandardCharsets.UTF_8).length : 0)
+                .sum();
+        String requestId = UUID.randomUUID().toString();
+        if (readOnly) {
+            log.info("mcp tool call requestId={} user={} tool={} result={} durationMs={} responseBytes={}",
+                    requestId, user, tool, outcome.code(), millis, bytes);
+            return;
+        }
+        List<String> targets = targets(raw);
+        log.info("mcp tool call requestId={} user={} tool={} result={} durationMs={} responseBytes={} targets={} targetCount={}",
+                requestId, user, tool, outcome.code(), millis, bytes, targets, targets.size());
+    }
+
+    private static List<String> targets(Map<String, Object> raw) {
+        List<String> ids = new java.util.ArrayList<>();
+        raw.forEach((name, value) -> {
+            if (!name.endsWith("Id") && !name.endsWith("Ids")) {
+                return;
+            }
+            for (Object item : value instanceof List<?> list ? list : java.util.Collections.singletonList(value)) {
+                if (item instanceof String text && UUID_TEXT.matcher(text).matches()) {
+                    ids.add(text);
+                }
+            }
+        });
+        return ids;
+    }
+
+    private record Outcome(CallToolResult result, String code) {
     }
 
     public static McpSchema.ToolAnnotations hints(boolean readOnly, boolean destructive, boolean idempotent) {
