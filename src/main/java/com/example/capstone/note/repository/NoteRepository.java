@@ -29,15 +29,17 @@ public interface NoteRepository extends JpaRepository<Note,UUID> {
                or exists(select 1 from analysis_graph_item g where g.job_id=j.id and g.user_id=j.user_id)))
             """,nativeQuery=true)
     boolean hasEvidence(UUID userId,UUID id);
+    /** 주제 topicId의 노트를 target(null이면 미분류)으로 옮길 때 제목이 겹치는 노트 제목. */
     @Query("""
             select n.title from Note n where n.userId = :userId and n.topicId = :topicId
-            and exists(select 1 from Note u where u.userId = :userId and u.topicId is null and u.title = n.title)
+            and exists(select 1 from Note u where u.userId = :userId and u.title = n.title
+             and (u.topicId = :target or (:target is null and u.topicId is null)))
             order by n.title
             """)
-    List<String> unassignedConflicts(UUID userId,UUID topicId);
+    List<String> titleConflicts(UUID userId,UUID topicId,UUID target);
     @Modifying(flushAutomatically=true,clearAutomatically=true)
-    @Query("update Note n set n.topicId = null, n.updatedAt = :now where n.userId = :userId and n.topicId = :topicId")
-    int unassignTopic(UUID userId,UUID topicId,Instant now);
+    @Query("update Note n set n.topicId = :target, n.updatedAt = :now where n.userId = :userId and n.topicId = :topicId")
+    int reassignTopic(UUID userId,UUID topicId,UUID target,Instant now);
     long countByUserIdAndTopicId(UUID userId,UUID topicId);
     Optional<Note> findByIdAndUserId(UUID id,UUID userId);
     boolean existsByIdAndUserId(UUID id,UUID userId);
