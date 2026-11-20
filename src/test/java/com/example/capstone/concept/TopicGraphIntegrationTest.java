@@ -111,6 +111,45 @@ class TopicGraphIntegrationTest extends ApiIntegrationSupport {
         call("GET","/api/graph/topics",null,"invalid").andExpect(status().isUnauthorized());
     }
 
+    @Test void searchReturnsTopicsThenKeywordsWithFullPathsThatMatchTheGraph() throws Exception {
+        seed();
+        UUID tcpUnderOs=child("tcp 튜닝",os);
+        JsonNode result=json(call("GET","/api/graph/search?q=tcp",null).andExpect(status().isOk()));
+        assertEquals(List.of("topic","topic"),values(result.path("results"),"kind"));
+        JsonNode exact=result.path("results").get(0);
+        assertEquals(tcp.toString(),exact.path("id").asString());assertEquals("extracted",exact.path("origin").asString());
+        assertEquals(List.of(network.toString(),transport.toString()),values(exact.path("path"),"id"));
+        assertEquals(List.of("네트워크","전송 계층"),values(exact.path("path"),"name"));
+        assertEquals(tcpUnderOs.toString(),result.path("results").get(1).path("id").asString());
+        assertEquals(List.of(os.toString()),values(result.path("results").get(1).path("path"),"id"));
+
+        JsonNode resend=json(call("GET","/api/graph/search?q=재전",null)).path("results");
+        assertEquals(1,resend.size());assertEquals("keyword",resend.get(0).path("kind").asString());assertEquals("재전송",resend.get(0).path("name").asString());
+        assertEquals(List.of(network.toString(),transport.toString(),tcp.toString()),values(resend.get(0).path("path"),"id"));
+        JsonNode leaf=json(call("GET","/api/graph/topics/"+tcp,null));
+        assertTrue(values(leaf.path("keywords"),"id").contains(resend.get(0).path("id").asString()));
+
+        JsonNode generated=json(call("GET","/api/graph/search?q=이해",null)).path("results").get(0);
+        assertEquals("generated",generated.path("origin").asString());assertEquals(List.of(network.toString()),values(generated.path("path"),"id"));
+        JsonNode memo=json(call("GET","/api/graph/search?q=메모",null)).path("results");
+        assertEquals(1,memo.size());assertEquals("none",memo.get(0).path("path").get(0).path("id").asString());assertEquals("미분류",memo.get(0).path("path").get(0).path("name").asString());
+        assertEquals(0,json(call("GET","/api/graph/search?q=제목없음",null)).path("results").size());
+
+        JsonNode topLevel=json(call("GET","/api/graph/search?q=네트",null)).path("results").get(0);
+        assertEquals("topic",topLevel.path("kind").asString());assertTrue(topLevel.path("path").isEmpty());
+        assertEquals(1,json(call("GET","/api/graph/search?q=t&limit=1",null)).path("results").size());
+    }
+
+    @Test void searchValidatesInputAndHidesOtherUsers() throws Exception {
+        seed();
+        call("GET","/api/graph/search",null).andExpect(status().isBadRequest());
+        call("GET","/api/graph/search?q=  ",null).andExpect(status().isBadRequest()).andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.error.code").value("VALIDATION_FAILED"));
+        call("GET","/api/graph/search?q=a&limit=0",null).andExpect(status().isBadRequest());
+        call("GET","/api/graph/search?q=a&limit=51",null).andExpect(status().isBadRequest());
+        assertEquals(0,json(call("GET","/api/graph/search?q=tcp",null,otherBearer).andExpect(status().isOk())).path("results").size());
+        assertEquals(0,json(call("GET","/api/graph/search?q=재전",null,otherBearer)).path("results").size());
+    }
+
     /** 라벨 앞 "+"는 이해함으로 들어온(origin=generated) 개념을 뜻한다. relations는 라벨 쌍 사이의 관계다. */
     void analyze(UUID requested,Map<UUID,List<String>> keywords,List<List<String>> relations) {
         work.submit(userId,requested);Work job=work.claim();var items=new ArrayList<JsonNode>();var conceptIds=new HashMap<String,String>();var snapshots=new HashMap<String,JsonNode>();
