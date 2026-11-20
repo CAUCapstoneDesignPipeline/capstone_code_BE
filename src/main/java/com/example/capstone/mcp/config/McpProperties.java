@@ -8,7 +8,8 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  * 크기 제한 기본값은 설계안 2.6의 [가정] 수치다.
  */
 @ConfigurationProperties("capstone.mcp")
-public record McpProperties(boolean enabled, boolean writeEnabled, @DefaultValue Limits limits) {
+public record McpProperties(boolean enabled, boolean writeEnabled, @DefaultValue Limits limits,
+        @DefaultValue RateLimits rateLimits) {
 
     public record Limits(
             @DefaultValue("10000") int noteDefaultChars,
@@ -18,5 +19,13 @@ public record McpProperties(boolean enabled, boolean writeEnabled, @DefaultValue
             @DefaultValue("50") int searchMaxLimit,
             @DefaultValue("100") int searchQueryMaxChars,
             @DefaultValue("50") int moveMaxNotes) {
+    }
+
+    /** 사용자별 호출 횟수 제한(설계안 2.6의 [가정] 수치). 창 안의 호출 수를 메모리에서 센다. */
+    public record RateLimits(
+            @DefaultValue("60") int readPerMinute,
+            @DefaultValue("20") int writePerMinute,
+            @DefaultValue("6") int movePerMinute,
+            @DefaultValue("5") int recommendationPerTenMinutes) {
     }
 }
