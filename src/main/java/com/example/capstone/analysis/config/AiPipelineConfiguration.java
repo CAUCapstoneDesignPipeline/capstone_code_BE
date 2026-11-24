@@ -90,6 +90,18 @@ public class AiPipelineConfiguration {
         for(String field:new String[]{"profileVersion","provider","model","modelRevision","promptVersion","schemaVersion","preprocessingVersion"}) if(!expected.path(field).equals(meta.path(field))) return false;
         return true;
     }
+    /**
+     * 외부 지식처럼 분석 파이프라인 밖에서 부르는 operation의 meta를 확인한다. 증명에 이 profile의 stamp가 있으면 그중 하나와 같아야 한다.
+     * 카드 표시용 부가 정보라 불일치해도 분석 파이프라인을 격리하지 않고 그 응답만 버린다.
+     */
+    public boolean accepts(String profile,JsonNode meta) {
+        if(rejected || !profile.equals(meta.path("profileVersion").asString())) return false;
+        if(synthetic) return Set.of("synthetic","fixture","test").contains(meta.path("provider").asString());
+        if(attestation==null || attestation.path("expectedMeta").path(profile).isMissingNode()) return true;
+        try { for(JsonNode expected:stamps(attestation.path("expectedMeta").path(profile))) if(matches(expected,meta)) return true; }
+        catch(AiCallException invalid) { return false; }
+        return false;
+    }
     /** 응답 meta 불일치·422 UNSUPPORTED_PROFILE로 격리됐거나 운영 설정이 거부된 상태. 재시작으로만 풀린다. */
     public boolean quarantined() { return rejected; }
     public void quarantine() { rejected=true; }
