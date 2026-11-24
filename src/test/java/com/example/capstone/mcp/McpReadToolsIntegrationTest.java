@@ -36,7 +36,7 @@ class McpReadToolsIntegrationTest extends McpIntegrationSupport {
         JsonNode tools = rpc(bearer, "tools/list", Map.of()).path("result").path("tools");
         List<String> names = new ArrayList<>();
         tools.forEach(tool -> names.add(tool.path("name").asString()));
-        assertThat(names).containsExactly("list_topics", "search_notes", "get_note");
+        assertThat(names).containsExactly("list_topics", "search_notes", "get_note", "get_recommendations");
 
         JsonNode search = tools.get(1);
         assertThat(search.path("description").asString()).isEqualTo(
