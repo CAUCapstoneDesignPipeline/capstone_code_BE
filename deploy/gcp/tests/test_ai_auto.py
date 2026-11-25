@@ -27,6 +27,8 @@ class FakeSource:
         self.extra = set(extra)
 
     def profiles(self):
+        extract = {'extract-det-3': {'id': 'extract-det-3', 'relations': 'rules'}}
+        extract.update(getattr(self, 'extract', {}))
         reasoning = {}
         for profile in USED:
             if profile in ('extract-det-3', 'embeddings-bge-m3-1'):
@@ -36,7 +38,6 @@ class FakeSource:
             reasoning[profile] = {'id': profile, 'operation': operation, 'model': model, 'prompt': profile, 'files': ('x.py',)}
         for profile in self.extra:
             reasoning[profile] = {'id': profile, 'operation': 'merge', 'model': 'rules', 'prompt': profile, 'files': ('x.py',)}
-        extract = {'extract-det-3': {'id': 'extract-det-3', 'relations': 'rules'}}
         embedding = {'embeddings-bge-m3-1': {'id': 'embeddings-bge-m3-1', 'backend': 'sentence-transformers',
                                              'model': host.AI_EMBEDDING['name'], 'revision': host.AI_EMBEDDING['revision'], 'prefix': ''}}
         return reasoning, extract, embedding
@@ -45,7 +46,14 @@ class FakeSource:
         return sha(self.code)[:12]
 
     def tree(self, path):
-        return 'concepts-tree-1' if not getattr(self, 'concepts', None) else self.concepts
+        """git object id of a file or directory; `trees` overrides single paths."""
+        return getattr(self, 'trees', {}).get(path, 'object-1:' + path)
+
+    def read(self, path):
+        assert path == 'uv.lock', path
+        kiwi = getattr(self, 'kiwi', '0.24.0')
+        return ('[[package]]\nname = "kiwipiepy"\nversion = "%s"\nsource = { registry = "https://pypi.org/simple" }\n\n'
+                '[[package]]\nname = "kiwipiepy-model"\nversion = "%s"\n' % (kiwi, kiwi)).encode()
 
 
 def ai_release(name='ai-fixture-v3', image=AI_IMAGE, source='b' * 40):
@@ -126,8 +134,11 @@ class AiAutoTest(unittest.TestCase):
         be = {'Derivation': {'properties': {'a': {'type': 'string'}}, 'required': ['a']}}
         newer = {'Derivation': {'properties': {'a': {'type': 'string'}, 'b': {'type': 'string'}}, 'required': ['a', 'b']}}
         relaxed = {'Derivation': {'properties': {'a': {'type': 'string'}, 'b': {'type': 'string'}}, 'required': ['a']}}
-        changed = FakeSource(b'v2', ['extract-hybrid-1'])
-        changed.concepts = 'concepts-tree-2'
+        def changed(**attrs):
+            source = FakeSource(b'v2', ['extract-hybrid-1'])
+            for key, value in attrs.items():
+                setattr(source, key, value)
+            return dict(sources, **{'9' * 40: source})
         self.assertTrue(plan(state, ai_state, release, installed, sources, relaxed, newer)['narrow'])
         for name, change in [
                 ('schema', lambda: plan(state, ai_state, release, installed, sources, be, newer)),
@@ -136,12 +147,26 @@ class AiAutoTest(unittest.TestCase):
                 ('dropped profile', lambda: plan(state, ai_state, release, installed, dict(sources, **{'9' * 40: FakeSource(b'v2')}))),
                 ('records disagree', lambda: plan(state, dict(ai_state, current='ai-other'), dict(release, releaseId='ai-other'), installed, sources)),
                 ('no previous', lambda: plan(state, ai_state, release, installed, sources, operation='rollback')),
-                ('concepts changed', lambda: plan(state, ai_state, release, installed, dict(sources, **{'9' * 40: changed})))]:
+                ('extract.py changed', lambda: plan(state, ai_state, release, installed, changed(trees={'app/services/concepts/extract.py': 'object-2'}))),
+                ('markdown.py changed', lambda: plan(state, ai_state, release, installed, changed(trees={'app/services/concepts/markdown.py': 'object-2'}))),
+                ('extract config changed', lambda: plan(state, ai_state, release, installed, changed(trees={'app/services/concepts/config.py': 'object-2'}))),
+                ('kiwi changed', lambda: plan(state, ai_state, release, installed, changed(kiwi='0.25.0'))),
+                ('kiwi unpinned', lambda: plan(state, ai_state, release, installed, changed(read=lambda path: b''))),
+                ('extract profile changed', lambda: plan(state, ai_state, release, installed,
+                                                         changed(extract={'extract-det-3': {'id': 'extract-det-3', 'relations': 'rules+structure'}})))]:
             with self.subTest(name), self.assertRaises(ReleaseError):
                 change()
         self.assertEqual(att.schema_problems(be, newer), ['/Derivation/properties/b'])
         self.assertEqual(att.schema_problems(newer, relaxed), ['/Derivation/required'])
         self.assertEqual(att.schema_problems(relaxed, newer), [])
+
+    def test_new_extractor_files_keep_the_pinned_idf(self):
+        # A new extractor in app/services/concepts changes the folder but not what the IDF check hashes.
+        state, ai_state, release, installed, sources = world()
+        sources['9' * 40].trees = {'app/services/concepts': 'object-2', 'app/services/concepts/student.py': 'object-2'}
+        sources['9' * 40].extract = {'extract-student-1': {'id': 'extract-student-1', 'relations': 'rules+structure', 'student': 'extract-student-1'}}
+        bundle = plan(state, ai_state, release, installed, sources)
+        self.assertEqual(bundle['target']['idf'], dict(release['idf'], sourceSha='9' * 40))
 
     def test_rollback_and_pending_narrow(self):
         state, ai_state, release, installed, sources = world()
