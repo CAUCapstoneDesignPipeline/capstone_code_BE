@@ -43,9 +43,12 @@ WORKFLOW = REPOSITORY + '/.github/workflows/gcp-cd.yml@' + REF
 AI_BUCKET = 'capsnote-169516793433-ai-releases'
 AI_IMAGE = re.escape('asia-northeast3-docker.pkg.dev/capsnote/capstone-ai/ai@') + DIGEST
 AI_CONTENT = '/etc/capstone-gcp/ai/'
-# The pinned IDF object is reused while the concept extraction code that reads it is unchanged
-# (AI manifest.py requires idf.sourceSha == sourceSha; the AI server also refuses an IDF config mismatch).
-IDF_CODE = 'app/services/concepts'
+# The pinned IDF object is reused while every input of the AI server's IDF compatibility hash is unchanged
+# (AI app/services/concepts/config.py ExtractConfig.version: the extractor config, extract.py, markdown.py and the
+# kiwipiepy / kiwipiepy-model versions). Other files in app/services/concepts (new extractors) do not touch the IDF.
+# AI manifest.py requires idf.sourceSha == sourceSha; the AI server also refuses an IDF config mismatch.
+IDF_FILES = tuple('app/services/concepts/' + name for name in ('config.py', 'extract.py', 'markdown.py'))
+IDF_PACKAGES = ('kiwipiepy', 'kiwipiepy-model')
 STEPS = ('validate', 'plan', 'widen', 'ai', 'narrow')
 
 
@@ -68,6 +71,17 @@ def identity(env, root):
 
 
 # ------------------------------------------------------------------------------------- pure planning
+def idf_inputs(source):
+    """What the AI server hashes to accept an IDF: git object ids of IDF_FILES and the locked IDF_PACKAGES versions."""
+    lock = source.read('uv.lock').decode()
+    versions = []
+    for name in IDF_PACKAGES:
+        found = re.search(r'^\[\[package\]\]\nname = "%s"\nversion = "([^"]+)"' % re.escape(name), lock, re.M)
+        require(found, 'AI uv.lock does not pin %s' % name)
+        versions.append(found.group(1))
+    return tuple(source.tree(path) for path in IDF_FILES) + tuple(versions)
+
+
 def ai_release_id(source, now):
     return 'cd-ai-%s-%s' % (time.strftime('%Y%m%d%H%M%S', time.gmtime(now)), source[:7])
 
@@ -147,7 +161,9 @@ def plan(app, ai_state, ai_current, ai_previous, installed, sources, be_schemas,
     require(set(target['profiles']) <= att.listed(tsource), 'Target AI source no longer serves a listed profile')
     if operation == 'deploy':
         old = sources[ai_current['sourceSha']]
-        require(old.tree(IDF_CODE) == tsource.tree(IDF_CODE) and old.profiles()[1] == tsource.profiles()[1],
+        before, after = old.profiles()[1], tsource.profiles()[1]
+        # New extract profiles may appear (they are not served unless listed); every existing one must be unchanged.
+        require(idf_inputs(old) == idf_inputs(tsource) and all(after.get(k) == v for k, v in before.items()),
                 'Concept extraction changed; the pinned IDF needs a reviewed rebuild (manual release)')
     if exported is None:
         # A rollback returns to an AI that already served this BE contract line; there is no export job for it.
