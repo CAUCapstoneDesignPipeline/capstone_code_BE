@@ -12,6 +12,8 @@ name: Automatic GCP app release
         value: ${{ jobs.release.outputs.operation_id }}
       release_id:
         value: ${{ jobs.release.outputs.release_id }}
+      stop_reason:
+        value: ${{ jobs.release.outputs.stop_reason }}
 permissions:
   contents: read
 jobs:
@@ -30,6 +32,7 @@ jobs:
     outputs:
       operation_id: ${{ steps.execute.outputs.operation_id }}
       release_id: ${{ steps.execute.outputs.release_id }}
+      stop_reason: ${{ steps.execute.outputs.stop_reason }}
     env:
       COMPONENT: ${{ inputs.component }}
       OPERATION: ${{ inputs.operation }}
@@ -72,6 +75,8 @@ jobs:
         service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
         create_credentials_file: true
     - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db
+    # Appended Flyway migrations: auto.py takes an on-demand Cloud SQL backup and writes the host's backup
+    # evidence before submitting (deployer custom role capsnoteReleaseBackup).
     - name: Derive from the recorded release, submit and observe
       id: execute
       run: python3 deploy/gcp/auto.py

@@ -1,5 +1,6 @@
 import copy
 import hashlib
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -10,6 +11,7 @@ import auto
 import pipeline
 
 DIGEST = 'sha256:' + '9' * 64
+BACKUP = 'projects/capsnote/instances/capsnote-prod-pg16/backupRuns/1795672067739'
 NOW = 1794700000
 
 
@@ -65,15 +67,47 @@ class AutoReleaseTest(unittest.TestCase):
         changed = {k for k in base if base[k] != target[k]}
         self.assertEqual(changed, {'web', 'releaseId'})
 
-    def test_be_requires_identical_migration_inventory(self):
+    def test_be_image_only_needs_the_identical_inventory(self):
         base = manifest('old')
-        self.assertEqual(auto.derive(base, 'be', '7' * 40, DIGEST, inventory(), NOW)['be']['sourceSha'], '7' * 40)
-        added = inventory() + [{'version': '3', 'sha256': '3' * 64}]
-        edited = inventory()
-        edited[1]['sha256'] = '4' * 64
-        for rows in (added, edited, None):
+        target = auto.derive(base, 'be', '7' * 40, DIGEST, inventory(), NOW)
+        self.assertEqual((target['be']['sourceSha'], target['flyway']['before']), ('7' * 40, '2'))
+        for rows in (None, []):
             with self.subTest(rows=rows), self.assertRaises(ReleaseError):
                 auto.derive(base, 'be', '7' * 40, DIGEST, rows, NOW)
+        with self.assertRaises(ReleaseError):
+            auto.derive(base, 'be', '7' * 40, DIGEST, inventory(), NOW, BACKUP)
+
+    def test_be_appending_migrations_moves_the_schema_with_the_backup(self):
+        base = manifest('old')
+        added = inventory() + [{'version': '3', 'sha256': '3' * 64}, {'version': '4', 'sha256': '4' * 64}]
+        with self.assertRaises(ReleaseError):
+            auto.derive(base, 'be', '7' * 40, DIGEST, added, NOW)
+        target = auto.derive(base, 'be', '7' * 40, DIGEST, added, NOW, BACKUP)
+        self.assertEqual(target['flyway'], {'before': '2', 'after': '4', 'rollbackCompatibleWith': ['4'],
+                                            'migrations': added, 'backupReference': BACKUP})
+        self.assertEqual({k for k in base if base[k] != target[k]}, {'be', 'releaseId', 'flyway'})
+
+    def test_applied_migrations_stay_immutable(self):
+        base = manifest('old')
+        edited = inventory()
+        edited[1]['sha256'] = '4' * 64
+        removed = inventory()[:1]
+        inserted = [inventory()[0], {'version': '2', 'sha256': '5' * 64}, {'version': '3', 'sha256': '3' * 64}]
+        for rows in (edited, removed, inserted, edited + [{'version': '3', 'sha256': '3' * 64}]):
+            with self.subTest(rows=rows), self.assertRaises(ReleaseError):
+                auto.derive(base, 'be', '7' * 40, DIGEST, rows, NOW, BACKUP)
+
+    def test_needs_backup_only_for_a_new_be_image_that_appends(self):
+        state = {'current': manifest('old'), 'previous': None}
+        added = inventory() + [{'version': '3', 'sha256': '3' * 64}]
+        self.assertTrue(auto.needs_backup(state, 'be', 'deploy', '7' * 40, DIGEST, added))
+        current_be = state['current']['be']
+        same = (current_be['sourceSha'], current_be['image'].split('@')[1])
+        for args in (('be', 'deploy', '7' * 40, DIGEST, inventory()), ('web', 'deploy', '7' * 40, DIGEST, None),
+                     ('be', 'rollback', None, None, None), ('be', 'deploy') + same + (added,)):
+            with self.subTest(args=args[:2]):
+                self.assertFalse(auto.needs_backup(state, *args))
+        self.assertFalse(auto.needs_backup({'current': None, 'previous': None}, 'be', 'deploy', '7' * 40, DIGEST, added))
 
     def test_same_image_is_a_noop_and_schema_moves_to_after(self):
         base = manifest('old')
@@ -121,6 +155,71 @@ class AutoReleaseTest(unittest.TestCase):
             with self.assertRaises(ReleaseError):
                 auto.run(env(repo, 'web'), Path('.'), FakeCloud([first]), execute)
             self.assertEqual(calls, ['old'])
+
+
+    def test_migrating_run_backs_up_first_and_records_the_backup(self):
+        repo = 'CAUCapstoneDesignPipeline/capstone_code_BE'
+        state = {'current': manifest('old'), 'previous': None}
+        added = inventory() + [{'version': '3', 'sha256': '3' * 64}]
+        order = []
+
+        def backup(current):
+            order.append(('backup', current['releaseId']))
+            return BACKUP
+
+        def execute(request):
+            order.append(('execute', request['manifest']['flyway']['backupReference']))
+
+        with patch.object(auto.subprocess, 'check_output', return_value='a' * 40 + '\n'), \
+                patch.object(auto, 'migrations', return_value=added):
+            auto.run(env(repo, 'be'), Path('.'), FakeCloud([state]), execute, backup=backup)
+            self.assertEqual(order, [('backup', 'old'), ('execute', BACKUP)])
+            order.clear()
+            with patch.object(auto, 'migrations', return_value=inventory()):
+                auto.run(env(repo, 'be'), Path('.'), FakeCloud([state]), execute, backup=backup)
+            self.assertEqual(order, [('execute', None)])
+            with self.assertRaises(ReleaseError):
+                auto.run(env(repo, 'be'), Path('.'), FakeCloud([state]), execute)
+
+    def test_backup_run_accepts_only_a_finished_on_demand_backup(self):
+        operation = {'status': 'DONE', 'backupContext': {'backupId': '1795672067739'}}
+        run = {'id': '1795672067739', 'status': 'SUCCESSFUL', 'type': 'ON_DEMAND', 'instance': 'capsnote-prod-pg16',
+               'endTime': '2026-11-26T05:49:18.906Z'}
+        self.assertEqual(auto.backup_run(operation, run, NOW)['reference'], BACKUP)
+        for bad_operation, bad_run in [({**operation, 'error': {'errors': [1]}}, run),
+                                       ({'status': 'DONE', 'backupContext': {}}, run),
+                                       (operation, {**run, 'status': 'FAILED'}),
+                                       (operation, {**run, 'type': 'AUTOMATED'}),
+                                       (operation, {**run, 'id': '1'}),
+                                       (operation, {**run, 'instance': 'other'})]:
+            with self.subTest(operation=bad_operation, run=bad_run), self.assertRaises(ReleaseError):
+                auto.backup_run(bad_operation, bad_run, NOW)
+
+    def test_evidence_is_written_on_the_host_for_the_current_release(self):
+        current = manifest('old')
+        taken = {'id': '1795672067739', 'reference': BACKUP}
+        calls = []
+
+        def ssh(channel, command, data=None):
+            calls.append((command, json.loads(data)))
+            return {'reference': BACKUP, 'version': '2'}
+
+        with patch.object(auto.pipeline, 'ssh', ssh):
+            auto.write_evidence(['ssh'], current, taken)
+            command, payload = calls[0]
+            self.assertTrue(command.startswith('sudo /usr/bin/python3 -c '))
+            self.assertEqual(payload, {'expectedRelease': 'old', 'backup': taken})
+        compile(auto.EVIDENCE_PROGRAM, 'evidence', 'exec')
+        with patch.object(auto.pipeline, 'ssh', return_value={'reference': BACKUP, 'version': '1'}), \
+                self.assertRaises(ReleaseError):
+            auto.write_evidence(['ssh'], current, taken)
+
+    def test_stop_reason_is_reported_on_one_line(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'output'
+            with patch.dict(auto.os.environ, {'GITHUB_OUTPUT': str(path)}):
+                auto.report('first\nsecond')
+            self.assertEqual(path.read_text(), 'stop_reason=first second\n')
 
 
 if __name__ == '__main__':
