@@ -1,0 +1,90 @@
+{
+  "schemaVersion": 4,
+  "releaseId": "cold-start-20261105-v7",
+  "be": {
+    "image": "asia-northeast3-docker.pkg.dev/capsnote/capstone-be/be@sha256:3b03f51c16bb859fb8dbc3d756eec759067dee78123867cb5470333aed5be57a",
+    "sourceSha": "15606e424ca4d3510b829d6a8073710d29c516d2"
+  },
+  "web": {
+    "image": "asia-northeast3-docker.pkg.dev/capsnote/capstone-web/web@sha256:2fb5337d0bf2d68d8b6adfb8cade0e22a31922c01d27a87549a31739af6ca486",
+    "sourceSha": "d91d8356b10e70d5e28dd270f2b07c253962c768"
+  },
+  "proxy": {
+    "image": "gcr.io/cloud-sql-connectors/cloud-sql-proxy@sha256:b0183dada4394925de5ca2ca833ef04706cb0a15a725be18c4c62e83eeae69ac"
+  },
+  "aiImage": "asia-northeast3-docker.pkg.dev/capsnote/capstone-ai/ai@sha256:fa6a090cf3507cbe210bc895e9e821a688e3cd35a36d44f5fcff86a7a7547559",
+  "aiEnabled": true,
+  "configRevision": "80ab0455f54268ded1ab7a6e9f8a09af2d12d12358290f41496e3f02db61f9eb",
+  "bootstrapRevision": "9e17851fae5ce74e5deac2ec4acb3e0c83c186c2",
+  "secretVersions": {
+    "dbPassword": "projects/capsnote/secrets/capsnote-prod-db-password/versions/1",
+    "jwtSecret": "projects/capsnote/secrets/capsnote-prod-jwt-secret/versions/2",
+    "googleClientSecret": "projects/capsnote/secrets/capsnote-prod-google-client-secret/versions/1",
+    "allowedEmails": "projects/capsnote/secrets/capsnote-prod-allowed-emails/versions/1"
+  },
+  "flyway": {
+    "before": "9",
+    "after": "11",
+    "rollbackCompatibleWith": [
+      "11"
+    ],
+    "migrations": [
+      {
+        "version": "1",
+        "sha256": "c26c36b8984752a4da05440ec39bf5b93bf6e89b5876feb15a67ec67896904fb"
+      },
+      {
+        "version": "2",
+        "sha256": "af1501d310de19c65a133a5d5b23c86565ca2f00079e577afd31dcdf098d0aee"
+      },
+      {
+        "version": "3",
+        "sha256": "ffb06e8b4d41a62856125ecf4313ef029b9ea8624c52d2de6214d4d29c3e9892"
+      },
+      {
+        "version": "4",
+        "sha256": "f0fca8a15d75a96b5b5b347190d5cca8764a57414ff3973fb2e46ececfff177b"
+      },
+      {
+        "version": "5",
+        "sha256": "2a4dd7f822e9ad44d1c95d4db8fc59a9a91adb6889e8b71032254727b5f203af"
+      },
+      {
+        "version": "6",
+        "sha256": "f1e3b897ff9e33307773fe0db25d18faae2b641a426f97cc099d6fe6ab10fab1"
+      },
+      {
+        "version": "7",
+        "sha256": "faeb95f2434fac0a403ebedcf7043ecdac5ecb529695d65f6aba0f046b7b2d9a"
+      },
+      {
+        "version": "8",
+        "sha256": "04ffd2943c45a9749f0c7e906193f2440516b19d4ce5e6d47fdea231fa7129c2"
+      },
+      {
+        "version": "9",
+        "sha256": "eea3f7653d6347461c187af5d3fa3d4f2af0302929b1abe28ea334850317f445"
+      },
+      {
+        "version": "10",
+        "sha256": "da446ca53c0457cb552cef10f740e51a2275008ebbbc0a5ea1b04a69dc370be1"
+      },
+      {
+        "version": "11",
+        "sha256": "dab183c72a1c7da406a269c51ded49c0554c8a3fe53314174c79f0c0d18ccf7b"
+      }
+    ],
+    "backupReference": "projects/capsnote/instances/capsnote-prod-pg16/backupRuns/1795672067739"
+  },
+  "ai": {
+    "release": "ai-chat-20261118-v1",
+    "serviceToken": "projects/capsnote/secrets/capsnote-prod-ai-service-token/versions/1",
+    "caSha256": "6ce273baf0c57799a377654ae743c32ba6569f5fdc51b6eac61482aa56437729",
+    "policySha256": "86ed97567097513ec921badb816defbf8c16f7fdf25d347f8162e40222cc08e2",
+    "attestationSha256": "6bd9f50334202038e15d7acf844f85a6c45611b07eb6cdced3098958df9a50be",
+    "profiles": {},
+    "budgetMicrounits": 110000000,
+    "currency": "USD",
+    "pollMs": 5000
+  }
+}
