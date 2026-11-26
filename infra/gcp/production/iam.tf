@@ -81,6 +81,22 @@ resource "google_project_iam_member" "deployment_lookup" {
   member  = "serviceAccount:${google_service_account.deployer.email}"
 }
 
+# Automatic BE releases that append Flyway migrations take an on-demand backup first (deploy/gcp/auto.py).
+# instances.get covers polling the backup operation; no restore, delete or instance change.
+resource "google_project_iam_custom_role" "release_backup" {
+  role_id     = "capsnoteReleaseBackup"
+  title       = "CAPSNOTE release backup"
+  description = "On-demand Cloud SQL backup before an automatic migration release."
+  permissions = ["cloudsql.backupRuns.create", "cloudsql.backupRuns.get", "cloudsql.instances.get"]
+  depends_on  = [google_project_service.required]
+}
+
+resource "google_project_iam_member" "release_backup" {
+  project = var.project_id
+  role    = google_project_iam_custom_role.release_backup.name
+  member  = "serviceAccount:${google_service_account.deployer.email}"
+}
+
 locals {
   ssh_principals = {
     bootstrap = "serviceAccount:capstone-bootstrap@${var.project_id}.iam.gserviceaccount.com"

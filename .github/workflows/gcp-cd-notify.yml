@@ -1,0 +1,37 @@
+name: Report a stopped GCP release
+# Called by the BE, FE and AI gcp-cd.yml when publishing or releasing fails, so a stopped automatic release
+# (for example an edited applied migration) is visible as an open issue instead of only a red run.
+'on':
+  workflow_call:
+    inputs:
+      component: {required: true, type: string}
+      stop_reason: {required: false, type: string, default: ''}
+permissions:
+  contents: read
+jobs:
+  report:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      COMPONENT: ${{ inputs.component }}
+      STOP_REASON: ${{ inputs.stop_reason }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      SOURCE_SHA: ${{ github.sha }}
+    steps:
+    - name: Open or update the stopped-release issue
+      run: |-
+        title="[CD] ${COMPONENT} 자동 배포가 멈춤"
+        body="$(printf '%s\n\n- 커밋: `%s`\n- 실행: %s\n- 이유: %s\n' \
+          "운영 자동 배포가 이 커밋을 반영하지 못했습니다. 원인을 고치거나 수동 release로 올린 뒤 이 이슈를 닫아 주세요." \
+          "${SOURCE_SHA}" "${RUN_URL}" "${STOP_REASON:-실행 로그 확인 필요}")"
+        number="$(gh issue list --state open --search "in:title \"${title}\"" --json number,title \
+          --jq "map(select(.title == \"${title}\")) | .[0].number // empty")"
+        if [ -n "${number}" ]; then
+          gh issue comment "${number}" --body "${body}"
+        else
+          gh issue create --title "${title}" --body "${body}"
+        fi

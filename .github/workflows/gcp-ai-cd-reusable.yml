@@ -6,6 +6,9 @@ name: Automatic GCP AI release
       source_sha: {required: true, type: string}
       image_digest: {required: true, type: string}
       deploy_tool_sha: {required: true, type: string}
+    outputs:
+      stop_reason:
+        value: ${{ jobs.plan.outputs.stop_reason }}
 permissions:
   contents: read
 env:
@@ -59,6 +62,7 @@ jobs:
       bundle: ${{ steps.plan.outputs.bundle }}
       noop: ${{ steps.plan.outputs.noop }}
       widen: ${{ steps.plan.outputs.widen }}
+      stop_reason: ${{ steps.plan.outputs.stop_reason }}
     env:
       GCP_DEPLOY_ENABLED: ${{ vars.GCP_DEPLOY_ENABLED }}
       GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}

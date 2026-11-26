@@ -387,6 +387,8 @@ if __name__ == '__main__':
     try:
         main()
     except ReleaseError as error:
+        auto.report(str(error))
         raise SystemExit('Automatic AI release stopped: ' + str(error)) from None
     except Exception:
+        auto.report('did not complete; inspect operation status')
         raise SystemExit('Automatic AI release did not complete; inspect operation status; details suppressed') from None
