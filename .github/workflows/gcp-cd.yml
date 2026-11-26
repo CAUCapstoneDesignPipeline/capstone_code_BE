@@ -26,7 +26,7 @@ jobs:
   release:
     needs: publish
     if: always() && github.repository == 'CAUCapstoneDesignPipeline/capstone_code_BE' && github.ref == 'refs/heads/main' && vars.GCP_DEPLOY_ENABLED == 'true' && (needs.publish.result == 'success' || (needs.publish.result == 'skipped' && inputs.operation == 'rollback'))
-    uses: CAUCapstoneDesignPipeline/capstone_code_BE/.github/workflows/gcp-cd-reusable.yml@c6495dbf0379be1b8665298a31f8bbcf682d7b91
+    uses: CAUCapstoneDesignPipeline/capstone_code_BE/.github/workflows/gcp-cd-reusable.yml@8575d45c1b9884d241cd776ffd75704e367f16d3
     permissions:
       contents: read
       id-token: write
@@ -35,4 +35,15 @@ jobs:
       operation: ${{ inputs.operation || 'deploy' }}
       source_sha: ${{ github.sha }}
       image_digest: ${{ needs.publish.outputs.digest }}
-      deploy_tool_sha: c6495dbf0379be1b8665298a31f8bbcf682d7b91
+      deploy_tool_sha: 8575d45c1b9884d241cd776ffd75704e367f16d3
+  # 자동 배포가 멈추면 이 저장소에 이슈를 열거나 댓글을 단다 (BE .github/workflows/gcp-cd-notify.yml).
+  notify:
+    needs: [publish, release]
+    if: failure() && github.repository == 'CAUCapstoneDesignPipeline/capstone_code_BE'
+    uses: CAUCapstoneDesignPipeline/capstone_code_BE/.github/workflows/gcp-cd-notify.yml@8575d45c1b9884d241cd776ffd75704e367f16d3
+    permissions:
+      contents: read
+      issues: write
+    with:
+      component: be
+      stop_reason: ${{ needs.release.outputs.stop_reason }}
