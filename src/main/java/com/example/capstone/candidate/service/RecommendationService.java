@@ -62,7 +62,8 @@ public class RecommendationService {
         };
     }
     /**
-     * understood는 채택 검토(새로 이해함)로, known은 거절 검토(이미 앎)로 기록한다. confused는 그래프에 반영하지 않는다.
+     * understood는 채택 검토(새로 이해함)로, known은 거절 검토(이미 앎)로 기록한다. confused는 검토 없이 답만 기록하고,
+     * 주제 그래프가 이 기록을 읽어 경로 키워드를 "이해 안 됨"으로 표시한다(#156).
      * 같은 최종 답을 다시 보내면 204이고, 최종 답 뒤에 다른 답을 보내면 409다. confused 뒤에는 최종 답을 받을 수 있다.
      */
     @Transactional

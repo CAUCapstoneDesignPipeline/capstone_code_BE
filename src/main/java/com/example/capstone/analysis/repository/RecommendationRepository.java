@@ -84,6 +84,22 @@ public class RecommendationRepository {
           """,Map.of("user",user,"recommendation",recommendation));
         return row==null?null:row.asString();
     }
+    /**
+     * "이해 안 됨" 키워드(#156): 가장 최근 답이 confused인 추천마다 가장 새 결과의 경로 개념(카드의 relatedKeywords)을 준다.
+     * 뒤이어 이해함·알고 있던 내용으로 답했거나 가장 새 결과의 근거가 사라진(evidence_lost) 추천은 뺀다.
+     */
+    public List<JsonNode> confusedKeywords(UUID user) {
+        return db.rows("""
+          with answered as(select distinct on(r.recommendation_id) r.recommendation_id,f.action
+            from recommendation_feedback f join analysis_result r on r.id=f.result_id and r.user_id=f.user_id
+           where f.user_id=:user order by r.recommendation_id,f.created_at desc,f.id desc),
+          latest as(select distinct on(r.recommendation_id) r.* from analysis_result r join answered a on a.recommendation_id=r.recommendation_id
+           where r.user_id=:user and a.action='confused'"""+" and "+ELIGIBLE+" order by r.recommendation_id,r.created_at desc,r.id desc)"+"""
+          select jsonb_build_object('conceptId',c.value->>'conceptId','label',c.value->>'label')::text
+           from latest r cross join jsonb_array_elements(case when jsonb_typeof(r.detail->'path'->'concepts')='array' then r.detail->'path'->'concepts' else '[]'::jsonb end) c
+          where r.freshness<>'evidence_lost'
+          """,Map.of("user",user));
+    }
     public void feedback(UUID user,UUID result,String action) {
         db.write("insert into recommendation_feedback(id,user_id,result_id,action) values(:id,:user,:result,:action)",Map.of("id",UUID.randomUUID(),"user",user,"result",result,"action",action));
     }
