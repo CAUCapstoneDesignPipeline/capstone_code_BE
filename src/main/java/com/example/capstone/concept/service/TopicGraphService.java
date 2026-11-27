@@ -18,6 +18,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.JsonNode;
 import com.example.capstone.analysis.repository.AnalysisGraphRepository;
+import com.example.capstone.analysis.repository.RecommendationRepository;
 import com.example.capstone.analysis.service.AnalysisAliasService;
 import com.example.capstone.concept.dto.response.TopicGraphResponse;
 import com.example.capstone.concept.dto.response.TopicGraphResponse.Document;
@@ -38,6 +39,8 @@ import com.example.capstone.topic.service.TopicService;
  *       같으면 주제 UUID 문자열이 작은 쪽, 미분류는 주제에 밀린다. 검색(#144)도 같은 규칙을 쓴다.</li>
  *   <li>선은 개념 사이 관계(근거를 잃은 관계 제외)를 이 단계에 보이는 노드로 옮겨 합친 것이다. 하위 주제 안쪽 키워드는
  *       그 하위 주제 노드로 대신하고, 이 단계 밖 키워드와의 관계는 그리지 않는다.</li>
+ *   <li>"이해 안 됨"(#156)은 가장 최근 답이 confused인 추천의 경로 개념이 가리키는 키워드다. 같은 개념(정본 id)이거나 정규화한 이름이 같은
+ *       키워드에만 표시하고 새 키워드는 만들지 않는다. 대상 추천은 {@link RecommendationRepository#confusedKeywords}가 고른다.</li>
  * </ul>
  */
 @Service
@@ -45,10 +48,11 @@ import com.example.capstone.topic.service.TopicService;
 public class TopicGraphService {
     public static final String UNASSIGNED="none";
     private final AnalysisGraphRepository repository;
+    private final RecommendationRepository recommendations;
     private final TopicRepository topicRepository;
     private final TopicService topics;
-    public TopicGraphService(AnalysisGraphRepository repository,TopicRepository topicRepository,TopicService topics) {
-        this.repository=repository;this.topicRepository=topicRepository;this.topics=topics;
+    public TopicGraphService(AnalysisGraphRepository repository,RecommendationRepository recommendations,TopicRepository topicRepository,TopicService topics) {
+        this.repository=repository;this.recommendations=recommendations;this.topicRepository=topicRepository;this.topics=topics;
     }
 
     /** 최상위 단계: 최상위 주제와 미분류 요약. */
@@ -70,7 +74,7 @@ public class TopicGraphService {
         }
         var topicNodes=children.stream().map(topic -> new TopicNode(topic.getId().toString(),topic.getName(),index.subtreeKeywords(topic.getId()),
                 !index.children.getOrDefault(topic.getId(),List.of()).isEmpty(),index.children.getOrDefault(topic.getId(),List.of()).size(),
-                index.subtreeRecommended(topic.getId()))).toList();
+                index.subtreeRecommended(topic.getId()),index.subtreeConfused(topic.getId()))).toList();
         var keywordNodes=index.keywords.values().stream().filter(keyword -> keyword.id.equals(nodes.get(keyword.id)))
                 .sorted(Comparator.comparing((Keyword keyword) -> keyword.label).thenComparing(keyword -> keyword.id)).map(Keyword::node).toList();
         var pairs=new TreeSet<String>();var edges=new ArrayList<Edge>();
@@ -84,7 +88,7 @@ public class TopicGraphService {
         Unassigned summary=null;
         if(level==null && !unassigned) {
             var none=index.keywords.values().stream().filter(keyword -> keyword.home==null).toList();
-            summary=new Unassigned(none.size(),none.stream().anyMatch(Keyword::generated));
+            summary=new Unassigned(none.size(),none.stream().anyMatch(Keyword::generated),none.stream().anyMatch(Keyword::confused));
         }
         return new TopicGraphResponse(topicNodes,keywordNodes,edges,summary);
     }
@@ -105,7 +109,7 @@ public class TopicGraphService {
         Map<String,String> aliases=AnalysisAliasService.mapping(repository.aliases(user));
         var rows=new ArrayList<Row>();var union=new HashMap<String,String>();
         for(JsonNode row:repository.topicKeywords(user)) {
-            String label=Normalizer.normalize(row.path("label").asString(),Normalizer.Form.NFC).strip().replaceAll("\\s+"," ");
+            String label=label(row.path("label").asString());
             if(label.isBlank()) continue;
             String concept=row.path("conceptId").asString();concept=aliases.getOrDefault(concept,concept);
             String labelKey="label:"+label.toLowerCase(Locale.ROOT),conceptKey="concept:"+concept;
@@ -116,9 +120,17 @@ public class TopicGraphService {
         }
         var grouped=new LinkedHashMap<String,List<Row>>();
         for(Row row:rows) grouped.computeIfAbsent(find(union,row.labelKey),ignored -> new ArrayList<>()).add(row);
+        var confused=new HashSet<String>();
+        for(JsonNode row:recommendations.confusedKeywords(user)) {
+            String concept=row.path("conceptId").asString(""),label=label(row.path("label").asString(""));
+            String conceptKey="concept:"+aliases.getOrDefault(concept,concept),labelKey="label:"+label.toLowerCase(Locale.ROOT);
+            if(!concept.isBlank() && union.containsKey(conceptKey)) confused.add(find(union,conceptKey));
+            else if(!label.isBlank() && union.containsKey(labelKey)) confused.add(find(union,labelKey));
+        }
         var keywords=new LinkedHashMap<String,Keyword>();var byConcept=new HashMap<String,String>();
-        for(List<Row> group:grouped.values()) {
-            Keyword keyword=Keyword.of(user,group);keywords.put(keyword.id,keyword);
+        for(var entry:grouped.entrySet()) {
+            List<Row> group=entry.getValue();
+            Keyword keyword=Keyword.of(user,group,confused.contains(entry.getKey()));keywords.put(keyword.id,keyword);
             for(Row row:group) byConcept.put(row.conceptKey,keyword.id);
         }
         var relations=new ArrayList<String[]>();
@@ -137,6 +149,8 @@ public class TopicGraphService {
         return new Index(keywords,relations,all,children);
     }
 
+    private static String label(String value) { return Normalizer.normalize(value,Normalizer.Form.NFC).strip().replaceAll("\\s+"," "); }
+
     private static void join(Map<String,String> parent,String a,String b) {
         String x=find(parent,a),y=find(parent,b);
         if(!x.equals(y)) { if(x.compareTo(y)<0) parent.put(y,x); else parent.put(x,y); }
@@ -149,11 +163,11 @@ public class TopicGraphService {
 
     private record Row(String noteId,String title,UUID topicId,String conceptId,String label,String labelKey,String conceptKey,boolean generated) { }
 
-    /** 합쳐진 키워드 하나. home은 바로 속한 주제(null이면 미분류). */
-    public record Keyword(String id,String label,String origin,int conceptCount,UUID home,List<Document> documents) {
+    /** 합쳐진 키워드 하나. home은 바로 속한 주제(null이면 미분류), confused는 "이해 안 됨" 표시. */
+    public record Keyword(String id,String label,String origin,int conceptCount,UUID home,boolean confused,List<Document> documents) {
         boolean generated() { return "generated".equals(origin); }
-        KeywordNode node() { return new KeywordNode(id,label,conceptCount,origin,home==null?null:home.toString(),documents); }
-        static Keyword of(UUID user,List<Row> rows) {
+        KeywordNode node() { return new KeywordNode(id,label,conceptCount,origin,home==null?null:home.toString(),confused,documents); }
+        static Keyword of(UUID user,List<Row> rows,boolean confused) {
             String label=rows.stream().map(Row::label).min(Comparator.naturalOrder()).orElseThrow();
             String key=rows.stream().map(Row::labelKey).min(Comparator.naturalOrder()).orElseThrow();
             String id=UUID.nameUUIDFromBytes((user+"|"+key).getBytes(StandardCharsets.UTF_8)).toString();
@@ -168,7 +182,7 @@ public class TopicGraphService {
                     .thenComparing(entry -> UNASSIGNED.equals(entry.getKey())).thenComparing(Map.Entry::getKey)).findFirst().orElseThrow().getKey();
             var documents=titles.entrySet().stream().map(entry -> new Document(entry.getKey(),entry.getValue()))
                     .sorted(Comparator.comparing(Document::title).thenComparing(Document::noteId)).toList();
-            return new Keyword(id,label,origin,concepts,UNASSIGNED.equals(home)?null:UUID.fromString(home),documents);
+            return new Keyword(id,label,origin,concepts,UNASSIGNED.equals(home)?null:UUID.fromString(home),confused,documents);
         }
     }
 
@@ -196,6 +210,9 @@ public class TopicGraphService {
         int subtreeKeywords(UUID topic) { return (int)keywords.values().stream().filter(keyword -> keyword.home!=null && path(keyword.home).contains(topic)).count(); }
         boolean subtreeRecommended(UUID topic) {
             return keywords.values().stream().anyMatch(keyword -> keyword.generated() && keyword.home!=null && path(keyword.home).contains(topic));
+        }
+        boolean subtreeConfused(UUID topic) {
+            return keywords.values().stream().anyMatch(keyword -> keyword.confused && keyword.home!=null && path(keyword.home).contains(topic));
         }
     }
 }
