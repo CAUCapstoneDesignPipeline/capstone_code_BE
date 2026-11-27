@@ -37,10 +37,10 @@ public class GraphSearchService {
         var topics=new ArrayList<Result>();var keywords=new ArrayList<Result>();
         for(Topic topic:index.topics()) if(matches(topic.getName(),query)) {
             List<UUID> path=index.path(topic.getId());
-            topics.add(new Result("topic",topic.getId().toString(),topic.getName(),"extracted",items(index,path.subList(0,path.size()-1))));
+            topics.add(new Result("topic",topic.getId().toString(),topic.getName(),"extracted",false,items(index,path.subList(0,path.size()-1))));
         }
         for(var keyword:index.keywords()) if(matches(keyword.label(),query)) {
-            keywords.add(new Result("keyword",keyword.id(),keyword.label(),keyword.origin(),keyword.home()==null?List.of(UNASSIGNED):items(index,index.path(keyword.home()))));
+            keywords.add(new Result("keyword",keyword.id(),keyword.label(),keyword.origin(),keyword.confused(),keyword.home()==null?List.of(UNASSIGNED):items(index,index.path(keyword.home()))));
         }
         Comparator<Result> order=Comparator.comparing((Result result) -> !normalize(result.name()).equals(query))
                 .thenComparing(result -> !normalize(result.name()).startsWith(query))
