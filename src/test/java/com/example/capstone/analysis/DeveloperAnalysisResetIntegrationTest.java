@@ -64,6 +64,7 @@ class DeveloperAnalysisResetIntegrationTest extends ApiIntegrationSupport {
         Map<String,Integer> otherBefore=rows(otherId);
 
         call("POST","/api/developer/users/"+userId+"/analysis-reset",null).andExpect(status().isForbidden());
+        call("POST","/api/developer/users/not-a-uuid/analysis-reset",null).andExpect(status().isForbidden());
         call("POST","/api/developer/users/"+UUID.randomUUID()+"/analysis-reset",null,developer).andExpect(status().isNotFound());
         call("POST","/api/developer/users/not-a-uuid/analysis-reset",null,developer).andExpect(status().isBadRequest());
         assertEquals(2,rows(userId).get("analysis_job"));

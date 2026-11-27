@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RestController;
 import com.example.capstone.analysis.dto.response.DeveloperAnalysisResetResponse;
 import com.example.capstone.analysis.service.DeveloperAnalysisResetService;
+import com.example.capstone.auth.service.DeveloperAccessService;
 import com.example.capstone.global.exception.ApiException;
 import com.example.capstone.global.exception.ErrorCode;
 
@@ -21,9 +22,11 @@ import com.example.capstone.global.exception.ErrorCode;
 @Tag(name = "개발자")
 @SecurityRequirement(name = "bearerAuth")
 public class DeveloperAnalysisResetController {
+    private final DeveloperAccessService access;
     private final DeveloperAnalysisResetService reset;
 
-    public DeveloperAnalysisResetController(DeveloperAnalysisResetService reset) {
+    public DeveloperAnalysisResetController(DeveloperAccessService access, DeveloperAnalysisResetService reset) {
+        this.access = access;
         this.reset = reset;
     }
 
@@ -34,8 +37,10 @@ public class DeveloperAnalysisResetController {
     @PostMapping("/api/developer/users/{userId}/analysis-reset")
     public ResponseEntity<DeveloperAnalysisResetResponse> reset(@AuthenticationPrincipal Jwt jwt,
             @PathVariable String userId) {
-        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
-                .body(reset.reset(UUID.fromString(jwt.getSubject()), id(userId)));
+        UUID developerId = UUID.fromString(jwt.getSubject());
+        // 개발자 확인이 입력 검증보다 먼저다.
+        access.require(developerId);
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(reset.reset(developerId, id(userId)));
     }
 
     private static UUID id(String value) {
